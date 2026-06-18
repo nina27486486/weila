@@ -1,0 +1,58 @@
+name: weila
+description: "薇拉 - 基于Kazumi架构的动漫播放器"
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.3.4 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # === 路由 ===
+  flutter_modular: ^6.4.1
+
+  # === 状态管理 ===
+  mobx: ^2.6.0
+  flutter_mobx: ^2.3.0
+
+  # === 网络 ===
+  dio: ^5.9.2
+
+  # === 本地存储 ===
+  hive_ce: ^2.19.3
+  hive_ce_flutter: ^2.3.4
+
+  # === 视频播放 ===
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_video: ^1.0.7
+
+  # === HTML/XPath解析 ===
+  html: ^0.15.6
+  xml: ^6.6.1
+
+  # === 窗口管理 ===
+  window_manager: ^0.5.1
+
+  # === 工具 ===
+  path_provider: ^2.1.5
+  connectivity_plus: ^7.1.1
+  dynamic_color: ^1.8.1
+  package_info_plus: ^10.1.0
+  url_launcher: ^6.3.2
+  cached_network_image: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+  # === 代码生成 ===
+  build_runner: ^2.15.0
+  hive_ce_generator: 1.11.1
+  mobx_codegen: ^2.7.7
+
+flutter:
+  uses-material-design: true
