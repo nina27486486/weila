@@ -49,6 +49,8 @@ class AppModule extends Module {
         videoUrl: r.args.queryParams['url'] ?? '',
         title: r.args.queryParams['title'] ?? '',
         animeUrl: r.args.queryParams['animeUrl'] ?? '',
+        animeName: r.args.queryParams['animeName'] ?? '',
+        coverUrl: r.args.queryParams['cover'],
         episodeIndex: int.tryParse(r.args.queryParams['ep'] ?? '0') ?? 0,
         sourcePlugin: r.args.queryParams['source'] ?? '',
       ),
@@ -90,12 +92,19 @@ class AppModule extends Module {
         if (type == 'movie') {
           return AnimeListPage(
             title: '剧场版',
-            categoryIds: PluginService.cmsCategories.map((k, v) => MapEntry(k, (v.last['id'] as int))),
+            categoryIds: PluginService.cmsCategories
+                .map((k, v) => MapEntry(k, (v.last['id'] as int))),
           );
         }
         return AnimeListPage(
           title: '番剧',
-          categoryIds: PluginService.cmsCategories.map((k, v) => MapEntry(k, (v.firstWhere((c) => c['name']?.toString().contains('日本') == true || c['name']?.toString().contains('日韩') == true, orElse: () => v.first)['id'] as int))),
+          categoryIds: PluginService.cmsCategories.map((k, v) => MapEntry(
+              k,
+              (v.firstWhere(
+                  (c) =>
+                      c['name']?.toString().contains('日本') == true ||
+                      c['name']?.toString().contains('日韩') == true,
+                  orElse: () => v.first)['id'] as int))),
         );
       },
     );

@@ -158,10 +158,11 @@ mixin _$HomeStore on _HomeStore, Store {
     return '''
 latestList: ${latestList},
 trendingList: ${trendingList},
-seasonalList: ${seasonalList},
 isLoadingLatest: ${isLoadingLatest},
 isLoadingTrending: ${isLoadingTrending},
-isLoadingSeasonal: ${isLoadingSeasonal}
+seasonalList: ${seasonalList},
+isLoadingSeasonal: ${isLoadingSeasonal},
+errorMessage: ${errorMessage}
     ''';
   }
 }

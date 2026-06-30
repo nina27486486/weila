@@ -73,6 +73,16 @@ mixin _$HistoryCollectStore on _HistoryCollectStore, Store {
     });
   }
 
+  late final _$refreshHistoryMetadataAsyncAction = AsyncAction(
+      '_HistoryCollectStore.refreshHistoryMetadata',
+      context: context);
+
+  @override
+  Future<int> refreshHistoryMetadata() {
+    return _$refreshHistoryMetadataAsyncAction
+        .run(() => super.refreshHistoryMetadata());
+  }
+
   late final _$addHistoryAsyncAction =
       AsyncAction('_HistoryCollectStore.addHistory', context: context);
 

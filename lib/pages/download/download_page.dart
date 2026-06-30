@@ -18,15 +18,19 @@ class DownloadPage extends StatefulWidget {
   State<DownloadPage> createState() => _DownloadPageState();
 }
 
-class _DownloadPageState extends State<DownloadPage> {
+class _DownloadPageState extends State<DownloadPage>
+    with WidgetsBindingObserver {
   final _service = DownloadService();
   List<DownloadItem> _downloads = [];
   Timer? _refreshTimer;
+  bool _refreshingMetadata = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadDownloads();
+    unawaited(_refreshMetadata());
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 1),
       (_) => _loadDownloads(),
@@ -35,8 +39,33 @@ class _DownloadPageState extends State<DownloadPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadDownloads();
+      unawaited(_refreshMetadata());
+    }
+  }
+
+  Future<void> _refreshMetadata() async {
+    if (_refreshingMetadata) return;
+    _refreshingMetadata = true;
+    try {
+      await _service.refreshMetadata();
+      _loadDownloads();
+    } finally {
+      _refreshingMetadata = false;
+    }
+  }
+
+  void _refreshDownloads() {
+    _loadDownloads();
+    unawaited(_refreshMetadata());
   }
 
   void _loadDownloads() {
@@ -51,6 +80,7 @@ class _DownloadPageState extends State<DownloadPage> {
           (item) => OfflineEpisode(
             id: item.episodeUrl,
             animeName: item.animeName,
+            coverUrl: item.cover,
             episodeName: item.episodeName,
             status: _offlineStatus(item.status),
             progress: item.progress,
@@ -90,7 +120,7 @@ class _DownloadPageState extends State<DownloadPage> {
           final item = _findItem(episode.id);
           if (item != null) _confirmRemove(item);
         },
-        onRefresh: _loadDownloads,
+        onRefresh: _refreshDownloads,
       ),
     );
   }
@@ -132,6 +162,8 @@ class _DownloadPageState extends State<DownloadPage> {
       '/player?url=${Uri.encodeComponent(localPath)}'
       '&title=${Uri.encodeComponent(item.episodeName)}'
       '&animeUrl=${Uri.encodeComponent(item.animeUrl)}'
+      '&animeName=${Uri.encodeComponent(item.animeName)}'
+      '&cover=${Uri.encodeComponent(item.cover ?? '')}'
       '&source=${Uri.encodeComponent(item.sourcePlugin)}',
     );
   }

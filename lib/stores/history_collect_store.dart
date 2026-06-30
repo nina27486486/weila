@@ -4,6 +4,7 @@ import 'package:mobx/mobx.dart';
 import '../models/history_item.dart';
 import '../models/collect_item.dart';
 import '../models/track_item.dart';
+import '../services/library/media_metadata_service.dart';
 import '../services/storage/storage_service.dart';
 
 part 'history_collect_store.g.dart';
@@ -12,6 +13,7 @@ class HistoryCollectStore = _HistoryCollectStore with _$HistoryCollectStore;
 
 abstract class _HistoryCollectStore with Store {
   final StorageService _storage = StorageService();
+  final MediaMetadataService _metadataService = MediaMetadataService();
 
   /// 变更计数器：每次增删操作+1，让isCollected/isTracked触发Observer重建
   @observable
@@ -30,6 +32,14 @@ abstract class _HistoryCollectStore with Store {
   void loadHistory() {
     historyList.clear();
     historyList.addAll(_storage.getHistory());
+  }
+
+  @action
+  Future<int> refreshHistoryMetadata() async {
+    loadHistory();
+    final changed = await _metadataService.hydrateHistory(historyList);
+    if (changed > 0) loadHistory();
+    return changed;
   }
 
   @action

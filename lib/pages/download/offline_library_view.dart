@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/vira_colors.dart';
+import '../../widgets/cover_image.dart';
 import '../../widgets/editorial_section_header.dart';
 import '../../widgets/vira_state_view.dart';
 
@@ -10,6 +11,7 @@ enum OfflineStatus { waiting, downloading, completed, paused, failed }
 class OfflineEpisode {
   final String id;
   final String animeName;
+  final String? coverUrl;
   final String episodeName;
   final OfflineStatus status;
   final double progress;
@@ -19,6 +21,7 @@ class OfflineEpisode {
   const OfflineEpisode({
     required this.id,
     required this.animeName,
+    this.coverUrl,
     required this.episodeName,
     required this.status,
     required this.progress,
@@ -290,6 +293,17 @@ class _OfflineAnimeGroup extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
+                if (episodes.first.coverUrl?.isNotEmpty == true) ...[
+                  SizedBox(
+                    width: 38,
+                    height: 50,
+                    child: CoverImage(
+                      url: episodes.first.coverUrl,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 Container(width: 3, height: 22, color: context.colors.sakura),
                 const SizedBox(width: 10),
                 Expanded(

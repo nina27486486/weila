@@ -9,13 +9,12 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../models/anime.dart';
-import '../../models/history_item.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/download/download_service.dart';
 import '../../services/danmaku/danmaku_service.dart';
+import '../../services/library/playback_entry_factory.dart';
 import '../../services/storage/storage_service.dart';
 import '../../models/danmaku_item.dart';
-import '../../models/download_item.dart';
 import '../../widgets/artwork_components.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../stores/history_collect_store.dart';
@@ -43,6 +42,8 @@ class PlayerPage extends StatefulWidget {
   final String videoUrl;
   final String title;
   final String animeUrl;
+  final String animeName;
+  final String? coverUrl;
   final int episodeIndex;
   final String sourcePlugin;
 
@@ -51,6 +52,8 @@ class PlayerPage extends StatefulWidget {
     required this.videoUrl,
     required this.title,
     this.animeUrl = '',
+    this.animeName = '',
+    this.coverUrl,
     this.episodeIndex = 0,
     this.sourcePlugin = '',
   });
@@ -112,6 +115,9 @@ class _PlayerPageState extends State<PlayerPage> {
       !_isFullscreen &&
       _showEpisodeDrawer &&
       (_episodes.isNotEmpty || _loadingEpisodes);
+
+  String get _animeName =>
+      widget.animeName.trim().isEmpty ? widget.title : widget.animeName;
 
   // 控制栏自动隐藏
   Timer? _hideTimer;
@@ -705,8 +711,7 @@ class _PlayerPageState extends State<PlayerPage> {
       final epNum = _currentEpisodeIndex + 1;
 
       Log.d('Player', '加载弹幕: ${widget.title} 第$epNum集');
-      final danmakuList =
-          await _danmakuService.fetchDanmaku(widget.title, epNum);
+      final danmakuList = await _danmakuService.fetchDanmaku(_animeName, epNum);
 
       if (mounted && danmakuList.isNotEmpty) {
         _danmakuController.loadDanmaku(danmakuList);
@@ -741,13 +746,13 @@ class _PlayerPageState extends State<PlayerPage> {
             ? _episodes[_currentEpisodeIndex].name
             : widget.title;
 
-    final item = DownloadItem(
-      animeName: widget.title,
+    final item = PlaybackEntryFactory.download(
+      animeName: _animeName,
       animeUrl: widget.animeUrl,
+      coverUrl: widget.coverUrl,
       episodeName: epName,
       episodeUrl: url,
       sourcePlugin: widget.sourcePlugin,
-      m3u8Url: url,
     );
 
     // 自动设置 Referer（m3u8 CDN 需要）
@@ -789,9 +794,10 @@ class _PlayerPageState extends State<PlayerPage> {
         _episodes.isNotEmpty && _currentEpisodeIndex < _episodes.length
             ? _episodes[_currentEpisodeIndex].name
             : widget.title;
-    _historyStore.addHistory(HistoryItem(
-      animeName: widget.title,
+    _historyStore.addHistory(PlaybackEntryFactory.history(
+      animeName: _animeName,
       animeUrl: widget.animeUrl.isNotEmpty ? widget.animeUrl : widget.videoUrl,
+      coverUrl: widget.coverUrl,
       episodeName: epName,
       episodeUrl: _currentVideoUrl ?? widget.videoUrl,
       sourcePlugin: widget.sourcePlugin,

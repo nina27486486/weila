@@ -69,6 +69,8 @@ class _HomePageState extends State<HomePage> {
             trendingItems: _homeStore.trendingList,
             continueStories: continueStories,
             isLoading: isLoading,
+            isSeasonalLoading: _homeStore.isLoadingSeasonal,
+            isTrendingLoading: _homeStore.isLoadingTrending,
             errorMessage: _homeStore.errorMessage,
             onOpenAnime: _openDetail,
             onOpenContinue: (story) => Modular.to.pushNamed(

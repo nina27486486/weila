@@ -732,10 +732,17 @@ class _DetailPageState extends State<DetailPage> {
     }
 
     final ep = episodes[index];
+    final detail = _store.currentDetail;
+    final animeName = detail?['name']?.toString().trim();
+    final coverUrl = detail?['cover']?.toString() ?? _anime.cover ?? '';
     Modular.to.pushNamed(
       '/player?url=${Uri.encodeComponent(ep.url)}'
       '&title=${Uri.encodeComponent(ep.name)}'
       '&animeUrl=${Uri.encodeComponent(widget.animeUrl)}'
+      '&animeName=${Uri.encodeComponent(
+        animeName?.isNotEmpty == true ? animeName! : widget.animeName,
+      )}'
+      '&cover=${Uri.encodeComponent(coverUrl)}'
       '&ep=$index'
       '&source=${Uri.encodeComponent(_anime.sourcePlugin)}',
     );
@@ -807,10 +814,17 @@ class _DetailPageState extends State<DetailPage> {
       final ep = episodes[epIndex];
 
       if (mounted) {
+        final detail = _store.currentDetail;
+        final animeName = detail?['name']?.toString().trim();
+        final coverUrl = detail?['cover']?.toString() ?? _anime.cover ?? '';
         Modular.to.pushNamed(
           '/player?url=${Uri.encodeComponent(ep.url)}'
           '&title=${Uri.encodeComponent(ep.name)}'
           '&animeUrl=${Uri.encodeComponent(_cmsAnimeUrl!)}'
+          '&animeName=${Uri.encodeComponent(
+            animeName?.isNotEmpty == true ? animeName! : widget.animeName,
+          )}'
+          '&cover=${Uri.encodeComponent(coverUrl)}'
           '&ep=$epIndex'
           '&source=${Uri.encodeComponent(_cmsAnimeUrl!.split(':').first)}',
         );

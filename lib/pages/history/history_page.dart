@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -15,13 +17,40 @@ class HistoryPage extends StatefulWidget {
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
+class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   final _store = HistoryCollectStore();
+  bool _refreshingMetadata = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _store.loadHistory();
+    unawaited(_refreshMetadata());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _store.loadHistory();
+      unawaited(_refreshMetadata());
+    }
+  }
+
+  Future<void> _refreshMetadata() async {
+    if (_refreshingMetadata) return;
+    _refreshingMetadata = true;
+    try {
+      await _store.refreshHistoryMetadata();
+    } finally {
+      _refreshingMetadata = false;
+    }
   }
 
   @override
@@ -75,6 +104,8 @@ class _HistoryPageState extends State<HistoryPage> {
                 '/player?url=${Uri.encodeComponent(item.episodeUrl)}'
                 '&title=${Uri.encodeComponent(item.episodeName)}'
                 '&animeUrl=${Uri.encodeComponent(item.animeUrl)}'
+                '&animeName=${Uri.encodeComponent(item.animeName)}'
+                '&cover=${Uri.encodeComponent(item.cover ?? '')}'
                 '&ep=${item.episodeUrl.split('/ep/').last}'
                 '&source=${Uri.encodeComponent(item.sourcePlugin)}',
               );

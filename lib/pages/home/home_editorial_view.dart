@@ -31,6 +31,8 @@ class HomeEditorialView extends StatelessWidget {
   final List<Map<String, dynamic>> trendingItems;
   final List<HomeContinueStory> continueStories;
   final bool isLoading;
+  final bool isSeasonalLoading;
+  final bool isTrendingLoading;
   final String? errorMessage;
   final ValueChanged<Map<String, dynamic>> onOpenAnime;
   final ValueChanged<HomeContinueStory> onOpenContinue;
@@ -49,6 +51,8 @@ class HomeEditorialView extends StatelessWidget {
     required this.onOpenContinue,
     required this.onRetry,
     this.isLoading = false,
+    this.isSeasonalLoading = false,
+    this.isTrendingLoading = false,
     this.errorMessage,
     this.onOpenHistory,
     this.onOpenCalendar,
@@ -115,12 +119,14 @@ class HomeEditorialView extends StatelessWidget {
           _SeasonSection(
             key: const ValueKey('home-seasonal'),
             items: seasonalItems,
+            isLoading: isSeasonalLoading,
             onOpen: onOpenAnime,
           ),
           const SizedBox(height: 50),
           _RankingSection(
             key: const ValueKey('home-ranking'),
             items: trendingItems,
+            isLoading: isTrendingLoading,
             onOpen: onOpenAnime,
             onOpenAll: onOpenRanking,
           ),
@@ -724,11 +730,13 @@ class _AiringCard extends StatelessWidget {
 
 class _SeasonSection extends StatelessWidget {
   final List<Map<String, dynamic>> items;
+  final bool isLoading;
   final ValueChanged<Map<String, dynamic>> onOpen;
 
   const _SeasonSection({
     super.key,
     required this.items,
+    required this.isLoading,
     required this.onOpen,
   });
 
@@ -758,9 +766,10 @@ class _SeasonSection extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         if (railItems.isEmpty)
-          const _QuietEmpty(
+          _QuietEmpty(
             icon: Icons.local_movies_outlined,
-            message: '本季片单正在整理中。',
+            message: isLoading ? '正在更新本季片单…' : '本季片单暂时没有数据。',
+            busy: isLoading,
           )
         else
           PosterRail(
@@ -777,12 +786,14 @@ class _SeasonSection extends StatelessWidget {
 
 class _RankingSection extends StatelessWidget {
   final List<Map<String, dynamic>> items;
+  final bool isLoading;
   final ValueChanged<Map<String, dynamic>> onOpen;
   final VoidCallback? onOpenAll;
 
   const _RankingSection({
     super.key,
     required this.items,
+    required this.isLoading,
     required this.onOpen,
     this.onOpenAll,
   });
@@ -803,9 +814,10 @@ class _RankingSection extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         if (visible.isEmpty)
-          const _QuietEmpty(
+          _QuietEmpty(
             icon: Icons.trending_up_rounded,
-            message: '本周榜单还在统计中。',
+            message: isLoading ? '正在更新本周榜单…' : '本周榜单暂时没有数据。',
+            busy: isLoading,
           )
         else
           Container(
@@ -991,8 +1003,13 @@ class _HoverSurfaceState extends State<_HoverSurface> {
 class _QuietEmpty extends StatelessWidget {
   final IconData icon;
   final String message;
+  final bool busy;
 
-  const _QuietEmpty({required this.icon, required this.message});
+  const _QuietEmpty({
+    required this.icon,
+    required this.message,
+    this.busy = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1010,7 +1027,17 @@ class _QuietEmpty extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 19, color: context.colors.textMuted),
+          if (busy)
+            SizedBox(
+              width: 17,
+              height: 17,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.8,
+                color: context.colors.sky,
+              ),
+            )
+          else
+            Icon(icon, size: 19, color: context.colors.textMuted),
           const SizedBox(width: 9),
           Text(message, style: Theme.of(context).textTheme.bodyMedium),
         ],

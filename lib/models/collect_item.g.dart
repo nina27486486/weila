@@ -2,17 +2,20 @@
 
 part of 'collect_item.dart';
 
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
+
 class CollectItemAdapter extends TypeAdapter<CollectItem> {
   @override
-  final int typeId = 4;
+  final typeId = 4;
 
   @override
   CollectItem read(BinaryReader reader) {
     final numOfFields = reader.readByte();
-    final fields = <int, dynamic>{};
-    for (int i = 0; i < numOfFields; i++) {
-      fields[reader.readByte()] = reader.read();
-    }
+    final fields = <int, dynamic>{
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+    };
     return CollectItem(
       animeName: fields[0] as String,
       animeUrl: fields[1] as String,
@@ -27,12 +30,18 @@ class CollectItemAdapter extends TypeAdapter<CollectItem> {
   void write(BinaryWriter writer, CollectItem obj) {
     writer
       ..writeByte(6)
-      ..writeByte(0)..write(obj.animeName)
-      ..writeByte(1)..write(obj.animeUrl)
-      ..writeByte(2)..write(obj.sourcePlugin)
-      ..writeByte(3)..write(obj.cover)
-      ..writeByte(4)..write(obj.description)
-      ..writeByte(5)..write(obj.collectedAt);
+      ..writeByte(0)
+      ..write(obj.animeName)
+      ..writeByte(1)
+      ..write(obj.animeUrl)
+      ..writeByte(2)
+      ..write(obj.sourcePlugin)
+      ..writeByte(3)
+      ..write(obj.cover)
+      ..writeByte(4)
+      ..write(obj.description)
+      ..writeByte(5)
+      ..write(obj.collectedAt);
   }
 
   @override
@@ -41,5 +50,7 @@ class CollectItemAdapter extends TypeAdapter<CollectItem> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is CollectItemAdapter && runtimeType == other.runtimeType && typeId == other.typeId;
+      other is CollectItemAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }

@@ -6,6 +6,7 @@ import 'package:dio/io.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/download_item.dart';
+import '../library/media_metadata_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/logger.dart';
 
@@ -27,6 +28,7 @@ class DownloadService {
 
   /// episodeUrl -> DownloadItem（内存中的活跃任务）
   final Map<String, DownloadItem> _activeTasks = {};
+  final MediaMetadataService _metadataService = MediaMetadataService();
 
   bool _initialized = false;
 
@@ -44,7 +46,7 @@ class DownloadService {
       headers: {
         'User-Agent':
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            '(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                '(KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
         'Accept': '*/*',
       },
     ));
@@ -97,6 +99,11 @@ class DownloadService {
   List<DownloadItem> getAllDownloads() {
     _ensureInitialized();
     return _downloadBox.values.toList();
+  }
+
+  Future<int> refreshMetadata() async {
+    _ensureInitialized();
+    return _metadataService.hydrateDownloads(_downloadBox.values);
   }
 
   /// 添加下载任务到队列
@@ -233,9 +240,7 @@ class DownloadService {
     if (activeDownloadCount >= _maxConcurrent) return;
 
     // 找到等待中的任务，按创建时间排序
-    final waiting = _activeTasks.values
-        .where((t) => t.status == 0)
-        .toList()
+    final waiting = _activeTasks.values.where((t) => t.status == 0).toList()
       ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
     for (final item in waiting) {
@@ -259,7 +264,8 @@ class DownloadService {
 
     try {
       // 1. 获取 m3u8 playlist
-      final playlistContent = await _fetchPlaylist(item.m3u8Url, item.referer, cancelToken);
+      final playlistContent =
+          await _fetchPlaylist(item.m3u8Url, item.referer, cancelToken);
       if (cancelToken.isCancelled) return;
 
       // 2. 解析分片 URL
@@ -271,7 +277,8 @@ class DownloadService {
       // 安全回退：如果解析出的是 m3u8 子链接而非 ts 分片，重新获取子播放列表
       if (segmentUrls.length == 1 && segmentUrls.first.contains('.m3u8')) {
         Log.d('Download', '子播放列表回退: ${segmentUrls.first}');
-        final subContent = await _fetchPlaylist(segmentUrls.first, item.referer, cancelToken);
+        final subContent =
+            await _fetchPlaylist(segmentUrls.first, item.referer, cancelToken);
         segmentUrls = _parseSegments(subContent, segmentUrls.first);
         if (segmentUrls.isEmpty) {
           throw Exception('M3U8 子播放列表解析失败：没有找到分片');
@@ -448,7 +455,8 @@ class DownloadService {
 
     // 如果有 .m3u8 子链接但没有 ts 分片，说明是 master playlist
     if (m3u8Links.isNotEmpty && segments.isEmpty) {
-      Log.d('Download', '检测到 master playlist（无 #EXT-X-STREAM-INF），子链接: ${m3u8Links.first}');
+      Log.d('Download',
+          '检测到 master playlist（无 #EXT-X-STREAM-INF），子链接: ${m3u8Links.first}');
       // 返回子链接的第一个 m3u8 作为唯一"分片"，让 _startDownload 重新解析
       // 实际上这不应该发生，因为 _fetchPlaylist 应该已经处理了
       // 但作为安全回退，返回子链接让上层知道需要重新获取
