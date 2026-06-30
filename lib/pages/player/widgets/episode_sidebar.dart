@@ -2,6 +2,33 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../models/anime.dart';
 
+class EpisodeDrawerMotion extends StatelessWidget {
+  final bool open;
+  final Widget child;
+
+  const EpisodeDrawerMotion({
+    super.key,
+    required this.open,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      key: const ValueKey('episode-drawer-motion'),
+      width: open ? 220 : 0,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutBack,
+      clipBehavior: Clip.hardEdge,
+      decoration: const BoxDecoration(),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: SizedBox(width: 220, child: child),
+      ),
+    );
+  }
+}
+
 class EpisodeSidebar extends StatelessWidget {
   final List<Episode> episodes;
   final int currentIndex;

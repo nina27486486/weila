@@ -47,7 +47,15 @@ void main() {
     );
 
     expect(find.text('我的资料库'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('archive-featured-stage')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('archive-poster-grid')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('library-ambient-backdrop')),
+      findsOneWidget,
+    );
     expect(find.text('收藏夹'), findsOneWidget);
 
     await tester.tap(find.text('观看足迹'));
@@ -77,7 +85,93 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('archive-progress-list')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('archive-progress-stack-0')),
+      findsOneWidget,
+    );
     expect(find.text('连载中'), findsWidgets);
     expect(find.text('看到这里'), findsWidgets);
+  });
+
+  testWidgets('海报模式少于三项时只显示精选舞台且保持可操作', (tester) async {
+    ArchiveEntry? opened;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '少量收藏',
+            description: '两部也能组成自己的小书架。',
+            mode: ArchiveDisplayMode.poster,
+            entries: entries.take(2).toList(),
+            onOpen: (entry) => opened = entry,
+            onRemove: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('archive-featured-stage')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('archive-poster-grid')), findsNothing);
+    await tester.tap(find.text(entries.first.title));
+    expect(opened, entries.first);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('历史模式显示墨迹时间线标记', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '观看足迹',
+            description: '沿着时间继续。',
+            mode: ArchiveDisplayMode.timeline,
+            entries: entries,
+            onOpen: (_) {},
+            onRemove: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('archive-ink-timeline-0')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('收藏页在 960、1280、1600 宽度下保持精选舞台完整', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final width in [960.0, 1280.0, 1600.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 900));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: PersonalArchiveView(
+              title: '响应式资料库',
+              description: '不同桌面宽度下都保持清楚。',
+              mode: ArchiveDisplayMode.poster,
+              entries: entries,
+              onOpen: (_) {},
+              onRemove: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byKey(const ValueKey('archive-featured-stage')),
+        findsOneWidget,
+      );
+    }
   });
 }

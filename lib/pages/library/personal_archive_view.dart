@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../services/artwork_palette_service.dart';
 import '../../theme/vira_colors.dart';
+import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/vira_state_view.dart';
 import '../../widgets/vira_text_tabs.dart';
@@ -66,7 +68,7 @@ class PersonalArchiveView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
+    final scrollView = CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
@@ -105,68 +107,81 @@ class PersonalArchiveView extends StatelessWidget {
               message: _emptyMessage(mode),
             ),
           )
+        else if (mode == ArchiveDisplayMode.poster) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 30),
+              child: _FeaturedArchiveStage(
+                entries: entries.take(3).toList(growable: false),
+                onOpen: onOpen,
+                onRemove: onRemove,
+              ),
+            ),
+          ),
+          if (entries.length > 3)
+            SliverPadding(
+              key: const ValueKey('archive-poster-grid'),
+              padding: const EdgeInsets.only(bottom: 40),
+              sliver: SliverGrid.builder(
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 218,
+                  mainAxisExtent: 326,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 22,
+                ),
+                itemCount: entries.length - 3,
+                itemBuilder: (context, index) {
+                  final entryIndex = index + 3;
+                  final entry = entries[entryIndex];
+                  return _PosterArchiveCard(
+                    entry: entry,
+                    index: entryIndex,
+                    onOpen: () => onOpen(entry),
+                    onRemove: () => onRemove(entry),
+                  );
+                },
+              ),
+            ),
+        ] else if (mode == ArchiveDisplayMode.timeline)
+          SliverPadding(
+            key: const ValueKey('archive-timeline-list'),
+            padding: const EdgeInsets.only(bottom: 40),
+            sliver: SliverList.separated(
+              itemCount: entries.length,
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: context.colors.divider),
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                return _TimelineArchiveRow(
+                  entry: entry,
+                  index: index,
+                  onOpen: () => onOpen(entry),
+                  onRemove: () => onRemove(entry),
+                );
+              },
+            ),
+          )
         else
-          switch (mode) {
-            ArchiveDisplayMode.poster => SliverPadding(
-                key: const ValueKey('archive-poster-grid'),
-                padding: const EdgeInsets.only(bottom: 40),
-                sliver: SliverGrid.builder(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 218,
-                    mainAxisExtent: 326,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 22,
-                  ),
-                  itemCount: entries.length,
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    return _PosterArchiveCard(
-                      entry: entry,
-                      index: index,
-                      onOpen: () => onOpen(entry),
-                      onRemove: () => onRemove(entry),
-                    );
-                  },
-                ),
-              ),
-            ArchiveDisplayMode.timeline => SliverPadding(
-                key: const ValueKey('archive-timeline-list'),
-                padding: const EdgeInsets.only(bottom: 40),
-                sliver: SliverList.separated(
-                  itemCount: entries.length,
-                  separatorBuilder: (_, __) =>
-                      Divider(height: 1, color: context.colors.divider),
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    return _TimelineArchiveRow(
-                      entry: entry,
-                      index: index,
-                      onOpen: () => onOpen(entry),
-                      onRemove: () => onRemove(entry),
-                    );
-                  },
-                ),
-              ),
-            ArchiveDisplayMode.progress => SliverPadding(
-                key: const ValueKey('archive-progress-list'),
-                padding: const EdgeInsets.only(bottom: 40),
-                sliver: SliverList.separated(
-                  itemCount: entries.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    final entry = entries[index];
-                    return _ProgressArchiveCard(
-                      entry: entry,
-                      index: index,
-                      onOpen: () => onOpen(entry),
-                      onRemove: () => onRemove(entry),
-                    );
-                  },
-                ),
-              ),
-          },
+          SliverPadding(
+            key: const ValueKey('archive-progress-list'),
+            padding: const EdgeInsets.only(bottom: 40),
+            sliver: SliverList.separated(
+              itemCount: entries.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemBuilder: (context, index) {
+                final entry = entries[index];
+                return _ProgressArchiveCard(
+                  entry: entry,
+                  index: index,
+                  onOpen: () => onOpen(entry),
+                  onRemove: () => onRemove(entry),
+                );
+              },
+            ),
+          ),
       ],
     );
+    return _ArchiveAmbientBackdrop(entries: entries, child: scrollView);
   }
 
   String _emptyTitle(ArchiveDisplayMode mode) => switch (mode) {
@@ -180,6 +195,103 @@ class PersonalArchiveView extends StatelessWidget {
         ArchiveDisplayMode.timeline => '开始播放后，薇拉会替你记住停下的位置。',
         ArchiveDisplayMode.progress => '在详情页点击追番，正在发生的故事会来到这里。',
       };
+}
+
+class _ArchiveAmbientBackdrop extends StatelessWidget {
+  final List<ArchiveEntry> entries;
+  final Widget child;
+
+  const _ArchiveAmbientBackdrop({
+    required this.entries,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Widget buildBackdrop(ArtworkPalette palette) {
+      return Container(
+        key: const ValueKey('library-ambient-backdrop'),
+        child: AmbientArtworkBackdrop(
+          palette: palette,
+          child: child,
+        ),
+      );
+    }
+
+    final coverUrl = entries.isEmpty ? null : entries.first.coverUrl;
+    final provider = CoverImage.providerFor(coverUrl);
+    if (provider == null) return buildBackdrop(ArtworkPalette.fallback);
+    return ArtworkPaletteBuilder(
+      cacheKey: coverUrl!,
+      provider: provider,
+      builder: (_, palette) => buildBackdrop(palette),
+    );
+  }
+}
+
+class _FeaturedArchiveStage extends StatelessWidget {
+  final List<ArchiveEntry> entries;
+  final ValueChanged<ArchiveEntry> onOpen;
+  final ValueChanged<ArchiveEntry> onRemove;
+
+  const _FeaturedArchiveStage({
+    required this.entries,
+    required this.onOpen,
+    required this.onRemove,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      key: const ValueKey('archive-featured-stage'),
+      height: 320,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final count = entries.length;
+          final cardWidth = (constraints.maxWidth * 0.26).clamp(162.0, 204.0);
+          final available = (constraints.maxWidth - cardWidth).clamp(0, 10000);
+          final spread = count <= 1
+              ? 0.0
+              : (cardWidth * 0.82).clamp(0, available / (count - 1)).toDouble();
+          final center = (count - 1) / 2;
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: context.colors.divider),
+                      bottom: BorderSide(color: context.colors.divider),
+                    ),
+                  ),
+                ),
+              ),
+              for (var index = 0; index < count; index++)
+                Positioned(
+                  width: cardWidth,
+                  height: 294,
+                  left: (constraints.maxWidth - cardWidth) / 2 +
+                      (index - center) * spread,
+                  top: index == center ? 4 : 14,
+                  child: Transform.rotate(
+                    angle: (index - center) * 0.055,
+                    alignment: Alignment.bottomCenter,
+                    child: _PosterArchiveCard(
+                      entry: entries[index],
+                      index: index,
+                      onOpen: () => onOpen(entries[index]),
+                      onRemove: () => onRemove(entries[index]),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _ArchiveIntroduction extends StatelessWidget {
@@ -506,6 +618,44 @@ class _TimelineArchiveRowState extends State<_TimelineArchiveRow> {
           child: Row(
             children: [
               SizedBox(
+                key: ValueKey('archive-ink-timeline-${widget.index}'),
+                width: 28,
+                height: double.infinity,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 2,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              colors.sky.withValues(alpha: 0.18),
+                              colors.sakura.withValues(alpha: 0.72),
+                              colors.sky.withValues(alpha: 0.18),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: colors.paper,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: colors.sakura, width: 2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
                 width: 56,
                 child: Text(
                   '${widget.index + 1}'.padLeft(2, '0'),
@@ -596,6 +746,7 @@ class _ProgressArchiveCardState extends State<_ProgressArchiveCard> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onOpen,
         child: AnimatedContainer(
+          key: ValueKey('archive-progress-stack-${widget.index}'),
           duration: const Duration(milliseconds: 170),
           height: 146,
           transform: Matrix4.translationValues(0, _hovered ? -2 : 0, 0),
@@ -607,6 +758,16 @@ class _ProgressArchiveCardState extends State<_ProgressArchiveCard> {
                   ? colors.sakura.withValues(alpha: 0.62)
                   : colors.divider,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.sakura.withValues(alpha: 0.12),
+                offset: const Offset(5, 5),
+              ),
+              BoxShadow(
+                color: colors.sky.withValues(alpha: 0.08),
+                offset: const Offset(9, 9),
+              ),
+            ],
           ),
           child: Row(
             children: [

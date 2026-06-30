@@ -16,6 +16,7 @@ import '../../services/danmaku/danmaku_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../models/danmaku_item.dart';
 import '../../models/download_item.dart';
+import '../../widgets/artwork_components.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../stores/history_collect_store.dart';
 import '../../utils/error_handler.dart';
@@ -889,7 +890,10 @@ class _PlayerPageState extends State<PlayerPage> {
                         ],
                       ),
                     ),
-                    if (_isEpisodeDrawerVisible) _buildEpisodeSidebar(),
+                    EpisodeDrawerMotion(
+                      open: _isEpisodeDrawerVisible,
+                      child: _buildEpisodeSidebar(),
+                    ),
                   ],
                 ),
 
@@ -1005,52 +1009,84 @@ class _PlayerPageState extends State<PlayerPage> {
                       ],
                     ),
                   ),
-                  if (_episodes.isNotEmpty || _loadingEpisodes) ...[
-                    _PlayerIconButton(
-                      icon: Icons.playlist_play_rounded,
-                      tooltip: _isEpisodeDrawerVisible ? '关闭选集' : '打开选集',
-                      active: _isEpisodeDrawerVisible,
-                      onTap: () {
-                        setState(
-                          () => _showEpisodeDrawer = !_showEpisodeDrawer,
-                        );
-                      },
+                  SizedBox(
+                    key: const ValueKey('player-expandable-toolbar'),
+                    width: 360,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: ExpandableToolTabs(
+                        items: [
+                          if (_episodes.isNotEmpty || _loadingEpisodes)
+                            ExpandableToolTab(
+                              id: 'episodes',
+                              icon: Icons.playlist_play_rounded,
+                              label: '选集',
+                              tooltip:
+                                  _isEpisodeDrawerVisible ? '关闭选集' : '打开选集',
+                            ),
+                          ExpandableToolTab(
+                            id: 'danmaku',
+                            icon: _showDanmaku
+                                ? Icons.subtitles_rounded
+                                : Icons.subtitles_off_rounded,
+                            label: _showDanmaku ? '弹幕开' : '弹幕关',
+                            tooltip: _showDanmaku ? '关闭弹幕' : '打开弹幕',
+                          ),
+                          const ExpandableToolTab(
+                            id: 'danmaku-settings',
+                            icon: Icons.tune_rounded,
+                            label: '弹幕设置',
+                            tooltip: '弹幕设置',
+                          ),
+                          ExpandableToolTab(
+                            id: 'download',
+                            icon: _isDownloading
+                                ? Icons.downloading_rounded
+                                : Icons.download_rounded,
+                            label: _isDownloaded ? '已缓存' : '缓存',
+                            tooltip: _isDownloaded ? '已缓存' : '缓存本集',
+                          ),
+                          const ExpandableToolTab(
+                            id: 'shortcuts',
+                            icon: Icons.keyboard_command_key_rounded,
+                            label: '快捷键',
+                            tooltip: '快捷键',
+                          ),
+                        ],
+                        selectedId: _isEpisodeDrawerVisible
+                            ? 'episodes'
+                            : _showDanmakuPanel
+                                ? 'danmaku-settings'
+                                : _showShortcutPanel
+                                    ? 'shortcuts'
+                                    : _isDownloaded || _isDownloading
+                                        ? 'download'
+                                        : _showDanmaku
+                                            ? 'danmaku'
+                                            : null,
+                        foregroundColor: Colors.white.withValues(alpha: 0.72),
+                        selectedColor: AppTheme.accentBlue,
+                        onSelected: (id) {
+                          switch (id) {
+                            case 'episodes':
+                              setState(
+                                () => _showEpisodeDrawer = !_showEpisodeDrawer,
+                              );
+                            case 'danmaku':
+                              setState(() => _showDanmaku = !_showDanmaku);
+                              _danmakuController.setVisible(_showDanmaku);
+                            case 'danmaku-settings':
+                              _toggleDanmakuPanel();
+                            case 'download':
+                              if (!_isDownloaded && !_isDownloading) {
+                                _startDownload();
+                              }
+                            case 'shortcuts':
+                              _toggleShortcutPanel();
+                          }
+                        },
+                      ),
                     ),
-                    const SizedBox(width: 8),
-                  ],
-                  _StatusChip(
-                    icon: _showDanmaku
-                        ? Icons.subtitles_rounded
-                        : Icons.subtitles_off_rounded,
-                    label: _showDanmaku ? '弹幕开' : '弹幕关',
-                    active: _showDanmaku,
-                    onTap: () {
-                      setState(() => _showDanmaku = !_showDanmaku);
-                      _danmakuController.setVisible(_showDanmaku);
-                    },
-                  ),
-                  const SizedBox(width: 8),
-                  _PlayerIconButton(
-                    icon: Icons.tune_rounded,
-                    tooltip: '弹幕设置',
-                    active: _showDanmakuPanel,
-                    onTap: _toggleDanmakuPanel,
-                  ),
-                  const SizedBox(width: 8),
-                  _PlayerIconButton(
-                    icon: _isDownloading
-                        ? Icons.downloading_rounded
-                        : Icons.download_rounded,
-                    tooltip: _isDownloaded ? '已缓存' : '缓存本集',
-                    active: _isDownloaded || _isDownloading,
-                    onTap: _isDownloaded ? null : _startDownload,
-                  ),
-                  const SizedBox(width: 8),
-                  _PlayerIconButton(
-                    icon: Icons.keyboard_command_key_rounded,
-                    tooltip: '快捷键',
-                    active: _showShortcutPanel,
-                    onTap: _toggleShortcutPanel,
                   ),
                 ],
               ),
@@ -1194,13 +1230,11 @@ class _PlayerPageState extends State<PlayerPage> {
 class _PlayerIconButton extends StatefulWidget {
   final IconData icon;
   final String tooltip;
-  final bool active;
   final VoidCallback? onTap;
 
   const _PlayerIconButton({
     required this.icon,
     required this.tooltip,
-    this.active = false,
     this.onTap,
   });
 
@@ -1227,93 +1261,17 @@ class _PlayerIconButtonState extends State<_PlayerIconButton> {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: widget.active
-                  ? AppTheme.primaryBlue.withValues(alpha: 0.18)
-                  : Colors.white
-                      .withValues(alpha: _hovering && enabled ? 0.10 : 0.02),
+              color: Colors.white
+                  .withValues(alpha: _hovering && enabled ? 0.10 : 0.02),
               borderRadius: BorderRadius.circular(7),
             ),
             child: Icon(
               widget.icon,
               color: enabled
-                  ? (widget.active
-                      ? AppTheme.primaryBlue
-                      : Colors.white.withValues(alpha: 0.82))
+                  ? Colors.white.withValues(alpha: 0.82)
                   : Colors.white.withValues(alpha: 0.32),
               size: 19,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatefulWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  const _StatusChip({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  @override
-  State<_StatusChip> createState() => _StatusChipState();
-}
-
-class _StatusChipState extends State<_StatusChip> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 170),
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: widget.active
-                ? AppTheme.primaryBlue
-                    .withValues(alpha: _hovering ? 0.22 : 0.16)
-                : Colors.white.withValues(alpha: _hovering ? 0.12 : 0.07),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: widget.active
-                  ? AppTheme.primaryBlue.withValues(alpha: 0.32)
-                  : Colors.white.withValues(alpha: 0.08),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                widget.icon,
-                color: widget.active
-                    ? AppTheme.primaryBlue
-                    : Colors.white.withValues(alpha: 0.74),
-                size: 16,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: widget.active
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.72),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
           ),
         ),
       ),

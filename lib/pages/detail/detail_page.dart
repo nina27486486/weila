@@ -1,6 +1,5 @@
 import '../../theme/vira_colors.dart';
 import '../../utils/logger.dart';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
@@ -15,6 +14,9 @@ import '../../models/track_item.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/jikan/jikan_service.dart';
 import '../../services/http/http_client.dart';
+import '../../services/artwork_palette_service.dart';
+import '../../utils/animations.dart';
+import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/vira_page_chrome.dart';
 import '../../utils/error_handler.dart';
@@ -915,191 +917,202 @@ class _DetailPageState extends State<DetailPage> {
         ? totalEps
         : int.tryParse(totalEps?.toString() ?? '') ?? 0;
 
-    return Container(
-      height: 410,
-      decoration: BoxDecoration(
-        color: context.colors.bgCard,
-        border: Border(
-          top: BorderSide(color: context.colors.divider),
-          bottom: BorderSide(color: context.colors.divider),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ImageFiltered(
-            imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-            child: Transform.scale(
-              scale: 1.14,
-              child: CoverImage(url: coverUrl, fit: BoxFit.cover),
-            ),
+    Widget buildPanel(ArtworkPalette palette) {
+      return Container(
+        key: const ValueKey('detail-ambient-hero'),
+        height: 410,
+        decoration: BoxDecoration(
+          color: context.colors.bgCard,
+          border: Border(
+            top: BorderSide(color: context.colors.divider),
+            bottom: BorderSide(color: context.colors.divider),
           ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  Colors.black.withValues(alpha: 0.92),
-                  context.colors.bgCard.withValues(alpha: 0.78),
-                  Colors.black.withValues(alpha: 0.32),
-                ],
-                stops: const [0, 0.58, 1],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AmbientArtworkBackdrop(
+              palette: palette,
+              child: const SizedBox.expand(),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.82),
+                    context.colors.bgCard.withValues(alpha: 0.58),
+                    Colors.black.withValues(alpha: 0.2),
+                  ],
+                  stops: const [0, 0.58, 1],
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Hero(
-                  tag: 'anime-cover-${widget.animeUrl}',
-                  child: _DetailPoster(coverUrl: coverUrl),
-                ),
-                const SizedBox(width: 28),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (date.isNotEmpty)
-                            _InfoPill(
-                                icon: Icons.calendar_today_outlined,
-                                text: date),
-                          if (platform.isNotEmpty)
-                            _InfoPill(icon: Icons.tv_outlined, text: platform),
-                          if (totalEpisodeCount > 0)
-                            _InfoPill(
-                                icon: Icons.video_library_outlined,
-                                text: '$totalEpisodeCount集'),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          height: 1.08,
-                          shadows: [
-                            Shadow(blurRadius: 12, color: Colors.black87)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Hero(
+                    tag: 'anime-cover-${widget.animeUrl}',
+                    child: ArtworkParallax(
+                      child: _DetailPoster(coverUrl: coverUrl),
+                    ),
+                  ),
+                  const SizedBox(width: 28),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            if (date.isNotEmpty)
+                              _InfoPill(
+                                  icon: Icons.calendar_today_outlined,
+                                  text: date),
+                            if (platform.isNotEmpty)
+                              _InfoPill(
+                                  icon: Icons.tv_outlined, text: platform),
+                            if (totalEpisodeCount > 0)
+                              _InfoPill(
+                                  icon: Icons.video_library_outlined,
+                                  text: '$totalEpisodeCount集'),
                           ],
                         ),
-                      ),
-                      if (nameJa.isNotEmpty && nameJa != name) ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         Text(
-                          nameJa,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.58),
-                            fontSize: 13,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                      if (summary.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          summary,
+                          name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.72),
-                            fontSize: 13,
-                            height: 1.5,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            height: 1.08,
+                            shadows: [
+                              Shadow(blurRadius: 12, color: Colors.black87)
+                            ],
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (rating != null) _buildScoreBadge(rating),
-                          if (ratingCount != null)
-                            _InfoPill(
-                                icon: Icons.people_alt_outlined,
-                                text: '${ratingCount.toString()}人评分'),
-                          if (rank != null)
-                            _InfoPill(
-                                icon: Icons.emoji_events_outlined,
-                                text: '排名 $rank',
-                                highlighted: true),
-                          _buildSourceIndicator(),
+                        if (nameJa.isNotEmpty && nameJa != name) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            nameJa,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.58),
+                              fontSize: 13,
+                              height: 1.3,
+                            ),
+                          ),
                         ],
-                      ),
-                      if (tags.isNotEmpty) ...[
-                        const SizedBox(height: 14),
+                        if (summary.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            summary,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.72),
+                              fontSize: 13,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
                         Wrap(
-                          spacing: 7,
-                          runSpacing: 7,
-                          children: tags
-                              .take(5)
-                              .map((tag) => _DetailTag(text: tag))
-                              .toList(),
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (rating != null) _buildScoreBadge(rating),
+                            if (ratingCount != null)
+                              _InfoPill(
+                                  icon: Icons.people_alt_outlined,
+                                  text: '${ratingCount.toString()}人评分'),
+                            if (rank != null)
+                              _InfoPill(
+                                  icon: Icons.emoji_events_outlined,
+                                  text: '排名 $rank',
+                                  highlighted: true),
+                            _buildSourceIndicator(),
+                          ],
                         ),
-                      ],
-                      const SizedBox(height: 18),
-                      Row(
-                        children: [
-                          _HeroActionButton(
-                            icon: Icons.play_arrow_rounded,
-                            label: _store.currentEpisodes.isEmpty
-                                ? '等待片源'
-                                : '立即播放',
-                            onTap: _store.currentEpisodes.isEmpty
-                                ? null
-                                : () => _onEpisodeTap(0),
-                          ),
-                          const SizedBox(width: 10),
-                          _HeroIconButton(
-                            icon: _tracked
-                                ? Icons.calendar_month
-                                : Icons.calendar_month_outlined,
-                            active: _tracked,
-                            tooltip: _tracked ? '已追番' : '追番',
-                            onTap: () => _toggleTrack(
-                              name: name,
-                              coverUrl: coverUrl,
-                              status: status,
-                              totalEpisodes: totalEpisodeCount,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _HeroIconButton(
-                            icon: _collected
-                                ? Icons.bookmark
-                                : Icons.bookmark_border,
-                            active: _collected,
-                            tooltip: _collected ? '已收藏' : '收藏',
-                            onTap: () => _toggleCollect(
-                              name: name,
-                              coverUrl: coverUrl,
-                              summary: summary,
-                            ),
+                        if (tags.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Wrap(
+                            spacing: 7,
+                            runSpacing: 7,
+                            children: tags
+                                .take(5)
+                                .map((tag) => _DetailTag(text: tag))
+                                .toList(),
                           ),
                         ],
-                      ),
-                    ],
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            _HeroActionButton(
+                              icon: Icons.play_arrow_rounded,
+                              label: _store.currentEpisodes.isEmpty
+                                  ? '等待片源'
+                                  : '立即播放',
+                              onTap: _store.currentEpisodes.isEmpty
+                                  ? null
+                                  : () => _onEpisodeTap(0),
+                            ),
+                            const SizedBox(width: 10),
+                            _HeroIconButton(
+                              icon: _tracked
+                                  ? Icons.calendar_month
+                                  : Icons.calendar_month_outlined,
+                              active: _tracked,
+                              tooltip: _tracked ? '已追番' : '追番',
+                              onTap: () => _toggleTrack(
+                                name: name,
+                                coverUrl: coverUrl,
+                                status: status,
+                                totalEpisodes: totalEpisodeCount,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _HeroIconButton(
+                              icon: _collected
+                                  ? Icons.bookmark
+                                  : Icons.bookmark_border,
+                              active: _collected,
+                              tooltip: _collected ? '已收藏' : '收藏',
+                              onTap: () => _toggleCollect(
+                                name: name,
+                                coverUrl: coverUrl,
+                                summary: summary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      );
+    }
+
+    final provider = CoverImage.providerFor(coverUrl);
+    if (provider == null) return buildPanel(ArtworkPalette.fallback);
+    return ArtworkPaletteBuilder(
+      cacheKey: coverUrl!,
+      provider: provider,
+      builder: (_, palette) => buildPanel(palette),
     );
   }
 
@@ -1249,10 +1262,15 @@ class _DetailPageState extends State<DetailPage> {
                   if (index.isOdd) return const SizedBox(height: 8);
                   final episodeIndex = index ~/ 2;
                   final ep = _store.currentEpisodes[episodeIndex];
-                  return _EpisodeListTile(
-                    episode: ep,
-                    index: episodeIndex,
-                    onTap: () => _onEpisodeTap(episodeIndex),
+                  return FadeSlideIn(
+                    delay: Duration(
+                      milliseconds: episodeIndex.clamp(0, 10) * 35,
+                    ),
+                    child: _EpisodeListTile(
+                      episode: ep,
+                      index: episodeIndex,
+                      onTap: () => _onEpisodeTap(episodeIndex),
+                    ),
                   );
                 },
                 childCount: _store.currentEpisodes.length * 2 - 1,
@@ -1270,9 +1288,12 @@ class _DetailPageState extends State<DetailPage> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final ep = _store.currentEpisodes[index];
-                return _EpisodeChip(
-                  episode: ep,
-                  onTap: () => _onEpisodeTap(index),
+                return FadeSlideIn(
+                  delay: Duration(milliseconds: index.clamp(0, 10) * 35),
+                  child: _EpisodeChip(
+                    episode: ep,
+                    onTap: () => _onEpisodeTap(index),
+                  ),
                 );
               },
               childCount: _store.currentEpisodes.length,

@@ -22,24 +22,27 @@ class CoverImage extends StatelessWidget {
     this.borderRadius,
   });
 
+  static ImageProvider<Object>? providerFor(String? url) {
+    final request = _requestFor(url);
+    if (request == null) return null;
+    return CachedNetworkImageProvider(
+      request.url,
+      headers: request.headers,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final fixedUrl = AppUtils.fixCoverUrl(url);
+    final request = _requestFor(url);
 
     Widget image;
-    if (fixedUrl == null) {
+    if (request == null) {
       image = _placeholder(context, width, height);
     } else {
       // 从图片URL提取origin作为Referer
-      Map<String, String>? headers;
-      try {
-        final uri = Uri.parse(fixedUrl);
-        headers = {'Referer': '${uri.scheme}://${uri.host}/'};
-      } catch (_) {}
-
       image = CachedNetworkImage(
-        imageUrl: fixedUrl,
-        httpHeaders: headers ?? {},
+        imageUrl: request.url,
+        httpHeaders: request.headers,
         width: width,
         height: height,
         fit: fit,
@@ -80,4 +83,25 @@ class CoverImage extends StatelessWidget {
       ),
     );
   }
+
+  static _CoverRequest? _requestFor(String? url) {
+    final fixedUrl = AppUtils.fixCoverUrl(url);
+    if (fixedUrl == null) return null;
+    try {
+      final uri = Uri.parse(fixedUrl);
+      return _CoverRequest(
+        url: fixedUrl,
+        headers: {'Referer': '${uri.scheme}://${uri.host}/'},
+      );
+    } catch (_) {
+      return _CoverRequest(url: fixedUrl, headers: const {});
+    }
+  }
+}
+
+class _CoverRequest {
+  final String url;
+  final Map<String, String> headers;
+
+  const _CoverRequest({required this.url, required this.headers});
 }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../services/artwork_palette_service.dart';
 import '../../theme/vira_colors.dart';
+import '../../utils/animations.dart';
+import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/editorial_section_header.dart';
 import '../../widgets/vira_state_view.dart';
@@ -191,106 +194,164 @@ class _EditorialHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontal = constraints.maxWidth >= 1040;
-        final image = _HeroImage(item: item, onOpen: onOpen);
-        final copy = _HeroCopy(item: item, onOpen: onOpen);
+    Widget buildHero(ArtworkPalette palette) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontal = constraints.maxWidth >= 1040;
+          final image = _HeroImage(item: item, onOpen: onOpen);
+          final copy = _HeroCopy(item: item, onOpen: onOpen);
+          final content = horizontal
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 13, child: image),
+                    const SizedBox(width: 22),
+                    Expanded(flex: 7, child: copy),
+                  ],
+                )
+              : Column(
+                  children: [
+                    Expanded(child: image),
+                    Expanded(child: copy),
+                  ],
+                );
 
-        if (!horizontal) {
-          return Column(
-            children: [
-              SizedBox(height: 330, child: image),
-              SizedBox(height: 330, child: copy),
-            ],
+          return SizedBox(
+            key: const ValueKey('home-ambient-hero'),
+            height: horizontal ? 390 : 660,
+            child: AmbientArtworkBackdrop(
+              palette: palette,
+              child: Padding(
+                padding: const EdgeInsets.all(10),
+                child: content,
+              ),
+            ),
           );
-        }
+        },
+      );
+    }
 
-        return SizedBox(
-          height: 390,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 13, child: image),
-              const SizedBox(width: 22),
-              Expanded(flex: 7, child: copy),
-            ],
-          ),
-        );
-      },
+    final coverUrl = item?['cover']?.toString();
+    final provider = CoverImage.providerFor(coverUrl);
+    if (provider == null) return buildHero(ArtworkPalette.fallback);
+    return ArtworkPaletteBuilder(
+      cacheKey: coverUrl!,
+      provider: provider,
+      builder: (_, palette) => buildHero(palette),
     );
   }
 }
 
-class _HeroImage extends StatelessWidget {
+class _HeroImage extends StatefulWidget {
   final Map<String, dynamic>? item;
   final VoidCallback? onOpen;
 
   const _HeroImage({this.item, this.onOpen});
 
   @override
+  State<_HeroImage> createState() => _HeroImageState();
+}
+
+class _HeroImageState extends State<_HeroImage> {
+  Offset _tilt = Offset.zero;
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return _HoverSurface(
-      onTap: onOpen,
-      lift: 2,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CoverImage(url: item?['cover']?.toString(), fit: BoxFit.cover),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.04),
-                  Colors.black.withValues(alpha: 0.58),
-                ],
-                stops: const [0.48, 1],
-              ),
-            ),
-          ),
-          Positioned(
-            top: 18,
-            left: 18,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              color: colors.paper.withValues(alpha: 0.92),
-              child: Text(
-                '本周主映',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.sky,
-                      fontWeight: FontWeight.w700,
-                    ),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 18,
-            child: Row(
-              children: [
-                Text(
-                  '镜头 01 / 04',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.9),
-                        letterSpacing: 1.1,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final transform = Matrix4.identity()
+          ..setEntry(3, 2, 0.0008)
+          ..rotateX(-_tilt.dy * 0.035)
+          ..rotateY(_tilt.dx * 0.035);
+        return MouseRegion(
+          onHover: (event) {
+            if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return;
+            if (constraints.maxWidth <= 0 || constraints.maxHeight <= 0) return;
+            setState(() {
+              _tilt = Offset(
+                (event.localPosition.dx / constraints.maxWidth - 0.5) * 2,
+                (event.localPosition.dy / constraints.maxHeight - 0.5) * 2,
+              );
+            });
+          },
+          onExit: (_) => setState(() => _tilt = Offset.zero),
+          child: AnimatedContainer(
+            duration: AppAnimations.normal,
+            curve: AppAnimations.easeOut,
+            transform: transform,
+            transformAlignment: Alignment.center,
+            child: _HoverSurface(
+              onTap: widget.onOpen,
+              lift: 2,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CoverImage(
+                    url: widget.item?['cover']?.toString(),
+                    fit: BoxFit.cover,
+                  ),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withValues(alpha: 0.04),
+                          Colors.black.withValues(alpha: 0.58),
+                        ],
+                        stops: const [0.48, 1],
                       ),
-                ),
-                const Spacer(),
-                const Icon(
-                  Icons.open_in_full_rounded,
-                  size: 15,
-                  color: Colors.white,
-                ),
-              ],
+                    ),
+                  ),
+                  Positioned(
+                    top: 18,
+                    left: 18,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      color: colors.paper.withValues(alpha: 0.92),
+                      child: Text(
+                        '本周主映',
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: colors.sky,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 18,
+                    child: Row(
+                      children: [
+                        Text(
+                          '镜头 01 / 04',
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    letterSpacing: 1.1,
+                                  ),
+                        ),
+                        const Spacer(),
+                        const Icon(
+                          Icons.open_in_full_rounded,
+                          size: 15,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -429,91 +490,24 @@ class _ContinueSection extends StatelessWidget {
             message: '还没有续看记录，开始一段新故事吧。',
           )
         else
-          SizedBox(
-            height: 186,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: stories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
-              itemBuilder: (context, index) {
-                final story = stories[index];
-                return _ContinueCard(
-                  story: story,
-                  onOpen: () => onOpen(story),
-                );
-              },
-            ),
+          LayeredArtworkStack(
+            items: [
+              for (final story in stories)
+                ArtworkStackItem(
+                  id: story.animeUrl,
+                  title: story.title,
+                  subtitle: '${story.progressLabel} · ${story.updatedLabel}',
+                  imageUrl: story.coverUrl,
+                  progress: 0.58,
+                ),
+            ],
+            onOpen: (item) {
+              final index =
+                  stories.indexWhere((story) => story.animeUrl == item.id);
+              if (index >= 0) onOpen(stories[index]);
+            },
           ),
       ],
-    );
-  }
-}
-
-class _ContinueCard extends StatelessWidget {
-  final HomeContinueStory story;
-  final VoidCallback onOpen;
-
-  const _ContinueCard({required this.story, required this.onOpen});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-
-    return SizedBox(
-      width: 318,
-      child: _HoverSurface(
-        onTap: onOpen,
-        child: Row(
-          children: [
-            SizedBox(
-              width: 126,
-              height: double.infinity,
-              child: CoverImage(url: story.coverUrl, fit: BoxFit.cover),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 14, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      story.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${story.progressLabel} · ${story.updatedLabel}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const Spacer(),
-                    Container(
-                      height: 2,
-                      color: colors.divider,
-                      alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
-                        widthFactor: 0.58,
-                        child: Container(color: colors.sakura),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton.icon(
-                      onPressed: onOpen,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(0, 30),
-                      ),
-                      icon: const Icon(Icons.play_arrow_rounded, size: 17),
-                      label: const Text('继续观看'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -740,7 +734,19 @@ class _SeasonSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visible = items.take(7).toList();
+    final railItems = [
+      for (var index = 0; index < items.length; index++)
+        PosterRailItem(
+          id: '${index}_${items[index]['url'] ?? ''}',
+          title: _nameOf(items[index]),
+          imageUrl: items[index]['cover']?.toString(),
+          meta: [
+            ..._genresOf(items[index]).take(2),
+            if (_scoreOf(items[index]) case final score?)
+              score.toStringAsFixed(1),
+          ].join(' · '),
+        ),
+    ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -751,124 +757,20 @@ class _SeasonSection extends StatelessWidget {
           subtitle: '不是填满页面，而是留下真正值得注意的作品',
         ),
         const SizedBox(height: 18),
-        if (visible.isEmpty)
+        if (railItems.isEmpty)
           const _QuietEmpty(
             icon: Icons.local_movies_outlined,
             message: '本季片单正在整理中。',
           )
         else
-          SizedBox(
-            height: 326,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: visible.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 14),
-              itemBuilder: (context, index) {
-                final item = visible[index];
-                return _SeasonCard(
-                  index: index,
-                  item: item,
-                  onOpen: () => onOpen(item),
-                );
-              },
-            ),
+          PosterRail(
+            items: railItems,
+            onOpen: (item) {
+              final index = railItems.indexOf(item);
+              if (index >= 0) onOpen(items[index]);
+            },
           ),
       ],
-    );
-  }
-}
-
-class _SeasonCard extends StatelessWidget {
-  final int index;
-  final Map<String, dynamic> item;
-  final VoidCallback onOpen;
-
-  const _SeasonCard({
-    required this.index,
-    required this.item,
-    required this.onOpen,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final score = _scoreOf(item);
-
-    return SizedBox(
-      width: index == 0 ? 220 : 172,
-      child: _HoverSurface(
-        onTap: onOpen,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CoverImage(url: item['cover']?.toString(), fit: BoxFit.cover),
-                  Positioned(
-                    left: 10,
-                    top: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 4,
-                      ),
-                      color: colors.paper.withValues(alpha: 0.92),
-                      child: Text(
-                        '${index + 1}'.padLeft(2, '0'),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colors.sky,
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _nameOf(item),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _genresOf(item).take(2).join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      if (score != null) ...[
-                        const SizedBox(width: 6),
-                        Icon(
-                          Icons.star_rounded,
-                          size: 13,
-                          color: colors.warning,
-                        ),
-                        Text(
-                          score.toStringAsFixed(1),
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
