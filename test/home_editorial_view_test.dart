@@ -98,6 +98,75 @@ void main() {
     expect(pointerRegions.length, greaterThanOrEqualTo(10));
   });
 
+  testWidgets('本周主映点击数字后切换番剧并打开当前项目', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Map<String, dynamic>? openedAnime;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: continueStories,
+            onOpenAnime: (item) => openedAnime = item,
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('今天，继续\n动画作品 1。'), findsOneWidget);
+    expect(find.text('镜头 01 / 04'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('home-hero-selector-1')),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('今天，继续\n动画作品 2。'), findsOneWidget);
+    expect(find.text('镜头 02 / 04'), findsOneWidget);
+
+    final detailsButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '查看详情').last,
+    );
+    detailsButton.onPressed!();
+    expect(openedAnime, animeItems[1]);
+  });
+
+  testWidgets('本周主映会自动切换到下一项', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: continueStories,
+            onOpenAnime: (_) {},
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('今天，继续\n动画作品 1。'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 7));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('今天，继续\n动画作品 2。'), findsOneWidget);
+  });
+
   testWidgets('首页使用层叠续看、完整海报轨道与环境背景', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));

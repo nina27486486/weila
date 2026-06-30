@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../services/artwork_palette_service.dart';
@@ -78,13 +80,13 @@ class HomeEditorialView extends StatelessWidget {
       return const _HomeLoadingView();
     }
 
-    final heroItem = trendingItems.isNotEmpty
-        ? trendingItems.first
-        : latestItems.isNotEmpty
-            ? latestItems.first
-            : seasonalItems.isNotEmpty
-                ? seasonalItems.first
-                : null;
+    final heroItems = (trendingItems.isNotEmpty
+            ? trendingItems
+            : latestItems.isNotEmpty
+                ? latestItems
+                : seasonalItems)
+        .take(4)
+        .toList(growable: false);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.only(top: 18, bottom: 64),
@@ -98,8 +100,8 @@ class HomeEditorialView extends StatelessWidget {
           const SizedBox(height: 16),
           _EditorialHero(
             key: const ValueKey('home-editorial-hero'),
-            item: heroItem,
-            onOpen: heroItem == null ? null : () => onOpenAnime(heroItem),
+            items: heroItems,
+            onOpen: onOpenAnime,
           ),
           const SizedBox(height: 48),
           _ContinueSection(
@@ -192,20 +194,132 @@ class _DiaryStrip extends StatelessWidget {
   }
 }
 
-class _EditorialHero extends StatelessWidget {
-  final Map<String, dynamic>? item;
-  final VoidCallback? onOpen;
+class _EditorialHero extends StatefulWidget {
+  final List<Map<String, dynamic>> items;
+  final ValueChanged<Map<String, dynamic>> onOpen;
 
-  const _EditorialHero({super.key, this.item, this.onOpen});
+  const _EditorialHero({
+    super.key,
+    required this.items,
+    required this.onOpen,
+  });
+
+  @override
+  State<_EditorialHero> createState() => _EditorialHeroState();
+}
+
+class _EditorialHeroState extends State<_EditorialHero>
+    with WidgetsBindingObserver {
+  static const _autoPlayInterval = Duration(seconds: 6);
+
+  Timer? _autoPlayTimer;
+  int _selectedIndex = 0;
+  bool _tickerEnabled = true;
+  bool _disableAnimations = false;
+  AppLifecycleState _lifecycle = AppLifecycleState.resumed;
+
+  Map<String, dynamic>? get _selectedItem =>
+      widget.items.isEmpty ? null : widget.items[_selectedIndex];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _lifecycle =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _tickerEnabled = TickerMode.valuesOf(context).enabled;
+    _disableAnimations =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    _syncAutoPlay();
+  }
+
+  @override
+  void didUpdateWidget(covariant _EditorialHero oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final previousItem = oldWidget.items.isEmpty
+        ? null
+        : oldWidget.items[_selectedIndex.clamp(0, oldWidget.items.length - 1)];
+    final previousId = _itemIdentity(previousItem);
+    final matchingIndex = widget.items.indexWhere(
+      (item) => _itemIdentity(item) == previousId,
+    );
+    _selectedIndex = matchingIndex >= 0 ? matchingIndex : 0;
+    _syncAutoPlay();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycle = state;
+    _syncAutoPlay();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _autoPlayTimer?.cancel();
+    super.dispose();
+  }
+
+  void _syncAutoPlay() {
+    _autoPlayTimer?.cancel();
+    if (!mounted ||
+        widget.items.length <= 1 ||
+        !_tickerEnabled ||
+        _disableAnimations ||
+        _lifecycle != AppLifecycleState.resumed) {
+      return;
+    }
+    _autoPlayTimer = Timer.periodic(_autoPlayInterval, (_) {
+      if (!mounted || widget.items.length <= 1) return;
+      _selectItem((_selectedIndex + 1) % widget.items.length, restart: false);
+    });
+  }
+
+  void _selectItem(int index, {bool restart = true}) {
+    if (index < 0 || index >= widget.items.length || index == _selectedIndex) {
+      return;
+    }
+    setState(() => _selectedIndex = index);
+    if (restart) _syncAutoPlay();
+  }
+
+  void _openSelected() {
+    final item = _selectedItem;
+    if (item != null) widget.onOpen(item);
+  }
+
+  String _itemIdentity(Map<String, dynamic>? item) {
+    if (item == null) return '';
+    return (item['url'] ?? item['id'] ?? item['name'] ?? '').toString();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final item = _selectedItem;
+    final itemCount = widget.items.length;
+
     Widget buildHero(ArtworkPalette palette) {
       return LayoutBuilder(
         builder: (context, constraints) {
           final horizontal = constraints.maxWidth >= 1040;
-          final image = _HeroImage(item: item, onOpen: onOpen);
-          final copy = _HeroCopy(item: item, onOpen: onOpen);
+          final image = _HeroImage(
+            item: item,
+            selectedIndex: _selectedIndex,
+            itemCount: itemCount,
+            onOpen: item == null ? null : _openSelected,
+          );
+          final copy = _HeroCopy(
+            item: item,
+            selectedIndex: _selectedIndex,
+            itemCount: itemCount,
+            onSelect: _selectItem,
+            onOpen: item == null ? null : _openSelected,
+          );
           final content = horizontal
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -229,7 +343,16 @@ class _EditorialHero extends StatelessWidget {
               palette: palette,
               child: Padding(
                 padding: const EdgeInsets.all(10),
-                child: content,
+                child: AnimatedSwitcher(
+                  duration:
+                      _disableAnimations ? Duration.zero : AppAnimations.normal,
+                  switchInCurve: AppAnimations.easeOut,
+                  switchOutCurve: AppAnimations.easeIn,
+                  child: KeyedSubtree(
+                    key: ValueKey(_itemIdentity(item)),
+                    child: content,
+                  ),
+                ),
               ),
             ),
           );
@@ -250,9 +373,16 @@ class _EditorialHero extends StatelessWidget {
 
 class _HeroImage extends StatefulWidget {
   final Map<String, dynamic>? item;
+  final int selectedIndex;
+  final int itemCount;
   final VoidCallback? onOpen;
 
-  const _HeroImage({this.item, this.onOpen});
+  const _HeroImage({
+    required this.item,
+    required this.selectedIndex,
+    required this.itemCount,
+    this.onOpen,
+  });
 
   @override
   State<_HeroImage> createState() => _HeroImageState();
@@ -336,7 +466,8 @@ class _HeroImageState extends State<_HeroImage> {
                     child: Row(
                       children: [
                         Text(
-                          '镜头 01 / 04',
+                          '镜头 ${_twoDigits(widget.selectedIndex + 1)} / '
+                          '${_twoDigits(widget.itemCount)}',
                           style:
                               Theme.of(context).textTheme.labelSmall?.copyWith(
                                     color: Colors.white.withValues(alpha: 0.9),
@@ -364,9 +495,18 @@ class _HeroImageState extends State<_HeroImage> {
 
 class _HeroCopy extends StatelessWidget {
   final Map<String, dynamic>? item;
+  final int selectedIndex;
+  final int itemCount;
+  final ValueChanged<int> onSelect;
   final VoidCallback? onOpen;
 
-  const _HeroCopy({this.item, this.onOpen});
+  const _HeroCopy({
+    required this.item,
+    required this.selectedIndex,
+    required this.itemCount,
+    required this.onSelect,
+    this.onOpen,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -436,15 +576,33 @@ class _HeroCopy extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             children: [
-              for (var index = 0; index < 4; index++) ...[
-                Text(
-                  '0${index + 1}',
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color:
-                            index == 0 ? colors.textPrimary : colors.textMuted,
+              for (var index = 0; index < itemCount; index++) ...[
+                Tooltip(
+                  message: '切换到第 ${index + 1} 部主映',
+                  child: InkWell(
+                    key: ValueKey('home-hero-selector-$index'),
+                    borderRadius: BorderRadius.circular(4),
+                    onTap: () => onSelect(index),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 2,
+                        vertical: 2,
                       ),
+                      child: Text(
+                        _twoDigits(index + 1),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: index == selectedIndex
+                                  ? colors.textPrimary
+                                  : colors.textMuted,
+                              fontWeight: index == selectedIndex
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                            ),
+                      ),
+                    ),
+                  ),
                 ),
-                if (index != 3) const SizedBox(width: 14),
+                if (index != itemCount - 1) const SizedBox(width: 10),
               ],
               const SizedBox(width: 12),
               Expanded(
@@ -1045,6 +1203,8 @@ class _QuietEmpty extends StatelessWidget {
     );
   }
 }
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
 
 class _HomeLoadingView extends StatelessWidget {
   const _HomeLoadingView();
