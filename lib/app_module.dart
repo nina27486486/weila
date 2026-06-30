@@ -16,11 +16,12 @@ import 'pages/discover/ranking_page.dart';
 import 'pages/discover/category_browse_page.dart';
 import 'pages/download/download_page.dart';
 import 'services/plugin/plugin_service.dart';
+import 'stores/theme_store.dart';
 
 class AppModule extends Module {
   @override
   void binds(i) {
-    // 全局依赖注入
+    i.addLazySingleton<ThemeStore>(() => ThemeStore());
   }
 
   @override

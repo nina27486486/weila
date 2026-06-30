@@ -1,3 +1,4 @@
+import '../theme/vira_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../utils/helpers.dart';
@@ -27,7 +28,7 @@ class CoverImage extends StatelessWidget {
 
     Widget image;
     if (fixedUrl == null) {
-      image = _placeholder(width, height);
+      image = _placeholder(context, width, height);
     } else {
       // 从图片URL提取origin作为Referer
       Map<String, String>? headers;
@@ -44,8 +45,8 @@ class CoverImage extends StatelessWidget {
         fit: fit,
         memCacheWidth: 300,
         maxWidthDiskCache: 600,
-        placeholder: (_, __) => _loadingPlaceholder(width, height),
-        errorWidget: (_, __, ___) => _placeholder(width, height),
+        placeholder: (_, __) => _loadingPlaceholder(context, width, height),
+        errorWidget: (_, __, ___) => _placeholder(context, width, height),
       );
     }
 
@@ -55,24 +56,27 @@ class CoverImage extends StatelessWidget {
     return image;
   }
 
-  static Widget _placeholder(double? w, double? h) {
+  Widget _placeholder(BuildContext context, double? w, double? h) {
     return Container(
       width: w,
       height: h,
-      color: AppTheme.bgCard,
-      child: const Center(
-        child: Icon(Icons.broken_image_outlined, color: AppTheme.textMuted, size: 32),
+      color: context.colors.bgCard,
+      child: Center(
+        child: Icon(Icons.broken_image_outlined,
+            color: context.colors.textMuted, size: 32),
       ),
     );
   }
 
-  static Widget _loadingPlaceholder(double? w, double? h) {
+  static Widget _loadingPlaceholder(
+      BuildContext context, double? w, double? h) {
     return Container(
       width: w,
       height: h,
-      color: AppTheme.bgCard,
-      child: const Center(
-        child: CircularProgressIndicator(color: AppTheme.primaryBlue, strokeWidth: 2),
+      color: context.colors.bgCard,
+      child: Center(
+        child: CircularProgressIndicator(
+            color: AppTheme.primaryBlue, strokeWidth: 2),
       ),
     );
   }

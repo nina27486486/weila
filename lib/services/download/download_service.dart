@@ -543,18 +543,6 @@ class DownloadService {
         .trim();
   }
 
-  /// 从 sourcePlugin 推导 CMS 站点 base URL
-  String? _getCmsBaseUrl(String sourcePlugin) {
-    switch (sourcePlugin) {
-      case 'cms_yinhua':
-        return 'https://www.yinhuadm.xyz';
-      case 'cms_ffzy':
-        return 'https://cj.ffzyapi.com';
-      default:
-        return null;
-    }
-  }
-
   /// 从 m3u8 URL 的 CDN 域名推导正确的 Referer
   String? _getRefererForCdn(String m3u8Url) {
     try {

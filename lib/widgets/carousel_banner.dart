@@ -1,4 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
+import '../theme/vira_colors.dart';
 import '../theme/app_theme.dart';
 import '../widgets/cover_image.dart';
 
@@ -33,7 +37,6 @@ class CarouselBanner extends StatefulWidget {
 class _CarouselBannerState extends State<CarouselBanner>
     with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
-  int _previousIndex = 0;
   late final PageController _pageController;
   late final AnimationController _progressController;
 
@@ -43,7 +46,7 @@ class _CarouselBannerState extends State<CarouselBanner>
     _pageController = PageController();
     _progressController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 5),
+      duration: Duration(seconds: 5),
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
           _goToNext();
@@ -57,7 +60,7 @@ class _CarouselBannerState extends State<CarouselBanner>
     final next = (_currentIndex + 1) % widget.items.length;
     _pageController.animateToPage(
       next,
-      duration: const Duration(milliseconds: 600),
+      duration: const Duration(milliseconds: 420),
       curve: Curves.easeInOutCubic,
     );
   }
@@ -73,13 +76,15 @@ class _CarouselBannerState extends State<CarouselBanner>
   Widget build(BuildContext context) {
     if (widget.items.isEmpty) {
       return Container(
-        height: 280,
+        height: 340,
         decoration: BoxDecoration(
-          color: AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(12),
+          color: context.colors.bgCard,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: context.colors.divider),
         ),
-        child: const Center(
-          child: Text('暂无推荐', style: TextStyle(color: AppTheme.textMuted)),
+        child: Center(
+          child:
+              Text('暂无推荐', style: TextStyle(color: context.colors.textMuted)),
         ),
       );
     }
@@ -91,7 +96,7 @@ class _CarouselBannerState extends State<CarouselBanner>
         _progressController.forward();
       },
       child: SizedBox(
-        height: 280,
+        height: 340,
         child: Stack(
           children: [
             // 页面视图
@@ -100,7 +105,6 @@ class _CarouselBannerState extends State<CarouselBanner>
               itemCount: widget.items.length,
               onPageChanged: (i) {
                 setState(() {
-                  _previousIndex = _currentIndex;
                   _currentIndex = i;
                 });
                 _progressController.reset();
@@ -117,7 +121,7 @@ class _CarouselBannerState extends State<CarouselBanner>
                       value = (1 - value.abs()).clamp(0.0, 1.0);
                     }
                     return Transform.scale(
-                      scale: 0.9 + value * 0.1,
+                      scale: 0.985 + value * 0.015,
                       child: Opacity(
                         opacity: value,
                         child: child,
@@ -125,84 +129,116 @@ class _CarouselBannerState extends State<CarouselBanner>
                     );
                   },
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    margin: EdgeInsets.zero,
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(12),
                       gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                         colors: [
-                          AppTheme.bgCard,
-                          AppTheme.primaryDark.withValues(alpha: 0.6),
+                          context.colors.bgCard,
+                          context.colors.bgCard,
+                          AppTheme.primaryBlue.withValues(alpha: 0.10),
                         ],
                       ),
+                      border: Border.all(color: context.colors.divider),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.20),
+                          blurRadius: 18,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        // 封面图（带Referer防盗链）
-                        CoverImage(url: item.imageUrl, fit: BoxFit.cover),
-                        // 暗色遮罩
+                        ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: Transform.scale(
+                            scale: 1.12,
+                            child: CoverImage(
+                                url: item.imageUrl, fit: BoxFit.cover),
+                          ),
+                        ),
                         Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
                               colors: [
-                                Colors.black.withValues(alpha: 0.3),
-                                Colors.black.withValues(alpha: 0.7),
+                                Colors.black.withValues(alpha: 0.88),
+                                context.colors.bgCard.withValues(alpha: 0.72),
+                                Colors.black.withValues(alpha: 0.18),
                               ],
-                              stops: const [0.4, 1.0],
+                              stops: const [0.0, 0.52, 1.0],
                             ),
                           ),
                         ),
-                        // 内容
+                        Positioned(
+                          top: 22,
+                          right: 34,
+                          bottom: 26,
+                          child: _HeroPoster(
+                            imageUrl: item.imageUrl,
+                            indexText: '${index + 1}'.padLeft(2, '0'),
+                          ),
+                        ),
                         Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.fromLTRB(32, 28, 340, 30),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.end,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Wrap(
                                 spacing: 6,
+                                runSpacing: 6,
                                 children: [
-                                  _buildTag('追番中', AppTheme.tagHighlight),
-                                  ...item.tags.take(3).map((t) => _buildTag(t, AppTheme.tagBg)),
+                                  _buildTag('今日主推', AppTheme.primaryBlue),
+                                  ...item.tags.take(3).map((t) =>
+                                      _buildTag(t, context.colors.tagBg)),
                                 ],
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                               Text(
                                 item.title,
-                                style: const TextStyle(
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                  shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.08,
+                                  shadows: const [
+                                    Shadow(
+                                        blurRadius: 12, color: Colors.black87)
+                                  ],
                                 ),
                               ),
                               if (item.description != null) ...[
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 10),
                                 Text(
                                   item.description!,
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.8),
-                                    fontSize: 13,
+                                    color: Colors.white.withValues(alpha: 0.78),
+                                    fontSize: 14,
+                                    height: 1.45,
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 16),
+                              const SizedBox(height: 20),
                               Row(
                                 children: [
                                   _HoverButton(
-                                    onPressed: item.onPlay,
+                                    onPressed: item.onPlay ?? item.onDetail,
                                     icon: Icons.play_arrow,
                                     label: '立即播放',
                                     filled: true,
                                   ),
-                                  const SizedBox(width: 12),
+                                  SizedBox(width: 12),
                                   _HoverButton(
                                     onPressed: item.onDetail,
                                     icon: Icons.info_outline,
@@ -220,26 +256,26 @@ class _CarouselBannerState extends State<CarouselBanner>
                 );
               },
             ),
-            
+
             // 指示器（带进度条动画）
             Positioned(
-              bottom: 16,
-              right: 24,
+              bottom: 22,
+              right: 36,
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: List.generate(
                   widget.items.length,
                   (i) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
+                    duration: Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
-                    width: i == _currentIndex ? 24 : 6,
-                    height: 6,
+                    width: i == _currentIndex ? 24 : 5,
+                    height: 4,
                     margin: const EdgeInsets.only(left: 4),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(3),
                       color: i == _currentIndex
                           ? AppTheme.primaryBlue
-                          : AppTheme.textMuted.withValues(alpha: 0.4),
+                          : context.colors.textMuted.withValues(alpha: 0.4),
                     ),
                     child: i == _currentIndex
                         ? AnimatedBuilder(
@@ -270,18 +306,69 @@ class _CarouselBannerState extends State<CarouselBanner>
 
   Widget _buildTag(String text, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.8),
+        color: color.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           color: Colors.white,
           fontSize: 11,
-          fontWeight: FontWeight.w500,
+          fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+}
+
+class _HeroPoster extends StatelessWidget {
+  final String? imageUrl;
+  final String indexText;
+
+  const _HeroPoster({
+    required this.imageUrl,
+    required this.indexText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 214,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: -18,
+            top: 28,
+            child: Text(
+              indexText,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.08),
+                fontSize: 96,
+                fontWeight: FontWeight.w900,
+                height: 1,
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.2),
+                    blurRadius: 28,
+                    offset: const Offset(0, 18),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: CoverImage(url: imageUrl, fit: BoxFit.cover),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -311,23 +398,34 @@ class _HoverButtonState extends State<_HoverButton> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: AnimatedScale(
-        scale: _hovering ? 1.05 : 1.0,
-        duration: const Duration(milliseconds: 150),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
         curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          boxShadow: widget.filled && _hovering
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.22),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ]
+              : null,
+        ),
         child: widget.filled
             ? FilledButton.icon(
                 onPressed: widget.onPressed,
                 icon: Icon(widget.icon, size: 20),
                 label: Text(widget.label),
                 style: FilledButton.styleFrom(
-                  backgroundColor: _hovering
-                      ? AppTheme.accentBlue
-                      : AppTheme.primaryBlue,
+                  backgroundColor:
+                      _hovering ? AppTheme.accentBlue : AppTheme.primaryBlue,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   animationDuration: const Duration(milliseconds: 200),
                 ),
               )
@@ -338,12 +436,15 @@ class _HoverButtonState extends State<_HoverButton> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: BorderSide(
-                    color: _hovering ? AppTheme.primaryBlue : AppTheme.divider,
+                    color: _hovering
+                        ? AppTheme.primaryBlue
+                        : context.colors.divider,
                   ),
                   backgroundColor: _hovering
                       ? AppTheme.primaryBlue.withValues(alpha: 0.1)
                       : Colors.transparent,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   animationDuration: const Duration(milliseconds: 200),
                 ),
               ),

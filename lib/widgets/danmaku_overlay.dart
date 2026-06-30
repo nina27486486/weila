@@ -14,7 +14,6 @@ class DanmakuController extends ChangeNotifier {
   bool _visible = true;
   double _opacity = 1.0;
   double _fontSize = 1.0; // 缩放因子
-  int _maxLines = 0; // 0=无限制
   double _speed = 1.0;
   double _area = 1.0; // 显示区域（0.5=上半屏, 1.0=全屏）
 
@@ -25,7 +24,8 @@ class DanmakuController extends ChangeNotifier {
   bool get visible => _visible;
   double get opacity => _opacity;
   List<DanmakuItem> get allDanmaku => _allDanmaku;
-  int get runningCount => _running.length + _topStatic.length + _bottomStatic.length;
+  int get runningCount =>
+      _running.length + _topStatic.length + _bottomStatic.length;
 
   /// 加载弹幕数据
   void loadDanmaku(List<DanmakuItem> items) {
@@ -82,7 +82,7 @@ class DanmakuController extends ChangeNotifier {
   }
 
   /// 获取当前时间点应该显示的弹幕
-  List<_DanmakuRenderInfo> getVisibleDanmaku(Size canvasSize, double dt) {
+  List<_DanmakuRenderInfo> _getVisibleDanmaku(Size canvasSize, double dt) {
     if (!_visible || _allDanmaku.isEmpty) return [];
 
     // 触发新弹幕
@@ -113,7 +113,9 @@ class DanmakuController extends ChangeNotifier {
     for (final d in _topStatic) {
       result.add(_DanmakuRenderInfo(
         text: d.item.text,
-        x: (canvasSize.width - d.item.text.length * d.item.fontSize * _fontSize) / 2,
+        x: (canvasSize.width -
+                d.item.text.length * d.item.fontSize * _fontSize) /
+            2,
         y: d.y,
         color: Color(d.item.color).withValues(alpha: _opacity),
         fontSize: d.item.fontSize * _fontSize,
@@ -125,7 +127,9 @@ class DanmakuController extends ChangeNotifier {
     for (final d in _bottomStatic) {
       result.add(_DanmakuRenderInfo(
         text: d.item.text,
-        x: (canvasSize.width - d.item.text.length * d.item.fontSize * _fontSize) / 2,
+        x: (canvasSize.width -
+                d.item.text.length * d.item.fontSize * _fontSize) /
+            2,
         y: canvasSize.height - d.y - 30,
         color: Color(d.item.color).withValues(alpha: _opacity),
         fontSize: d.item.fontSize * _fontSize,
@@ -148,10 +152,14 @@ class DanmakuController extends ChangeNotifier {
 
       switch (item.type) {
         case 1: // 顶部
-          _topStatic.add(_StaticDanmaku(item: item, y: _findTopSlot(maxHeight), spawnTime: _currentTime));
+          _topStatic.add(_StaticDanmaku(
+              item: item, y: _findTopSlot(maxHeight), spawnTime: _currentTime));
           break;
         case 2: // 底部
-          _bottomStatic.add(_StaticDanmaku(item: item, y: _findBottomSlot(maxHeight), spawnTime: _currentTime));
+          _bottomStatic.add(_StaticDanmaku(
+              item: item,
+              y: _findBottomSlot(maxHeight),
+              spawnTime: _currentTime));
           break;
         default: // 滚动
           final track = _findTrack(maxHeight);
@@ -231,7 +239,8 @@ class _StaticDanmaku {
   final double y;
   final double spawnTime;
 
-  _StaticDanmaku({required this.item, required this.y, required this.spawnTime});
+  _StaticDanmaku(
+      {required this.item, required this.y, required this.spawnTime});
 }
 
 /// 弹幕渲染信息
@@ -263,7 +272,8 @@ class DanmakuOverlay extends StatefulWidget {
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();
 }
 
-class _DanmakuOverlayState extends State<DanmakuOverlay> with SingleTickerProviderStateMixin {
+class _DanmakuOverlayState extends State<DanmakuOverlay>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _animController;
   DateTime _lastFrameTime = DateTime.now();
 
@@ -320,7 +330,7 @@ class _DanmakuPainter extends CustomPainter {
     final now = DateTime.now();
     final dt = now.difference(lastFrameTime).inMilliseconds / 1000.0;
     final clampedDt = dt.clamp(0.001, 0.1); // 防止极端值
-    final items = controller.getVisibleDanmaku(size, clampedDt);
+    final items = controller._getVisibleDanmaku(size, clampedDt);
 
     for (final item in items) {
       final painter = TextPainter(
@@ -331,7 +341,8 @@ class _DanmakuPainter extends CustomPainter {
             fontSize: item.fontSize,
             fontWeight: FontWeight.w500,
             shadows: const [
-              Shadow(color: Colors.black54, blurRadius: 2, offset: Offset(1, 1)),
+              Shadow(
+                  color: Colors.black54, blurRadius: 2, offset: Offset(1, 1)),
             ],
           ),
         ),

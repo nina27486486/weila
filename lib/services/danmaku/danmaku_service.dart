@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import '../../models/danmaku_item.dart';
+import '../../utils/constants.dart';
 import '../../utils/logger.dart';
 
 /// 弹幕服务 — 接入弹弹play开放API
@@ -26,7 +26,7 @@ class DanmakuService {
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 15),
       headers: {
-        'User-Agent': 'Weila/0.1.0 (Desktop Anime Player)',
+        'User-Agent': 'Weila/${AppConstants.appVersion} (Desktop Anime Player)',
         'Accept': 'application/json',
       },
     ));
@@ -61,13 +61,14 @@ class DanmakuService {
 
   /// 搜索番剧匹配弹幕
   /// 返回匹配的 animeId 和 episodeId 列表
-  Future<List<Map<String, dynamic>>> searchEpisode(String animeName, int episodeNum) async {
+  Future<List<Map<String, dynamic>>> searchEpisode(
+      String animeName, int episodeNum) async {
     if (!hasCredentials) {
       Log.d('Danmaku', '未配置弹弹play API Key，跳过');
       return [];
     }
     try {
-      Log.d('Danmaku', '搜索匹配: $animeName 第${episodeNum}集');
+      Log.d('Danmaku', '搜索匹配: $animeName 第$episodeNum集');
 
       final response = await _dio.get(
         '$_baseUrl/api/v2/search/episodes',
@@ -87,7 +88,8 @@ class DanmakuService {
           if (ep is! Map<String, dynamic>) continue;
           final epTitle = ep['episodeTitle']?.toString() ?? '';
           // 匹配集数：标题包含集数号，或者精确匹配
-          if (epTitle.contains('$episodeNum') || epTitle.contains('第$episodeNum')) {
+          if (epTitle.contains('$episodeNum') ||
+              epTitle.contains('第$episodeNum')) {
             results.add({
               'animeId': anime['animeId'],
               'episodeId': ep['episodeId'],
@@ -155,10 +157,11 @@ class DanmakuService {
 
   /// 智能匹配并获取弹幕
   /// 先搜索番剧，找到匹配的 episodeId，再获取弹幕
-  Future<List<DanmakuItem>> fetchDanmaku(String animeName, int episodeNum) async {
+  Future<List<DanmakuItem>> fetchDanmaku(
+      String animeName, int episodeNum) async {
     final episodes = await searchEpisode(animeName, episodeNum);
     if (episodes.isEmpty) {
-      Log.d('Danmaku', '未找到匹配: $animeName 第${episodeNum}集');
+      Log.d('Danmaku', '未找到匹配: $animeName 第$episodeNum集');
       return [];
     }
 

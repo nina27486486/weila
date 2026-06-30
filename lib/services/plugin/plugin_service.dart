@@ -7,6 +7,7 @@ import '../../models/anime.dart';
 import '../../utils/constants.dart';
 import '../http/http_client.dart';
 import '../parser/xpath_parser.dart';
+import '../jikan/jikan_service.dart';
 
 class PluginService {
   static final PluginService _instance = PluginService._();
@@ -86,6 +87,35 @@ class PluginService {
     return allResults;
   }
 
+  /// 仅搜索 CMS 源（不搜索其他插件，速度更快）
+  Future<List<Anime>> searchCmsOnly(String keyword) async {
+    final cmsPlugins = getEnabledPlugins().where((p) => p.api.startsWith('cms_')).toList();
+    if (cmsPlugins.isEmpty) return [];
+
+    final allResults = <Anime>[];
+    final futures = cmsPlugins.map((plugin) =>
+      _searchPlugin(plugin, keyword).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => <Anime>[],
+      ),
+    );
+    final results = await Future.wait(futures, eagerError: false);
+    for (final list in results) {
+      allResults.addAll(list);
+    }
+    return allResults;
+  }
+
+  /// 仅搜索 Bangumi（用于获取中文名称做桥接）
+  Future<List<Anime>> searchBangumi(String keyword) async {
+    final bangumiPlugin = _plugins.where((p) => p.api == 'bangumi' && p.enabled).firstOrNull;
+    if (bangumiPlugin == null) return [];
+    return await _searchPlugin(bangumiPlugin, keyword).timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => <Anime>[],
+    );
+  }
+
   /// 搜索单个插件
   Future<List<Anime>> _searchPlugin(Plugin plugin, String keyword) async {
     try {
@@ -104,6 +134,9 @@ class PluginService {
       }
 
       // 判断 API 类型
+      if (_isJikanApi(plugin)) {
+        return await JikanService().searchAnime(keyword);
+      }
       if (_isAnilistApi(plugin)) {
         return await _searchAnilist(keyword);
       }
@@ -154,6 +187,12 @@ class PluginService {
   bool _isCmsApi(Plugin plugin) {
     return plugin.api.startsWith('cms_') ||
            plugin.searchURL.contains('api.php/provide/vod');
+  }
+
+  /// 判断是否是 Jikan API (MyAnimeList)
+  bool _isJikanApi(Plugin plugin) {
+    return plugin.api == 'jikan' ||
+           plugin.baseUrl.contains('jikan.moe');
   }
 
   /// JSON API 搜索（Bangumi等）
@@ -578,6 +617,11 @@ class PluginService {
 
   /// 获取动漫详情
   Future<Map<String, dynamic>?> getDetail(Anime anime) async {
+    if (anime.sourcePlugin == 'jikan') {
+      final malId = JikanService.extractMalId(anime.url);
+      if (malId == null) return null;
+      return await JikanService().getAnimeDetails(malId);
+    }
     if (anime.sourcePlugin == 'anilist') {
       return await _getAnilistDetail(anime.url);
     }
@@ -649,6 +693,20 @@ class PluginService {
 
   /// 获取动漫章节列表
   Future<List<Episode>> getEpisodes(Anime anime) async {
+    // Jikan 模式（不提供播放源，生成占位集数）
+    if (anime.sourcePlugin == 'jikan') {
+      final malId = JikanService.extractMalId(anime.url);
+      if (malId == null) return [];
+      final detail = await JikanService().getAnimeDetails(malId);
+      if (detail == null) return [];
+      final totalEps = detail['total_episodes'] as int? ?? 12;
+      return List.generate(totalEps, (i) => Episode(
+        name: '第${i + 1}话',
+        url: '', // Jikan 不提供播放源，需配合 CMS 源使用
+        index: i + 1,
+      ));
+    }
+
     // Anilist 模式
     if (anime.sourcePlugin == 'anilist') {
       return await _getAnilistEpisodes(anime.url);
@@ -793,6 +851,21 @@ class PluginService {
   /// 创建默认示例插件
   List<Plugin> _createDefaultPlugins() {
     return [
+      // Jikan API (MyAnimeList) - 高质量元数据、排行榜、季度新番
+      Plugin(
+        api: 'jikan',
+        name: 'Jikan (MAL)',
+        version: '1.0.0',
+        baseUrl: 'https://api.jikan.moe',
+        searchURL: 'https://api.jikan.moe/v4/anime?q={keyword}',
+        searchList: 'data',
+        searchName: 'title',
+        searchResult: 'mal_id',
+        chapterRoads: '',
+        chapterResult: '',
+        userAgent: AppConstants.defaultUserAgent,
+        enabled: true,
+      ),
       // Anilist GraphQL API - 搜索动漫元数据（国际源，稳定可用）
       Plugin(
         api: 'anilist',
@@ -869,5 +942,47 @@ class PluginService {
         enabled: true,
       ),
     ];
+  }
+
+  // ============================================================
+  // Jikan 排行榜 / 季度新番
+  // ============================================================
+
+  /// Jikan 排行榜
+  Future<List<Map<String, dynamic>>> getJikanTopAnime({
+    String? filter,
+    String? type,
+    int page = 1,
+  }) async {
+    return await JikanService().getTopAnime(
+      filter: filter,
+      type: type,
+      page: page,
+    );
+  }
+
+  /// Jikan 当前季度新番
+  Future<List<Map<String, dynamic>>> getJikanSeasonNow() async {
+    return await JikanService().getSeasonNow();
+  }
+
+  /// Jikan 下一季度
+  Future<List<Map<String, dynamic>>> getJikanSeasonUpcoming() async {
+    return await JikanService().getSeasonUpcoming();
+  }
+
+  /// Jikan 每周放送表
+  Future<Map<String, List<Map<String, dynamic>>>> getJikanSchedule() async {
+    return await JikanService().getFullWeekSchedule();
+  }
+
+  /// Jikan 推荐
+  Future<List<Map<String, dynamic>>> getJikanRecommendations(int malId) async {
+    return await JikanService().getAnimeRecommendations(malId);
+  }
+
+  /// Jikan 角色
+  Future<List<Map<String, dynamic>>> getJikanCharacters(int malId) async {
+    return await JikanService().getAnimeCharacters(malId);
   }
 }

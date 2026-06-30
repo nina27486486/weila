@@ -55,3 +55,12 @@ app.*.map.json
 
 # Qoder
 .qoder/
+
+# Local development assistants and notes
+/.agents/
+/.codex/
+/.workbuddy/
+/docs/superpowers/
+/tmp/
+/看番Debug/
+/前端评审报告.md

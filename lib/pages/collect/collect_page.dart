@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
-import '../../theme/app_theme.dart';
+import 'package:flutter_modular/flutter_modular.dart';
+
 import '../../stores/history_collect_store.dart';
+import '../../stores/theme_store.dart';
+import '../../widgets/vira_page_chrome.dart';
+import '../library/personal_archive_view.dart';
 
 class CollectPage extends StatefulWidget {
   const CollectPage({super.key});
@@ -22,185 +25,69 @@ class _CollectPageState extends State<CollectPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.bgDark,
-      appBar: AppBar(
-        backgroundColor: AppTheme.bgDark,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-          onPressed: () => Modular.to.navigate('/'),
-        ),
-        title: const Text('我的收藏', style: TextStyle(color: AppTheme.textPrimary)),
-      ),
-      body: Observer(
+    return ViraPageScaffold(
+      activeDestination: ViraDestination.library,
+      onDestinationSelected: _openDestination,
+      onSearch: () => Modular.to.pushNamed('/search'),
+      onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
+      onProfile: () => Modular.to.pushNamed('/settings'),
+      child: Observer(
         builder: (_) {
-          if (_store.collectList.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.bookmark_border, size: 64, color: AppTheme.textMuted),
-                  SizedBox(height: 16),
-                  Text('暂无收藏', style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
-                  SizedBox(height: 4),
-                  Text('收藏喜欢的番剧，下次再看', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
-                ],
-              ),
-            );
-          }
+          final entries = _store.collectList
+              .map(
+                (item) => ArchiveEntry(
+                  id: item.animeUrl,
+                  title: item.animeName,
+                  coverUrl: item.cover,
+                  subtitle: item.description ?? '',
+                  meta: '收藏于 ${_dateLabel(item.collectedAt)}',
+                  sourceLabel: _sourceLabel(item.sourcePlugin),
+                ),
+              )
+              .toList(growable: false);
 
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 200,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.68,
-            ),
-            itemCount: _store.collectList.length,
-            itemBuilder: (context, index) {
-              final item = _store.collectList[index];
-              return _CollectCard(
-                item: item,
-                onTap: () {
-                  Modular.to.pushNamed(
-                    '/detail?url=${Uri.encodeComponent(item.animeUrl)}'
-                    '&name=${Uri.encodeComponent(item.animeName)}',
-                  );
-                },
-                onRemove: () async {
-                  await _store.removeCollect(item.animeUrl);
-                },
-              );
+          return PersonalArchiveView(
+            title: '我的资料库',
+            description: '把值得回看的作品收进自己的动画书架。',
+            mode: ArchiveDisplayMode.poster,
+            entries: entries,
+            sections: const [
+              ArchiveSection(id: 'collect', label: '收藏夹'),
+              ArchiveSection(id: 'history', label: '观看足迹'),
+            ],
+            selectedSectionId: 'collect',
+            onSectionSelected: (section) {
+              if (section == 'history') Modular.to.navigate('/history');
             },
+            onOpen: (entry) => Modular.to.pushNamed(
+              '/detail?url=${Uri.encodeComponent(entry.id)}'
+              '&name=${Uri.encodeComponent(entry.title)}',
+            ),
+            onRemove: (entry) => _store.removeCollect(entry.id),
           );
         },
       ),
     );
   }
-}
 
-class _CollectCard extends StatefulWidget {
-  final dynamic item;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
+  String _dateLabel(DateTime date) => '${date.month}月${date.day}日';
 
-  const _CollectCard({
-    required this.item,
-    required this.onTap,
-    required this.onRemove,
-  });
+  String _sourceLabel(String source) => switch (source) {
+        'cms_yinhua' => '樱花动漫',
+        'cms_ffzy' => '非凡资源',
+        _ => source,
+      };
 
-  @override
-  State<_CollectCard> createState() => _CollectCardState();
-}
-
-class _CollectCardState extends State<_CollectCard> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.item;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          decoration: BoxDecoration(
-            color: AppTheme.bgCard,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: _hovering ? AppTheme.primaryBlue.withValues(alpha: 0.4) : AppTheme.divider,
-            ),
-            boxShadow: _hovering
-                ? [BoxShadow(color: AppTheme.primaryBlue.withValues(alpha: 0.15), blurRadius: 12)]
-                : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 封面
-              Expanded(
-                child: Stack(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: AppTheme.bgSurface,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                      ),
-                      child: item.cover != null
-                          ? ClipRRect(
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                              child: Image.network(
-                                item.cover!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(
-                                  child: Icon(Icons.movie_outlined, size: 40, color: AppTheme.textMuted),
-                                ),
-                              ),
-                            )
-                          : const Center(
-                              child: Icon(Icons.movie_outlined, size: 40, color: AppTheme.textMuted),
-                            ),
-                    ),
-                    // 移除按钮
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: GestureDetector(
-                        onTap: widget.onRemove,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black54,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.close, size: 14, color: Colors.white70),
-                        ),
-                      ),
-                    ),
-                    // 来源标签
-                    Positioned(
-                      bottom: 6,
-                      left: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          item.sourcePlugin,
-                          style: const TextStyle(color: Colors.white70, fontSize: 9),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // 标题
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(
-                  item.animeName,
-                  style: const TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _openDestination(ViraDestination destination) {
+    final route = switch (destination) {
+      ViraDestination.home => '/',
+      ViraDestination.discover => '/category',
+      ViraDestination.following => '/track',
+      ViraDestination.library => '/collect',
+      ViraDestination.downloads => '/download',
+    };
+    if (destination != ViraDestination.library) {
+      Modular.to.navigate(route);
+    }
   }
 }

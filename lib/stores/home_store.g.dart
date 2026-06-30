@@ -73,6 +73,38 @@ mixin _$HomeStore on _HomeStore, Store {
     });
   }
 
+  late final _$seasonalListAtom =
+      Atom(name: '_HomeStore.seasonalList', context: context);
+
+  @override
+  ObservableList<Map<String, dynamic>> get seasonalList {
+    _$seasonalListAtom.reportRead();
+    return super.seasonalList;
+  }
+
+  @override
+  set seasonalList(ObservableList<Map<String, dynamic>> value) {
+    _$seasonalListAtom.reportWrite(value, super.seasonalList, () {
+      super.seasonalList = value;
+    });
+  }
+
+  late final _$isLoadingSeasonalAtom =
+      Atom(name: '_HomeStore.isLoadingSeasonal', context: context);
+
+  @override
+  bool get isLoadingSeasonal {
+    _$isLoadingSeasonalAtom.reportRead();
+    return super.isLoadingSeasonal;
+  }
+
+  @override
+  set isLoadingSeasonal(bool value) {
+    _$isLoadingSeasonalAtom.reportWrite(value, super.isLoadingSeasonal, () {
+      super.isLoadingSeasonal = value;
+    });
+  }
+
   late final _$errorMessageAtom =
       Atom(name: '_HomeStore.errorMessage', context: context);
 
@@ -105,6 +137,14 @@ mixin _$HomeStore on _HomeStore, Store {
     return _$loadTrendingAsyncAction.run(() => super.loadTrending());
   }
 
+  late final _$loadSeasonalAsyncAction =
+      AsyncAction('_HomeStore.loadSeasonal', context: context);
+
+  @override
+  Future<void> loadSeasonal() {
+    return _$loadSeasonalAsyncAction.run(() => super.loadSeasonal());
+  }
+
   late final _$loadAllAsyncAction =
       AsyncAction('_HomeStore.loadAll', context: context);
 
@@ -118,8 +158,10 @@ mixin _$HomeStore on _HomeStore, Store {
     return '''
 latestList: ${latestList},
 trendingList: ${trendingList},
+seasonalList: ${seasonalList},
 isLoadingLatest: ${isLoadingLatest},
-isLoadingTrending: ${isLoadingTrending}
+isLoadingTrending: ${isLoadingTrending},
+isLoadingSeasonal: ${isLoadingSeasonal}
     ''';
   }
 }

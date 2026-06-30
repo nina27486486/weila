@@ -1,7 +1,7 @@
 name: weila
-description: "薇拉 - 基于Kazumi架构的动漫播放器"
+description: "薇拉 - 面向 Windows 桌面端的开源动漫追番与播放应用"
 publish_to: "none"
-version: 0.1.0+1
+version: 0.4.0+4
 
 environment:
   sdk: ">=3.3.4 <4.0.0"
@@ -43,6 +43,7 @@ dependencies:
   package_info_plus: ^10.1.0
   url_launcher: ^6.3.2
   cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
 
 dev_dependencies:
   flutter_test:
@@ -56,3 +57,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/ranking_hero_anime.png

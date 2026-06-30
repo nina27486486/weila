@@ -8,6 +8,7 @@ import 'app_widget.dart';
 import 'services/storage/storage_service.dart';
 import 'services/plugin/plugin_service.dart';
 import 'services/download/download_service.dart';
+import 'stores/theme_store.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,9 @@ void main() async {
 
   // 初始化 Hive 本地存储
   await StorageService().init();
+
+  // 加载主题设置
+  ThemeStore().loadTheme();
 
   // 初始化插件系统
   await PluginService().init();

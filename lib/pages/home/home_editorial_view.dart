@@ -1,0 +1,1192 @@
+import 'package:flutter/material.dart';
+
+import '../../theme/vira_colors.dart';
+import '../../widgets/cover_image.dart';
+import '../../widgets/editorial_section_header.dart';
+import '../../widgets/vira_state_view.dart';
+
+@immutable
+class HomeContinueStory {
+  final String title;
+  final String? coverUrl;
+  final String progressLabel;
+  final String updatedLabel;
+  final String animeUrl;
+
+  const HomeContinueStory({
+    required this.title,
+    required this.coverUrl,
+    required this.progressLabel,
+    required this.updatedLabel,
+    required this.animeUrl,
+  });
+}
+
+class HomeEditorialView extends StatelessWidget {
+  final List<Map<String, dynamic>> latestItems;
+  final List<Map<String, dynamic>> seasonalItems;
+  final List<Map<String, dynamic>> trendingItems;
+  final List<HomeContinueStory> continueStories;
+  final bool isLoading;
+  final String? errorMessage;
+  final ValueChanged<Map<String, dynamic>> onOpenAnime;
+  final ValueChanged<HomeContinueStory> onOpenContinue;
+  final VoidCallback onRetry;
+  final VoidCallback? onOpenHistory;
+  final VoidCallback? onOpenCalendar;
+  final VoidCallback? onOpenRanking;
+
+  const HomeEditorialView({
+    super.key,
+    required this.latestItems,
+    required this.seasonalItems,
+    required this.trendingItems,
+    required this.continueStories,
+    required this.onOpenAnime,
+    required this.onOpenContinue,
+    required this.onRetry,
+    this.isLoading = false,
+    this.errorMessage,
+    this.onOpenHistory,
+    this.onOpenCalendar,
+    this.onOpenRanking,
+  });
+
+  bool get _hasAnime =>
+      latestItems.isNotEmpty ||
+      seasonalItems.isNotEmpty ||
+      trendingItems.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasAnime && errorMessage != null && !isLoading) {
+      return ViraStateView.error(
+        title: '今天的放映单还没送达',
+        message: errorMessage!,
+        onRetry: onRetry,
+      );
+    }
+
+    if (!_hasAnime && isLoading) {
+      return const _HomeLoadingView();
+    }
+
+    final heroItem = trendingItems.isNotEmpty
+        ? trendingItems.first
+        : latestItems.isNotEmpty
+            ? latestItems.first
+            : seasonalItems.isNotEmpty
+                ? seasonalItems.first
+                : null;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 18, bottom: 64),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DiaryStrip(
+            key: const ValueKey('home-diary-strip'),
+            followingCount: continueStories.length,
+          ),
+          const SizedBox(height: 16),
+          _EditorialHero(
+            key: const ValueKey('home-editorial-hero'),
+            item: heroItem,
+            onOpen: heroItem == null ? null : () => onOpenAnime(heroItem),
+          ),
+          const SizedBox(height: 48),
+          _ContinueSection(
+            key: const ValueKey('home-continue'),
+            stories: continueStories,
+            onOpen: onOpenContinue,
+            onOpenAll: onOpenHistory,
+          ),
+          const SizedBox(height: 50),
+          _TodaySection(
+            key: const ValueKey('home-today'),
+            items: latestItems,
+            onOpen: onOpenAnime,
+            onOpenAll: onOpenCalendar,
+          ),
+          const SizedBox(height: 50),
+          _SeasonSection(
+            key: const ValueKey('home-seasonal'),
+            items: seasonalItems,
+            onOpen: onOpenAnime,
+          ),
+          const SizedBox(height: 50),
+          _RankingSection(
+            key: const ValueKey('home-ranking'),
+            items: trendingItems,
+            onOpen: onOpenAnime,
+            onOpenAll: onOpenRanking,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiaryStrip extends StatelessWidget {
+  final int followingCount;
+
+  const _DiaryStrip({super.key, required this.followingCount});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final now = DateTime.now();
+    const weekdays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
+
+    return Container(
+      height: 34,
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: colors.divider),
+          bottom: BorderSide(color: colors.divider),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(width: 28, height: 1, color: colors.sakura),
+          const SizedBox(width: 10),
+          Text(
+            '${now.month}月${now.day}日 · ${weekdays[now.weekday - 1]}',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.4,
+                ),
+          ),
+          const Spacer(),
+          Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: colors.sky,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            followingCount == 0
+                ? '今晚，挑一部喜欢的动画吧'
+                : '今晚有 $followingCount 部故事等你继续',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorialHero extends StatelessWidget {
+  final Map<String, dynamic>? item;
+  final VoidCallback? onOpen;
+
+  const _EditorialHero({super.key, this.item, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontal = constraints.maxWidth >= 1040;
+        final image = _HeroImage(item: item, onOpen: onOpen);
+        final copy = _HeroCopy(item: item, onOpen: onOpen);
+
+        if (!horizontal) {
+          return Column(
+            children: [
+              SizedBox(height: 330, child: image),
+              SizedBox(height: 330, child: copy),
+            ],
+          );
+        }
+
+        return SizedBox(
+          height: 390,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 13, child: image),
+              const SizedBox(width: 22),
+              Expanded(flex: 7, child: copy),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _HeroImage extends StatelessWidget {
+  final Map<String, dynamic>? item;
+  final VoidCallback? onOpen;
+
+  const _HeroImage({this.item, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return _HoverSurface(
+      onTap: onOpen,
+      lift: 2,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CoverImage(url: item?['cover']?.toString(), fit: BoxFit.cover),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.04),
+                  Colors.black.withValues(alpha: 0.58),
+                ],
+                stops: const [0.48, 1],
+              ),
+            ),
+          ),
+          Positioned(
+            top: 18,
+            left: 18,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              color: colors.paper.withValues(alpha: 0.92),
+              child: Text(
+                '本周主映',
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colors.sky,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 18,
+            child: Row(
+              children: [
+                Text(
+                  '镜头 01 / 04',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        letterSpacing: 1.1,
+                      ),
+                ),
+                const Spacer(),
+                const Icon(
+                  Icons.open_in_full_rounded,
+                  size: 15,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroCopy extends StatelessWidget {
+  final Map<String, dynamic>? item;
+  final VoidCallback? onOpen;
+
+  const _HeroCopy({this.item, this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final title = _nameOf(item);
+    final status = _statusOf(item);
+    final genres = _genresOf(item);
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(30, 30, 30, 24),
+      decoration: BoxDecoration(
+        color: colors.paper,
+        border: Border.all(color: colors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '今日放映 · 奇幻冒险',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colors.sky,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            item == null ? '今天，挑一段喜欢的故事。' : '今天，继续\n$title。',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontSize: 34,
+                  height: 1.2,
+                ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            status.isEmpty ? '让画面替忙碌的一天留下一点余白。' : status,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (genres.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              genres.take(3).join(' · '),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: colors.textMuted,
+                  ),
+            ),
+          ],
+          const Spacer(),
+          Row(
+            children: [
+              FilledButton.icon(
+                onPressed: onOpen,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('立即播放'),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton(
+                onPressed: onOpen,
+                child: const Text('查看详情'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              for (var index = 0; index < 4; index++) ...[
+                Text(
+                  '0${index + 1}',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color:
+                            index == 0 ? colors.textPrimary : colors.textMuted,
+                      ),
+                ),
+                if (index != 3) const SizedBox(width: 14),
+              ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: 42,
+                    height: 1,
+                    color: colors.sky,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ContinueSection extends StatelessWidget {
+  final List<HomeContinueStory> stories;
+  final ValueChanged<HomeContinueStory> onOpen;
+  final VoidCallback? onOpenAll;
+
+  const _ContinueSection({
+    super.key,
+    required this.stories,
+    required this.onOpen,
+    this.onOpenAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        EditorialSectionHeader(
+          chapter: '镜头 02',
+          title: '接着上次的故事',
+          subtitle: '不催促，只替你记住停下的位置',
+          actionLabel: '全部记录',
+          onAction: onOpenAll,
+        ),
+        const SizedBox(height: 18),
+        if (stories.isEmpty)
+          const _QuietEmpty(
+            icon: Icons.history_toggle_off_rounded,
+            message: '还没有续看记录，开始一段新故事吧。',
+          )
+        else
+          SizedBox(
+            height: 186,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: stories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              itemBuilder: (context, index) {
+                final story = stories[index];
+                return _ContinueCard(
+                  story: story,
+                  onOpen: () => onOpen(story),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ContinueCard extends StatelessWidget {
+  final HomeContinueStory story;
+  final VoidCallback onOpen;
+
+  const _ContinueCard({required this.story, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return SizedBox(
+      width: 318,
+      child: _HoverSurface(
+        onTap: onOpen,
+        child: Row(
+          children: [
+            SizedBox(
+              width: 126,
+              height: double.infinity,
+              child: CoverImage(url: story.coverUrl, fit: BoxFit.cover),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      story.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${story.progressLabel} · ${story.updatedLabel}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const Spacer(),
+                    Container(
+                      height: 2,
+                      color: colors.divider,
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: 0.58,
+                        child: Container(color: colors.sakura),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      onPressed: onOpen,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(0, 30),
+                      ),
+                      icon: const Icon(Icons.play_arrow_rounded, size: 17),
+                      label: const Text('继续观看'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TodaySection extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  final ValueChanged<Map<String, dynamic>> onOpen;
+  final VoidCallback? onOpenAll;
+
+  const _TodaySection({
+    super.key,
+    required this.items,
+    required this.onOpen,
+    this.onOpenAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = items.take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        EditorialSectionHeader(
+          chapter: '今日编排',
+          title: '今日放送',
+          subtitle: '按更新时间排好，想看时直接抵达',
+          actionLabel: '查看日历',
+          onAction: onOpenAll,
+        ),
+        const SizedBox(height: 18),
+        if (visible.isEmpty)
+          const _QuietEmpty(
+            icon: Icons.calendar_today_outlined,
+            message: '今天暂时没有新的放送安排。',
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 1040 || visible.length == 1) {
+                return SizedBox(
+                  height: 260,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: visible.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 14),
+                    itemBuilder: (context, index) {
+                      final item = visible[index];
+                      return SizedBox(
+                        width: 286,
+                        child: _AiringCard(
+                          item: item,
+                          featured: index == 0,
+                          onOpen: () => onOpen(item),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              }
+
+              return SizedBox(
+                height: 330,
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 7,
+                      child: _AiringCard(
+                        item: visible.first,
+                        featured: true,
+                        onOpen: () => onOpen(visible.first),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 9,
+                      child: GridView.builder(
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: EdgeInsets.zero,
+                        itemCount: visible.length - 1,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 2.35,
+                        ),
+                        itemBuilder: (context, index) {
+                          final item = visible[index + 1];
+                          return _AiringCard(
+                            item: item,
+                            onOpen: () => onOpen(item),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _AiringCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final bool featured;
+  final VoidCallback onOpen;
+
+  const _AiringCard({
+    required this.item,
+    required this.onOpen,
+    this.featured = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final score = _scoreOf(item);
+
+    return _HoverSurface(
+      onTap: onOpen,
+      child: featured
+          ? Stack(
+              fit: StackFit.expand,
+              children: [
+                CoverImage(url: item['cover']?.toString(), fit: BoxFit.cover),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.76),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 18,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _statusOf(item),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: colors.skyLight,
+                            ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        _nameOf(item),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              color: Colors.white,
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                SizedBox(
+                  width: 104,
+                  height: double.infinity,
+                  child: CoverImage(
+                      url: item['cover']?.toString(), fit: BoxFit.cover),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(13),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _statusOf(item),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: colors.sky,
+                                  ),
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          _nameOf(item),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const Spacer(),
+                        if (score != null)
+                          Text(
+                            '评分 ${score.toStringAsFixed(1)}',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+class _SeasonSection extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  final ValueChanged<Map<String, dynamic>> onOpen;
+
+  const _SeasonSection({
+    super.key,
+    required this.items,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = items.take(7).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const EditorialSectionHeader(
+          chapter: '季度选刊',
+          title: '本季选片',
+          subtitle: '不是填满页面，而是留下真正值得注意的作品',
+        ),
+        const SizedBox(height: 18),
+        if (visible.isEmpty)
+          const _QuietEmpty(
+            icon: Icons.local_movies_outlined,
+            message: '本季片单正在整理中。',
+          )
+        else
+          SizedBox(
+            height: 326,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: visible.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 14),
+              itemBuilder: (context, index) {
+                final item = visible[index];
+                return _SeasonCard(
+                  index: index,
+                  item: item,
+                  onOpen: () => onOpen(item),
+                );
+              },
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SeasonCard extends StatelessWidget {
+  final int index;
+  final Map<String, dynamic> item;
+  final VoidCallback onOpen;
+
+  const _SeasonCard({
+    required this.index,
+    required this.item,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final score = _scoreOf(item);
+
+    return SizedBox(
+      width: index == 0 ? 220 : 172,
+      child: _HoverSurface(
+        onTap: onOpen,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CoverImage(url: item['cover']?.toString(), fit: BoxFit.cover),
+                  Positioned(
+                    left: 10,
+                    top: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      color: colors.paper.withValues(alpha: 0.92),
+                      child: Text(
+                        '${index + 1}'.padLeft(2, '0'),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              color: colors.sky,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _nameOf(item),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _genresOf(item).take(2).join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      if (score != null) ...[
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.star_rounded,
+                          size: 13,
+                          color: colors.warning,
+                        ),
+                        Text(
+                          score.toStringAsFixed(1),
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RankingSection extends StatelessWidget {
+  final List<Map<String, dynamic>> items;
+  final ValueChanged<Map<String, dynamic>> onOpen;
+  final VoidCallback? onOpenAll;
+
+  const _RankingSection({
+    super.key,
+    required this.items,
+    required this.onOpen,
+    this.onOpenAll,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = items.take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        EditorialSectionHeader(
+          chapter: '读者风向',
+          title: '本周上升榜',
+          subtitle: '看看哪些故事正在被更多人发现',
+          actionLabel: '完整榜单',
+          onAction: onOpenAll,
+        ),
+        const SizedBox(height: 18),
+        if (visible.isEmpty)
+          const _QuietEmpty(
+            icon: Icons.trending_up_rounded,
+            message: '本周榜单还在统计中。',
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: context.colors.paper,
+              border: Border(
+                top: BorderSide(color: context.colors.divider),
+                bottom: BorderSide(color: context.colors.divider),
+              ),
+            ),
+            child: Row(
+              children: [
+                for (var index = 0; index < visible.length; index++)
+                  Expanded(
+                    child: _RankingEntry(
+                      rank: index + 1,
+                      item: visible[index],
+                      onOpen: () => onOpen(visible[index]),
+                      showDivider: index != visible.length - 1,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _RankingEntry extends StatefulWidget {
+  final int rank;
+  final Map<String, dynamic> item;
+  final VoidCallback onOpen;
+  final bool showDivider;
+
+  const _RankingEntry({
+    required this.rank,
+    required this.item,
+    required this.onOpen,
+    required this.showDivider,
+  });
+
+  @override
+  State<_RankingEntry> createState() => _RankingEntryState();
+}
+
+class _RankingEntryState extends State<_RankingEntry> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final score = _scoreOf(widget.item);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onOpen,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          height: 112,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _hovered ? colors.bgHover : Colors.transparent,
+            border: widget.showDivider
+                ? Border(right: BorderSide(color: colors.divider))
+                : null,
+          ),
+          child: Row(
+            children: [
+              Text(
+                '${widget.rank}'.padLeft(2, '0'),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: widget.rank <= 3 ? colors.sky : colors.textMuted,
+                    ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _nameOf(widget.item),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      score == null
+                          ? _statusOf(widget.item)
+                          : '评分 ${score.toStringAsFixed(1)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.north_east_rounded,
+                size: 15,
+                color: _hovered ? colors.sky : colors.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HoverSurface extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+  final double lift;
+
+  const _HoverSurface({
+    required this.child,
+    this.onTap,
+    this.lift = 3,
+  });
+
+  @override
+  State<_HoverSurface> createState() => _HoverSurfaceState();
+}
+
+class _HoverSurfaceState extends State<_HoverSurface> {
+  var _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+
+    return Semantics(
+      button: widget.onTap != null,
+      child: MouseRegion(
+        cursor:
+            widget.onTap == null ? MouseCursor.defer : SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            transform: Matrix4.translationValues(
+              0,
+              _hovered ? -widget.lift : 0,
+              0,
+            ),
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: colors.paper,
+              border: Border.all(
+                color: _hovered
+                    ? colors.sky.withValues(alpha: 0.55)
+                    : colors.divider,
+              ),
+              boxShadow: _hovered
+                  ? [
+                      BoxShadow(
+                        color: colors.textPrimary.withValues(alpha: 0.08),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuietEmpty extends StatelessWidget {
+  final IconData icon;
+  final String message;
+
+  const _QuietEmpty({required this.icon, required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 112,
+      width: double.infinity,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: context.colors.paper,
+        border: Border(
+          top: BorderSide(color: context.colors.divider),
+          bottom: BorderSide(color: context.colors.divider),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 19, color: context.colors.textMuted),
+          const SizedBox(width: 9),
+          Text(message, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeLoadingView extends StatelessWidget {
+  const _HomeLoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(top: 18, bottom: 64),
+      child: Column(
+        children: [
+          _Skeleton(height: 34, color: context.colors.paper),
+          const SizedBox(height: 16),
+          const _Skeleton(height: 390),
+          const SizedBox(height: 48),
+          const _Skeleton(height: 48, widthFactor: 0.38),
+          const SizedBox(height: 18),
+          const _Skeleton(height: 186),
+          const SizedBox(height: 50),
+          const _Skeleton(height: 330),
+        ],
+      ),
+    );
+  }
+}
+
+class _Skeleton extends StatelessWidget {
+  final double height;
+  final double widthFactor;
+  final Color? color;
+
+  const _Skeleton({
+    required this.height,
+    this.widthFactor = 1,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      widthFactor: widthFactor,
+      alignment: Alignment.centerLeft,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: color ?? context.colors.bgSurface,
+          border: Border.all(color: context.colors.divider),
+        ),
+      ),
+    );
+  }
+}
+
+String _nameOf(Map<String, dynamic>? item) {
+  final value = item?['name']?.toString().trim() ?? '';
+  return value.isEmpty ? '未命名作品' : value;
+}
+
+String _statusOf(Map<String, dynamic>? item) {
+  return item?['status']?.toString().trim() ?? '';
+}
+
+List<String> _genresOf(Map<String, dynamic>? item) {
+  final value = item?['genres'];
+  if (value is! List) return const [];
+  return value
+      .map((entry) => entry.toString())
+      .where((e) => e.isNotEmpty)
+      .toList();
+}
+
+double? _scoreOf(Map<String, dynamic>? item) {
+  final value = item?['score'];
+  return value is num ? value.toDouble() : double.tryParse('$value');
+}

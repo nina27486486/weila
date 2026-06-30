@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
-import '../../theme/app_theme.dart';
+
 import '../../models/plugin.dart';
-import '../../services/plugin/plugin_service.dart';
 import '../../services/http/http_client.dart';
+import '../../services/plugin/plugin_service.dart';
+import '../../stores/theme_store.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/vira_colors.dart';
+import '../../utils/animations.dart';
 import '../../utils/constants.dart';
+import '../../utils/error_handler.dart';
+import '../../widgets/vira_page_chrome.dart';
+import 'widgets/plugin_workspace_components.dart';
 
 class PluginAddPage extends StatefulWidget {
   const PluginAddPage({super.key});
@@ -14,13 +21,8 @@ class PluginAddPage extends StatefulWidget {
 }
 
 class _PluginAddPageState extends State<PluginAddPage> {
-  int _tabIndex = 0; // 0=从URL安装, 1=手动配置
-  bool _installing = false;
-
-  // URL安装
+  final _pluginService = PluginService();
   final _urlController = TextEditingController();
-
-  // 手动配置
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _apiController = TextEditingController();
@@ -31,8 +33,13 @@ class _PluginAddPageState extends State<PluginAddPage> {
   final _searchResultController = TextEditingController();
   final _chapterRoadsController = TextEditingController();
   final _chapterResultController = TextEditingController();
-  final _uaController = TextEditingController(text: AppConstants.defaultUserAgent);
+  final _uaController = TextEditingController(
+    text: AppConstants.defaultUserAgent,
+  );
   final _refererController = TextEditingController();
+
+  int _tabIndex = 0;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -51,326 +58,593 @@ class _PluginAddPageState extends State<PluginAddPage> {
     super.dispose();
   }
 
+  bool _isHttpUrl(String value) {
+    final uri = Uri.tryParse(value.trim());
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  bool _apiExists(String api) {
+    return _pluginService.plugins.any(
+      (plugin) => plugin.api.toLowerCase() == api.toLowerCase(),
+    );
+  }
+
+  String? _validateImportedPlugin(Plugin plugin) {
+    if (plugin.name.trim().isEmpty) return '插件名称为空';
+    if (plugin.api.trim().isEmpty) return 'API 标识为空';
+    if (!_isHttpUrl(plugin.baseUrl)) return '基础地址无效';
+    return null;
+  }
+
   Future<void> _installFromUrl() async {
     final url = _urlController.text.trim();
-    if (url.isEmpty) {
-      _showMsg('请输入插件URL', isError: true);
+    if (!_isHttpUrl(url)) {
+      _showMessage('请输入有效的 HTTP 或 HTTPS 地址', isError: true);
       return;
     }
 
-    setState(() => _installing = true);
+    setState(() => _submitting = true);
     try {
-      final http = HttpClient();
-      final data = await http.getJson(url);
-      
+      final data = await HttpClient().getJson(url);
+      final imported = <Plugin>[];
       if (data is Map<String, dynamic>) {
-        final plugin = Plugin.fromJson(data);
-        await PluginService().addPlugin(plugin);
-        _showMsg('插件「${plugin.name}」安装成功');
-        if (mounted) Modular.to.pop();
-      } else if (data is List && data.isNotEmpty) {
-        // 支持插件列表
+        imported.add(Plugin.fromJson(data));
+      } else if (data is List) {
         for (final item in data) {
           if (item is Map<String, dynamic>) {
-            final plugin = Plugin.fromJson(item);
-            await PluginService().addPlugin(plugin);
+            imported.add(Plugin.fromJson(item));
           }
         }
-        _showMsg('已安装 ${data.length} 个插件');
-        if (mounted) Modular.to.pop();
       }
-    } catch (e) {
-      _showMsg('安装失败: $e', isError: true);
+
+      if (imported.isEmpty) {
+        _showMessage('地址中没有可识别的数据源配置', isError: true);
+        return;
+      }
+
+      var added = 0;
+      var skipped = 0;
+      for (final plugin in imported) {
+        final validationError = _validateImportedPlugin(plugin);
+        if (validationError != null || _apiExists(plugin.api)) {
+          skipped++;
+          continue;
+        }
+        await _pluginService.addPlugin(plugin);
+        added++;
+      }
+
+      if (added == 0) {
+        _showMessage(
+          skipped > 0 ? '数据源已存在或配置不完整' : '没有新增数据源',
+          isError: true,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      Modular.to.pop();
+    } catch (error) {
+      _showMessage('导入失败，请检查地址和配置格式', isError: true);
     } finally {
-      setState(() => _installing = false);
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
   Future<void> _saveManualPlugin() async {
     if (!_formKey.currentState!.validate()) return;
+    final api = _apiController.text.trim();
+    if (_apiExists(api)) {
+      _showMessage('API 标识“$api”已存在', isError: true);
+      return;
+    }
 
-    final plugin = Plugin(
-      api: _apiController.text.trim(),
-      name: _nameController.text.trim(),
-      baseUrl: _baseUrlController.text.trim(),
-      searchURL: _searchUrlController.text.trim(),
-      searchList: _searchListController.text.trim(),
-      searchName: _searchNameController.text.trim(),
-      searchResult: _searchResultController.text.trim(),
-      chapterRoads: _chapterRoadsController.text.trim(),
-      chapterResult: _chapterResultController.text.trim(),
-      userAgent: _uaController.text.trim(),
-      referer: _refererController.text.trim().isNotEmpty ? _refererController.text.trim() : null,
-      enabled: true,
-    );
-
-    await PluginService().addPlugin(plugin);
-    _showMsg('插件「${plugin.name}」已添加');
-    if (mounted) Modular.to.pop();
+    setState(() => _submitting = true);
+    try {
+      final plugin = Plugin(
+        api: api,
+        name: _nameController.text.trim(),
+        baseUrl: _baseUrlController.text.trim(),
+        searchURL: _searchUrlController.text.trim(),
+        searchList: _searchListController.text.trim(),
+        searchName: _searchNameController.text.trim(),
+        searchResult: _searchResultController.text.trim(),
+        chapterRoads: _chapterRoadsController.text.trim(),
+        chapterResult: _chapterResultController.text.trim(),
+        userAgent: _uaController.text.trim(),
+        referer: _refererController.text.trim().isEmpty
+            ? null
+            : _refererController.text.trim(),
+        enabled: true,
+      );
+      await _pluginService.addPlugin(plugin);
+      if (mounted) Modular.to.pop();
+    } catch (_) {
+      _showMessage('保存失败，请稍后重试', isError: true);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
-  void _showMsg(String msg, {bool isError = false}) {
+  void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.redAccent : AppTheme.scoreGreen,
-    ));
+    if (isError) {
+      ErrorHandler.showError(context, message);
+    } else {
+      ErrorHandler.showSuccess(context, message);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.bgDark,
-      appBar: AppBar(
-        backgroundColor: AppTheme.bgDark,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-          onPressed: () => Modular.to.pop(),
-        ),
-        title: const Text('添加插件', style: TextStyle(color: AppTheme.textPrimary)),
-      ),
-      body: Column(
+    return ViraPageScaffold(
+      activeDestination: null,
+      onDestinationSelected: _openDestination,
+      onSearch: () => Modular.to.pushNamed('/search'),
+      onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
+      onProfile: () => Modular.to.navigate('/settings'),
+      child: Column(
         children: [
-          // 标签切换
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            child: Row(
+          DataSourcePageHeader(
+            title: '添加数据源',
+            subtitle: '从配置地址导入，或手动建立解析规则',
+            onBack: Modular.to.pop,
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
               children: [
-                _buildTab(0, Icons.link, '从URL安装'),
-                const SizedBox(width: 12),
-                _buildTab(1, Icons.edit, '手动配置'),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 980),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _MethodSelector(
+                          selectedIndex: _tabIndex,
+                          onSelected: (index) {
+                            if (_submitting) return;
+                            setState(() => _tabIndex = index);
+                          },
+                        ),
+                        const SizedBox(height: 18),
+                        AnimatedSwitcher(
+                          duration: AppAnimations.normal,
+                          switchInCurve: AppAnimations.easeOut,
+                          switchOutCurve: AppAnimations.easeIn,
+                          child: _tabIndex == 0
+                              ? _buildUrlImport()
+                              : _buildManualForm(),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
-          ),
-          // 内容
-          Expanded(
-            child: _tabIndex == 0 ? _buildUrlTab() : _buildManualTab(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTab(int index, IconData icon, String label) {
-    final isActive = _tabIndex == index;
-    return GestureDetector(
-      onTap: () => setState(() => _tabIndex = index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        decoration: BoxDecoration(
-          color: isActive ? AppTheme.primaryBlue.withValues(alpha: 0.15) : AppTheme.bgCard,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isActive ? AppTheme.primaryBlue : AppTheme.divider,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: isActive ? AppTheme.primaryBlue : AppTheme.textSecondary),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                fontSize: 13,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _openDestination(ViraDestination destination) {
+    final route = switch (destination) {
+      ViraDestination.home => '/',
+      ViraDestination.discover => '/category',
+      ViraDestination.following => '/track',
+      ViraDestination.library => '/collect',
+      ViraDestination.downloads => '/download',
+    };
+    Modular.to.navigate(route);
   }
 
-  Widget _buildUrlTab() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
+  Widget _buildUrlImport() {
+    return DataSourceSection(
+      key: const ValueKey('url-import'),
+      icon: Icons.add_link_rounded,
+      title: '通过配置地址导入',
+      description: '支持单个 JSON 对象或由多个对象组成的 JSON 数组。',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            '输入插件JSON的URL地址',
-            style: TextStyle(color: AppTheme.textPrimary, fontSize: 14, fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            '支持单个插件JSON或插件数组',
-            style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            decoration: BoxDecoration(
-              color: AppTheme.bgSurface,
-              borderRadius: BorderRadius.circular(8),
+          TextField(
+            controller: _urlController,
+            enabled: !_submitting,
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              if (!_submitting) _installFromUrl();
+            },
+            decoration: const InputDecoration(
+              labelText: '配置地址',
+              hintText: 'https://example.com/plugin.json',
+              prefixIcon: Icon(Icons.link_rounded),
             ),
-            child: TextField(
-              controller: _urlController,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-              decoration: const InputDecoration(
-                hintText: 'https://example.com/plugin.json',
-                hintStyle: TextStyle(color: AppTheme.textMuted),
-                prefixIcon: Icon(Icons.link, color: AppTheme.textMuted, size: 20),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: AppTheme.scoreOrange.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppTheme.scoreOrange.withValues(alpha: 0.22),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _installing ? null : _installFromUrl,
-              icon: _installing
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.download, size: 18),
-              label: Text(_installing ? '安装中...' : '安装'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primaryBlue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          // 提示信息
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppTheme.bgCard,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.divider),
-            ),
-            child: const Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.lightbulb_outline, size: 16, color: AppTheme.scoreOrange),
-                    SizedBox(width: 8),
-                    Text('提示', style: TextStyle(color: AppTheme.scoreOrange, fontSize: 12, fontWeight: FontWeight.w600)),
-                  ],
+                const Icon(
+                  Icons.shield_outlined,
+                  color: AppTheme.scoreOrange,
+                  size: 18,
                 ),
-                SizedBox(height: 8),
-                Text(
-                  '插件JSON格式示例：\n'
-                  '{\n'
-                  '  "api": "my_source",\n'
-                  '  "name": "我的源",\n'
-                  '  "baseUrl": "https://example.com",\n'
-                  '  "searchURL": "https://example.com/search/{keyword}",\n'
-                  '  "searchList": ".video-item",\n'
-                  '  "searchName": ".title",\n'
-                  '  "searchResult": "a",\n'
-                  '  "chapterRoads": ".episode-item",\n'
-                  '  "chapterResult": ".source-item"\n'
-                  '}',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 11, fontFamily: 'monospace', height: 1.5),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    '只导入你信任的配置地址。数据源可以向其声明的网站发起网络请求。',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildManualTab() {
-    return Form(
-      key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
-          _buildFieldGroup('基本信息', [
-            _buildField('插件名称', _nameController, '如：动漫之家', required: true),
-            _buildField('API标识', _apiController, '如：dmzj（唯一标识）', required: true),
-            _buildField('基础URL', _baseUrlController, '如：https://www.example.com', required: true),
-          ]),
-          const SizedBox(height: 20),
-          _buildFieldGroup('搜索配置', [
-            _buildField('搜索URL', _searchUrlController, '如：https://example.com/search/{keyword}', required: true),
-            _buildField('搜索列表选择器', _searchListController, 'CSS选择器，如：.video-item', required: true),
-            _buildField('名称选择器', _searchNameController, '如：.title', required: true),
-            _buildField('链接选择器', _searchResultController, '如：a', required: true),
-          ]),
-          const SizedBox(height: 20),
-          _buildFieldGroup('章节配置', [
-            _buildField('章节列表选择器', _chapterRoadsController, '如：.episode-item', required: true),
-            _buildField('视频源选择器', _chapterResultController, '如：.source-item', required: true),
-          ]),
-          const SizedBox(height: 20),
-          _buildFieldGroup('高级设置', [
-            _buildField('User-Agent', _uaController, '浏览器UA', required: false),
-            _buildField('Referer', _refererController, '请求来源', required: false),
-          ]),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerRight,
             child: FilledButton.icon(
-              onPressed: _saveManualPlugin,
-              icon: const Icon(Icons.save, size: 18),
-              label: const Text('保存插件'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppTheme.primaryBlue,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
+              onPressed: _submitting ? null : _installFromUrl,
+              icon: _submitting
+                  ? const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.download_rounded, size: 18),
+              label: Text(_submitting ? '正在导入' : '验证并导入'),
             ),
           ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFieldGroup(String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(color: AppTheme.primaryBlue, fontSize: 13, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 10),
-        ...children,
-      ],
-    );
-  }
-
-  Widget _buildField(String label, TextEditingController controller, String hint, {bool required = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+          const SizedBox(height: 18),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(top: 8),
+            title: Text(
+              '查看配置格式说明',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
             children: [
-              Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-              if (required)
-                const Text(' *', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: context.colors.bgSurface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: context.colors.divider),
+                ),
+                child: SelectableText(
+                  '{\n'
+                  '  "api": "my_source",\n'
+                  '  "name": "我的数据源",\n'
+                  '  "baseUrl": "https://example.com",\n'
+                  '  "searchURL": "https://example.com/search/{keyword}"\n'
+                  '}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontFamily: 'Consolas',
+                        height: 1.55,
+                      ),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 4),
-          Container(
-            decoration: BoxDecoration(
-              color: AppTheme.bgSurface,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: TextFormField(
-              controller: controller,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        key: const ValueKey('manual-form'),
+        children: [
+          _fieldSection(
+            icon: Icons.badge_outlined,
+            title: '基本信息',
+            description: '定义数据源名称、唯一标识和站点根地址。',
+            fields: [
+              _FieldSpec('数据源名称', _nameController, '例如：动画资料库'),
+              _FieldSpec(
+                'API 标识',
+                _apiController,
+                '例如：my_source',
+                validator: (value) {
+                  final input = value?.trim() ?? '';
+                  if (input.isEmpty) return '此项必填';
+                  if (!RegExp(r'^[a-zA-Z0-9_-]+$').hasMatch(input)) {
+                    return '仅支持字母、数字、下划线和连字符';
+                  }
+                  return null;
+                },
               ),
-              validator: required
-                  ? (v) => (v == null || v.trim().isEmpty) ? '此项必填' : null
-                  : null,
+              _FieldSpec(
+                '基础地址',
+                _baseUrlController,
+                'https://www.example.com',
+                validator: _urlValidator,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _fieldSection(
+            icon: Icons.search_rounded,
+            title: '搜索配置',
+            description: '定义搜索入口以及结果列表中的字段选择器。',
+            fields: [
+              _FieldSpec(
+                '搜索地址',
+                _searchUrlController,
+                'https://example.com/search/{keyword}',
+                validator: _urlValidator,
+                fullWidth: true,
+              ),
+              _FieldSpec('列表选择器', _searchListController, '.video-item'),
+              _FieldSpec('名称选择器', _searchNameController, '.title'),
+              _FieldSpec('链接选择器', _searchResultController, 'a'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _fieldSection(
+            icon: Icons.format_list_numbered_rounded,
+            title: '章节配置',
+            description: '定义选集列表与播放线路的解析位置。',
+            fields: [
+              _FieldSpec('章节列表选择器', _chapterRoadsController, '.episode-item'),
+              _FieldSpec('视频源选择器', _chapterResultController, '.source-item'),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _fieldSection(
+            icon: Icons.network_check_rounded,
+            title: '高级网络设置',
+            description: '仅在目标站点需要指定请求头时修改。',
+            fields: [
+              _FieldSpec(
+                'User-Agent',
+                _uaController,
+                '浏览器请求标识',
+                required: false,
+                fullWidth: true,
+                maxLines: 2,
+              ),
+              _FieldSpec(
+                'Referer',
+                _refererController,
+                'https://www.example.com/',
+                required: false,
+                fullWidth: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              onPressed: _submitting ? null : _saveManualPlugin,
+              icon: _submitting
+                  ? const SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined, size: 18),
+              label: Text(_submitting ? '正在保存' : '保存数据源'),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  String? _urlValidator(String? value) {
+    final input = value?.trim() ?? '';
+    if (input.isEmpty) return '此项必填';
+    if (!_isHttpUrl(input.replaceAll('{keyword}', 'test'))) {
+      return '请输入有效的 HTTP 或 HTTPS 地址';
+    }
+    return null;
+  }
+
+  Widget _fieldSection({
+    required IconData icon,
+    required String title,
+    required String description,
+    required List<_FieldSpec> fields,
+  }) {
+    return DataSourceSection(
+      icon: icon,
+      title: title,
+      description: description,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final twoColumns = constraints.maxWidth >= 650;
+          final halfWidth = (constraints.maxWidth - 12) / 2;
+          return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: fields.map((field) {
+              final width = field.fullWidth || !twoColumns
+                  ? constraints.maxWidth
+                  : halfWidth;
+              return SizedBox(
+                width: width,
+                child: TextFormField(
+                  controller: field.controller,
+                  enabled: !_submitting,
+                  maxLines: field.maxLines,
+                  decoration: InputDecoration(
+                    labelText:
+                        field.required ? '${field.label} *' : field.label,
+                    hintText: field.hint,
+                  ),
+                  validator: field.validator ??
+                      (field.required
+                          ? (value) => value == null || value.trim().isEmpty
+                              ? '此项必填'
+                              : null
+                          : null),
+                ),
+              );
+            }).toList(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _FieldSpec {
+  const _FieldSpec(
+    this.label,
+    this.controller,
+    this.hint, {
+    this.required = true,
+    this.fullWidth = false,
+    this.maxLines = 1,
+    this.validator,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String hint;
+  final bool required;
+  final bool fullWidth;
+  final int maxLines;
+  final FormFieldValidator<String>? validator;
+}
+
+class _MethodSelector extends StatelessWidget {
+  const _MethodSelector({
+    required this.selectedIndex,
+    required this.onSelected,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: context.colors.bgCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: context.colors.divider),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _MethodTab(
+              icon: Icons.add_link_rounded,
+              title: '配置地址导入',
+              subtitle: '适合已有 JSON 配置',
+              selected: selectedIndex == 0,
+              onTap: () => onSelected(0),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _MethodTab(
+              icon: Icons.tune_rounded,
+              title: '手动建立规则',
+              subtitle: '逐项填写解析选择器',
+              selected: selectedIndex == 1,
+              onTap: () => onSelected(1),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MethodTab extends StatefulWidget {
+  const _MethodTab({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  State<_MethodTab> createState() => _MethodTabState();
+}
+
+class _MethodTabState extends State<_MethodTab> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: AppAnimations.fast,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? AppTheme.primaryBlue.withValues(alpha: 0.13)
+                : (_hovering ? context.colors.bgHover : Colors.transparent),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: widget.selected
+                  ? AppTheme.primaryBlue.withValues(alpha: 0.38)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                widget.icon,
+                color: widget.selected
+                    ? AppTheme.primaryBlue
+                    : context.colors.textMuted,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.title,
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 2),
+                    Text(widget.subtitle,
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

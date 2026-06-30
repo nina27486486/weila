@@ -1,130 +1,113 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
+
 import '../theme/app_theme.dart';
+import '../theme/vira_colors.dart';
+import '../utils/animations.dart';
 
 class LeftSidebar extends StatefulWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onIndexChanged;
-
   const LeftSidebar({
     super.key,
     required this.selectedIndex,
     required this.onIndexChanged,
   });
 
+  final int selectedIndex;
+  final ValueChanged<int> onIndexChanged;
+
   @override
   State<LeftSidebar> createState() => _LeftSidebarState();
 }
 
-class _LeftSidebarState extends State<LeftSidebar> with SingleTickerProviderStateMixin {
+class _LeftSidebarState extends State<LeftSidebar> {
   int _hoveredIndex = -1;
-  late final AnimationController _logoController;
-  late final Animation<double> _logoRotation;
-
-  @override
-  void initState() {
-    super.initState();
-    _logoController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
-    _logoRotation = Tween<double>(begin: 0, end: 1).animate(_logoController);
-  }
-
-  @override
-  void dispose() {
-    _logoController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 200,
-      color: AppTheme.bgSidebar,
+      width: 204,
+      decoration: BoxDecoration(
+        color: context.colors.bgSidebar,
+        border: Border(right: BorderSide(color: context.colors.divider)),
+      ),
       child: Column(
         children: [
-          // Logo（带微旋转光效）
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 20, 14, 18),
             child: Row(
               children: [
-                AnimatedBuilder(
-                  animation: _logoRotation,
-                  builder: (context, child) {
-                    return Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        gradient: SweepGradient(
-                          startAngle: 0,
-                          endAngle: 6.28,
-                          transform: GradientRotation(_logoRotation.value * 6.28),
-                          colors: const [
-                            AppTheme.primaryBlue,
-                            AppTheme.accentBlue,
-                            AppTheme.primaryBlue,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Center(
-                        child: Text(
-                          '薇',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            shadows: [Shadow(blurRadius: 4, color: Colors.black26)],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  '薇拉',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue,
+                    borderRadius: BorderRadius.circular(9),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.16)),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    '薇',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700),
                   ),
                 ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('薇拉', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 1),
+                    Text(
+                      '私人动漫资料库',
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: context.colors.textMuted,
+                            fontWeight: FontWeight.w400,
+                          ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
-          const Divider(height: 1),
-          
-          // 主导航
+          Divider(height: 1, color: context.colors.divider),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 12),
               children: [
                 _buildSectionTitle('发现'),
-                _buildNavItem(0, Icons.home_outlined, Icons.home, '首页'),
-                _buildNavItem(1, Icons.video_library_outlined, Icons.video_library, '番剧'),
-                _buildNavItem(2, Icons.movie_outlined, Icons.movie, '剧场版'),
-                _buildNavItem(3, Icons.calendar_month_outlined, Icons.calendar_month, '追番日历'),
-                _buildNavItem(4, Icons.leaderboard_outlined, Icons.leaderboard, '排行榜'),
-                _buildNavItem(5, Icons.category_outlined, Icons.category, '分类浏览'),
-                
-                const SizedBox(height: 16),
+                _buildNavItem(0, Icons.home_outlined, Icons.home_rounded, '首页'),
+                _buildNavItem(1, Icons.video_library_outlined,
+                    Icons.video_library_rounded, '番剧'),
+                _buildNavItem(
+                    2, Icons.movie_outlined, Icons.movie_rounded, '剧场版'),
+                _buildNavItem(3, Icons.calendar_month_outlined,
+                    Icons.calendar_month_rounded, '追番日历'),
+                _buildNavItem(4, Icons.leaderboard_outlined,
+                    Icons.leaderboard_rounded, '排行榜'),
+                _buildNavItem(
+                    5, Icons.category_outlined, Icons.category_rounded, '分类浏览'),
+                const SizedBox(height: 18),
                 _buildSectionTitle('我的'),
-                _buildNavItem(6, Icons.bookmark_outline, Icons.bookmark, '追番列表'),
-                _buildNavItem(7, Icons.history_outlined, Icons.history, '观看历史'),
-                _buildNavItem(8, Icons.download_outlined, Icons.download, '离线缓存'),
-                _buildNavItem(9, Icons.favorite_outline, Icons.favorite, '收藏夹'),
-                _buildNavItem(10, Icons.watch_later_outlined, Icons.watch_later, '稍后再看'),
-                _buildNavItem(11, Icons.person_outline, Icons.person, '个人中心'),
+                _buildNavItem(6, Icons.bookmark_outline_rounded,
+                    Icons.bookmark_rounded, '追番列表'),
+                _buildNavItem(7, Icons.history_rounded,
+                    Icons.history_toggle_off_rounded, '观看历史'),
+                _buildNavItem(
+                    8, Icons.download_outlined, Icons.download_rounded, '离线缓存'),
+                _buildNavItem(9, Icons.favorite_outline_rounded,
+                    Icons.favorite_rounded, '收藏夹'),
               ],
             ),
           ),
-          
-          // 底部设置
-          const Divider(height: 1),
-          _buildNavItem(12, Icons.settings_outlined, Icons.settings, '设置'),
-          const SizedBox(height: 12),
+          Divider(height: 1, color: context.colors.divider),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: _buildNavItem(
+                12, Icons.settings_outlined, Icons.settings_rounded, '设置'),
+          ),
         ],
       ),
     );
@@ -132,72 +115,82 @@ class _LeftSidebarState extends State<LeftSidebar> with SingleTickerProviderStat
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(18, 4, 16, 7),
       child: Text(
         title,
-        style: const TextStyle(
-          color: AppTheme.textMuted,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1,
-        ),
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: context.colors.textMuted,
+              letterSpacing: 1.2,
+            ),
       ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
-    final isSelected = widget.selectedIndex == index;
-    final isHovered = _hoveredIndex == index;
-
+  Widget _buildNavItem(
+      int index, IconData icon, IconData activeIcon, String label) {
+    final selected = widget.selectedIndex == index;
+    final hovered = _hoveredIndex == index;
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hoveredIndex = index),
       onExit: (_) => setState(() => _hoveredIndex = -1),
-      child: GestureDetector(
-        onTap: () {
-          widget.onIndexChanged(index);
-          _navigateToPage(index);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppTheme.primaryBlue.withValues(alpha: 0.15)
-                : isHovered
-                    ? AppTheme.bgHover.withValues(alpha: 0.5)
-                    : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border(
-              left: BorderSide(
-                color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
-                width: 3,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 1),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(7),
+            onTap: () {
+              widget.onIndexChanged(index);
+              _navigateToPage(index);
+            },
+            child: AnimatedContainer(
+              duration: AppAnimations.fast,
+              curve: AppAnimations.easeOut,
+              height: 39,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppTheme.primaryBlue.withValues(alpha: 0.11)
+                    : hovered
+                        ? context.colors.bgHover.withValues(alpha: 0.55)
+                        : Colors.transparent,
+                borderRadius: BorderRadius.circular(7),
+                border: Border(
+                  left: BorderSide(
+                    color: selected ? AppTheme.primaryBlue : Colors.transparent,
+                    width: 2,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  AnimatedSwitcher(
+                    duration: AppAnimations.fast,
+                    child: Icon(
+                      selected ? activeIcon : icon,
+                      key: ValueKey('$index-$selected'),
+                      size: 19,
+                      color: selected
+                          ? AppTheme.accentBlue
+                          : context.colors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 11),
+                  AnimatedDefaultTextStyle(
+                    duration: AppAnimations.fast,
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(
+                          color: selected
+                              ? context.colors.textPrimary
+                              : context.colors.textSecondary,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                    child: Text(label),
+                  ),
+                ],
               ),
             ),
-          ),
-          child: Row(
-            children: [
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: Icon(
-                  isSelected ? activeIcon : icon,
-                  key: ValueKey('$index-$isSelected'),
-                  size: 20,
-                  color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              AnimatedDefaultTextStyle(
-                duration: const Duration(milliseconds: 200),
-                style: TextStyle(
-                  color: isSelected ? AppTheme.primaryBlue : AppTheme.textSecondary,
-                  fontSize: 13,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                ),
-                child: Text(label),
-              ),
-            ],
           ),
         ),
       ),
@@ -208,37 +201,37 @@ class _LeftSidebarState extends State<LeftSidebar> with SingleTickerProviderStat
     switch (index) {
       case 0:
         Modular.to.navigate('/');
-        break;
+        return;
       case 1:
         Modular.to.navigate('/anime-list');
-        break;
+        return;
       case 2:
         Modular.to.navigate('/anime-list?type=movie');
-        break;
+        return;
       case 3:
         Modular.to.navigate('/calendar');
-        break;
+        return;
       case 4:
         Modular.to.navigate('/ranking');
-        break;
+        return;
       case 5:
         Modular.to.navigate('/category');
-        break;
+        return;
       case 6:
         Modular.to.navigate('/track');
-        break;
+        return;
       case 7:
         Modular.to.navigate('/history');
-        break;
+        return;
       case 8:
         Modular.to.navigate('/download');
-        break;
+        return;
       case 9:
         Modular.to.navigate('/collect');
-        break;
+        return;
       case 12:
         Modular.to.navigate('/settings');
-        break;
+        return;
     }
   }
 }

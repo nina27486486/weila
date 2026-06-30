@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 
 /// 薇拉动画工具集
 class AppAnimations {
-  // 时长
-  static const Duration fast = Duration(milliseconds: 150);
-  static const Duration normal = Duration(milliseconds: 300);
-  static const Duration slow = Duration(milliseconds: 500);
-  static const Duration stagger = Duration(milliseconds: 80);
+  static const Duration immediate = Duration(milliseconds: 90);
+  static const Duration fast = Duration(milliseconds: 160);
+  static const Duration normal = Duration(milliseconds: 240);
+  static const Duration slow = Duration(milliseconds: 320);
+  static const Duration scene = Duration(milliseconds: 420);
+  static const Duration stagger = Duration(milliseconds: 50);
 
   // 曲线
   static const Curve easeOut = Curves.easeOutCubic;
   static const Curve easeIn = Curves.easeInCubic;
-  static const Curve bounce = Curves.easeOutBack;
+  static const Curve bounce = Curves.easeOutCubic;
   static const Curve smooth = Curves.easeInOutCubic;
 }
 
@@ -26,8 +27,8 @@ class FadeSlideIn extends StatefulWidget {
     super.key,
     required this.child,
     this.delay = Duration.zero,
-    this.duration = const Duration(milliseconds: 400),
-    this.beginOffset = const Offset(0, 0.1),
+    this.duration = AppAnimations.normal,
+    this.beginOffset = const Offset(0, 0.025),
   });
 
   @override
@@ -47,6 +48,9 @@ class _FadeSlideInState extends State<FadeSlideIn> {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+      return widget.child;
+    }
     return AnimatedOpacity(
       opacity: _visible ? 1.0 : 0.0,
       duration: widget.duration,
