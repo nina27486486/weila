@@ -31,4 +31,36 @@ void main() {
     await tester.tap(find.byTooltip('关闭选集'));
     expect(closed, isTrue);
   });
+
+  testWidgets('选集抽屉以 240ms 弹性过渡展开和收起', (tester) async {
+    Widget build(bool open) {
+      return MaterialApp(
+        theme: AppTheme.darkTheme,
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.centerRight,
+            child: EpisodeDrawerMotion(
+              open: open,
+              child: const ColoredBox(color: Colors.black),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(build(false));
+    var motion = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('episode-drawer-motion')),
+    );
+    expect(motion.constraints?.maxWidth, 0);
+    expect(motion.duration, const Duration(milliseconds: 240));
+
+    await tester.pumpWidget(build(true));
+    await tester.pump(const Duration(milliseconds: 240));
+    motion = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('episode-drawer-motion')),
+    );
+    expect(motion.constraints?.maxWidth, 220);
+    expect(tester.takeException(), isNull);
+  });
 }

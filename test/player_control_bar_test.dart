@@ -62,6 +62,11 @@ void main() {
     expect(find.text('下一集'), findsOneWidget);
     expect(find.byTooltip('暂停'), findsOneWidget);
     expect(find.byTooltip('进入全屏'), findsOneWidget);
+    final glow = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('player-progress-glow')),
+    );
+    final decoration = glow.decoration! as BoxDecoration;
+    expect(decoration.boxShadow, isNotEmpty);
   });
 
   testWidgets('控制条把桌面端操作转换为播放回调', (tester) async {
@@ -157,5 +162,32 @@ void main() {
     expect(find.byTooltip('播放下一集'), findsOneWidget);
     expect(find.text('下一集'), findsNothing);
     expect(find.byKey(const ValueKey('player-volume-slider')), findsOneWidget);
+  });
+
+  testWidgets('播放状态图标使用短过渡且不循环脉冲', (tester) async {
+    await tester.pumpWidget(_buildControlBar(playing: true));
+
+    expect(
+      find.byKey(const ValueKey('player-play-state-icon')),
+      findsOneWidget,
+    );
+    expect(find.byType(AnimatedSwitcher), findsWidgets);
+
+    await tester.pumpWidget(_buildControlBar(playing: false));
+    await tester.pump(const Duration(milliseconds: 160));
+    expect(find.byTooltip('播放'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('控制条在 960、1280、1600 宽度下保持稳定', (tester) async {
+    for (final width in [960.0, 1280.0, 1600.0]) {
+      await tester.pumpWidget(_buildControlBar(width: width));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byKey(const ValueKey('player-progress-slider')),
+        findsOneWidget,
+      );
+    }
   });
 }

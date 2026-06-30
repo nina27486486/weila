@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/pages/home/home_editorial_view.dart';
 import 'package:weila/theme/app_theme.dart';
+import 'package:weila/widgets/artwork_components.dart';
 
 void main() {
   final animeItems = List.generate(
@@ -97,6 +98,50 @@ void main() {
     expect(pointerRegions.length, greaterThanOrEqualTo(10));
   });
 
+  testWidgets('首页使用层叠续看、完整海报轨道与环境背景', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final stories = List.generate(
+      5,
+      (index) => HomeContinueStory(
+        title: '续看故事 ${index + 1}',
+        coverUrl: null,
+        progressLabel: '看到第 ${index + 1} 集',
+        updatedLabel: '今天',
+        animeUrl: 'continue:$index',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: stories,
+            onOpenAnime: (_) {},
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    final stack = tester.widget<LayeredArtworkStack>(
+      find.byType(LayeredArtworkStack),
+    );
+    final rail = tester.widget<PosterRail>(find.byType(PosterRail));
+
+    expect(stack.items, hasLength(5));
+    expect(rail.items, hasLength(animeItems.length));
+    expect(
+      find.byKey(const ValueKey('home-ambient-hero')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('首页加载失败时使用统一中文状态', (tester) async {
     var retried = false;
 
@@ -121,5 +166,37 @@ void main() {
     expect(find.text('今天的放映单还没送达'), findsOneWidget);
     await tester.tap(find.text('重新加载'));
     expect(retried, isTrue);
+  });
+
+  testWidgets('首页在 960、1280、1600 宽度下无布局溢出', (tester) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    for (final width in [960.0, 1280.0, 1600.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 1000));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: HomeEditorialView(
+              latestItems: animeItems,
+              seasonalItems: animeItems,
+              trendingItems: animeItems,
+              continueStories: continueStories,
+              onOpenAnime: (_) {},
+              onOpenContinue: (_) {},
+              onRetry: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: '$width 宽度不应产生布局异常',
+      );
+      expect(find.byType(PosterRail), findsOneWidget);
+    }
   });
 }

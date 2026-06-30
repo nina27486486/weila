@@ -79,6 +79,7 @@ class PlayerControlBar extends StatelessWidget {
                   position: position,
                   duration: duration,
                   progress: _progress,
+                  active: playing,
                   onChanged: (value) {
                     final milliseconds =
                         (duration.inMilliseconds * value).round();
@@ -116,12 +117,14 @@ class _ProgressRow extends StatelessWidget {
     required this.position,
     required this.duration,
     required this.progress,
+    required this.active,
     required this.onChanged,
   });
 
   final Duration position;
   final Duration duration;
   final double progress;
+  final bool active;
   final ValueChanged<double> onChanged;
 
   @override
@@ -134,27 +137,44 @@ class _ProgressRow extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Semantics(
-            label: '播放进度',
-            value: '${(progress * 100).round()}%',
-            child: SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: AppTheme.primaryBlue,
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-                secondaryActiveTrackColor: Colors.white.withValues(alpha: 0.34),
-                thumbColor: Colors.white,
-                overlayColor: AppTheme.primaryBlue.withValues(alpha: 0.18),
-                trackHeight: 3,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 5.5),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 13),
-              ),
-              child: Slider(
-                key: const ValueKey('player-progress-slider'),
-                value: progress,
-                onChanged: onChanged,
-                semanticFormatterCallback: (value) =>
-                    '播放进度 ${(value * 100).round()}%',
+          child: AnimatedContainer(
+            key: const ValueKey('player-progress-glow'),
+            duration: const Duration(milliseconds: 160),
+            decoration: BoxDecoration(
+              boxShadow: active && progress > 0
+                  ? [
+                      BoxShadow(
+                        color: AppTheme.primaryBlue.withValues(alpha: 0.42),
+                        blurRadius: 9,
+                        spreadRadius: -2,
+                      ),
+                    ]
+                  : const [],
+            ),
+            child: Semantics(
+              label: '播放进度',
+              value: '${(progress * 100).round()}%',
+              child: SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: AppTheme.primaryBlue,
+                  inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
+                  secondaryActiveTrackColor:
+                      Colors.white.withValues(alpha: 0.34),
+                  thumbColor: Colors.white,
+                  overlayColor: AppTheme.primaryBlue.withValues(alpha: 0.18),
+                  trackHeight: 3,
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+                  overlayShape:
+                      const RoundSliderOverlayShape(overlayRadius: 13),
+                ),
+                child: Slider(
+                  key: const ValueKey('player-progress-slider'),
+                  value: progress,
+                  onChanged: onChanged,
+                  semanticFormatterCallback: (value) =>
+                      '播放进度 ${(value * 100).round()}%',
+                ),
               ),
             ),
           ),
@@ -377,9 +397,16 @@ class _PrimaryPlayButton extends StatelessWidget {
         tooltip: tooltip,
         onPressed: onPressed,
         mouseCursor: SystemMouseCursors.click,
-        icon: Icon(
-          playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-          size: 25,
+        icon: AnimatedSwitcher(
+          key: const ValueKey('player-play-state-icon'),
+          duration: const Duration(milliseconds: 160),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          child: Icon(
+            playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+            key: ValueKey(playing),
+            size: 25,
+          ),
         ),
         color: Colors.white,
         style: IconButton.styleFrom(
