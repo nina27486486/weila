@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/vira_colors.dart';
+import 'liquid_glass_surface.dart';
 
 enum ViraDestination { home, discover, following, library, downloads }
 
@@ -79,7 +80,7 @@ class ViraPageScaffold extends StatelessWidget {
   }
 }
 
-class _Masthead extends StatelessWidget {
+class _Masthead extends StatefulWidget {
   final ViraDestination? activeDestination;
   final ValueChanged<ViraDestination> onDestinationSelected;
   final VoidCallback onSearch;
@@ -95,14 +96,88 @@ class _Masthead extends StatelessWidget {
   });
 
   @override
+  State<_Masthead> createState() => _MastheadState();
+}
+
+class _MastheadState extends State<_Masthead>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _glassMotion;
+  AppLifecycleState _lifecycle = AppLifecycleState.resumed;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _lifecycle =
+        WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;
+    _glassMotion = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 14),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncMotion();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycle = state;
+    _syncMotion();
+  }
+
+  void _syncMotion() {
+    final disable = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final tickerEnabled = TickerMode.valuesOf(context).enabled;
+    final enabled = mounted &&
+        !disable &&
+        tickerEnabled &&
+        _lifecycle == AppLifecycleState.resumed;
+    if (enabled && !_glassMotion.isAnimating) {
+      _glassMotion.repeat();
+    } else if (!enabled && _glassMotion.isAnimating) {
+      _glassMotion.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _glassMotion.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnimations =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
 
     return Container(
       height: 72,
       decoration: BoxDecoration(
-        color: colors.paper.withValues(alpha: 0.97),
-        border: Border(bottom: BorderSide(color: colors.divider)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: dark
+              ? [
+                  colors.paper.withValues(alpha: 0.96),
+                  colors.bgCard.withValues(alpha: 0.98),
+                ]
+              : [
+                  colors.paper.withValues(alpha: 0.98),
+                  colors.sky.withValues(alpha: 0.06),
+                  colors.sakura.withValues(alpha: 0.05),
+                ],
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: colors.divider.withValues(alpha: 0.72),
+          ),
+        ),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -116,46 +191,183 @@ class _Masthead extends StatelessWidget {
                 const _Brand(),
                 const Spacer(),
                 if (compact)
-                  _CompactNavigation(
-                    activeDestination: activeDestination,
-                    onSelected: onDestinationSelected,
+                  AnimatedBuilder(
+                    animation: _glassMotion,
+                    builder: (context, _) => _CompactNavigation(
+                      activeDestination: widget.activeDestination,
+                      onSelected: widget.onDestinationSelected,
+                      motionProgress: _glassMotion.value,
+                    ),
                   )
                 else
-                  Row(
-                    children: [
-                      for (final destination in ViraDestination.values)
-                        _NavigationItem(
-                          destination: destination,
-                          selected: destination == activeDestination,
-                          onTap: () => onDestinationSelected(destination),
-                        ),
-                    ],
+                  AnimatedBuilder(
+                    animation: _glassMotion,
+                    builder: (context, _) => _GlassNavigationRail(
+                      activeDestination: widget.activeDestination,
+                      onSelected: widget.onDestinationSelected,
+                      motionProgress: _glassMotion.value,
+                      disableAnimations: disableAnimations,
+                    ),
                   ),
                 const Spacer(),
-                _MastheadTool(
-                  tooltip: '搜索',
-                  icon: Icons.search_rounded,
-                  onTap: onSearch,
-                ),
-                const SizedBox(width: 6),
-                _MastheadTool(
-                  tooltip: '切换主题',
-                  icon: Theme.of(context).brightness == Brightness.dark
-                      ? Icons.light_mode_outlined
-                      : Icons.dark_mode_outlined,
-                  onTap: onThemeToggle,
-                ),
-                const SizedBox(width: 6),
-                _MastheadTool(
-                  tooltip: '个人与设置',
-                  icon: Icons.person_outline_rounded,
-                  onTap: onProfile,
-                  accent: true,
+                AnimatedBuilder(
+                  animation: _glassMotion,
+                  builder: (context, _) => LiquidGlassSurface(
+                    key: const ValueKey('vira-tools-glass'),
+                    motionProgress: _glassMotion.value,
+                    phase: 0.34,
+                    borderRadius: BorderRadius.circular(24),
+                    padding: const EdgeInsets.all(4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _MastheadTool(
+                          id: 'search',
+                          tooltip: '搜索',
+                          icon: Icons.search_rounded,
+                          onTap: widget.onSearch,
+                        ),
+                        const SizedBox(width: 2),
+                        _MastheadTool(
+                          id: 'theme',
+                          tooltip: '切换主题',
+                          icon: dark
+                              ? Icons.light_mode_outlined
+                              : Icons.dark_mode_outlined,
+                          onTap: widget.onThemeToggle,
+                        ),
+                        const SizedBox(width: 2),
+                        _MastheadTool(
+                          id: 'profile',
+                          tooltip: '个人与设置',
+                          icon: Icons.person_outline_rounded,
+                          onTap: widget.onProfile,
+                          accent: true,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _GlassNavigationRail extends StatelessWidget {
+  const _GlassNavigationRail({
+    required this.activeDestination,
+    required this.onSelected,
+    required this.motionProgress,
+    required this.disableAnimations,
+  });
+
+  final ViraDestination? activeDestination;
+  final ValueChanged<ViraDestination> onSelected;
+  final double motionProgress;
+  final bool disableAnimations;
+
+  @override
+  Widget build(BuildContext context) {
+    final activeIndex = activeDestination == null
+        ? -1
+        : ViraDestination.values.indexOf(activeDestination!);
+
+    return LiquidGlassSurface(
+      key: const ValueKey('vira-navigation-glass'),
+      motionProgress: motionProgress,
+      borderRadius: BorderRadius.circular(26),
+      padding: const EdgeInsets.all(5),
+      child: SizedBox(
+        width: 340,
+        height: 42,
+        child: Stack(
+          children: [
+            if (activeIndex >= 0)
+              AnimatedPositioned(
+                key: const ValueKey('vira-nav-lens'),
+                duration: disableAnimations
+                    ? Duration.zero
+                    : const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                left: activeIndex * 68,
+                top: 0,
+                width: 68,
+                height: 42,
+                child: KeyedSubtree(
+                  key: ValueKey(
+                    'vira-nav-indicator-${activeDestination!.name}',
+                  ),
+                  child: KeyedSubtree(
+                    key: ValueKey(
+                      'vira-nav-lens-${activeDestination!.name}',
+                    ),
+                    child: const _SelectedGlassLens(),
+                  ),
+                ),
+              ),
+            Row(
+              children: [
+                for (final destination in ViraDestination.values)
+                  _NavigationItem(
+                    destination: destination,
+                    selected: destination == activeDestination,
+                    onTap: () => onSelected(destination),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SelectedGlassLens extends StatelessWidget {
+  const _SelectedGlassLens();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: dark
+                ? [
+                    colors.sky.withValues(alpha: 0.38),
+                    Colors.white.withValues(alpha: 0.12),
+                  ]
+                : [
+                    Colors.white.withValues(alpha: 0.94),
+                    colors.sky.withValues(alpha: 0.24),
+                  ],
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: dark ? 0.28 : 0.92),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: colors.sky.withValues(alpha: dark ? 0.2 : 0.25),
+              blurRadius: 14,
+              offset: const Offset(0, 5),
+            ),
+            BoxShadow(
+              color: Colors.white.withValues(alpha: dark ? 0.04 : 0.6),
+              blurRadius: 3,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -242,6 +454,7 @@ class _NavigationItem extends StatefulWidget {
 
 class _NavigationItemState extends State<_NavigationItem> {
   var _hovered = false;
+  var _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -255,41 +468,67 @@ class _NavigationItemState extends State<_NavigationItem> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: SizedBox(
-            width: 68,
-            height: 72,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 160),
-                  style: Theme.of(context).textTheme.labelLarge!.copyWith(
-                        color: widget.selected
-                            ? colors.textPrimary
-                            : _hovered
-                                ? colors.sky
-                                : colors.textSecondary,
-                        fontWeight:
-                            widget.selected ? FontWeight.w700 : FontWeight.w500,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: widget.onTap,
+            onFocusChange: (value) => setState(() => _focused = value),
+            hoverColor: Colors.transparent,
+            focusColor: Colors.transparent,
+            splashColor: colors.sky.withValues(alpha: 0.1),
+            highlightColor: colors.sky.withValues(alpha: 0.08),
+            child: SizedBox(
+              width: 68,
+              height: 42,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (_hovered && !widget.selected)
+                    Positioned.fill(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 160),
+                        margin: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: colors.sky.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                       ),
-                  child: Text(widget.destination.label),
-                ),
-                if (widget.selected)
-                  Positioned(
-                    key: ValueKey(
-                      'vira-nav-indicator-${widget.destination.name}',
                     ),
-                    bottom: 0,
-                    child: Container(
-                      width: 22,
-                      height: 2,
-                      color: colors.sky,
+                  if (_focused)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          key: ValueKey(
+                            'vira-nav-focus-${widget.destination.name}',
+                          ),
+                          margin: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(17),
+                            border: Border.all(
+                              color: colors.sky,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 160),
+                    style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                          color: widget.selected
+                              ? colors.textPrimary
+                              : _hovered
+                                  ? colors.sky
+                                  : colors.textSecondary,
+                          fontWeight: widget.selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                    child: Text(widget.destination.label),
                   ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -301,10 +540,12 @@ class _NavigationItemState extends State<_NavigationItem> {
 class _CompactNavigation extends StatelessWidget {
   final ViraDestination? activeDestination;
   final ValueChanged<ViraDestination> onSelected;
+  final double motionProgress;
 
   const _CompactNavigation({
     required this.activeDestination,
     required this.onSelected,
+    required this.motionProgress,
   });
 
   @override
@@ -321,8 +562,11 @@ class _CompactNavigation extends StatelessWidget {
       ],
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: LiquidGlassSurface(
+          key: const ValueKey('vira-compact-navigation-glass'),
+          motionProgress: motionProgress,
+          borderRadius: BorderRadius.circular(22),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
           child: Row(
             children: [
               Text(
@@ -340,12 +584,14 @@ class _CompactNavigation extends StatelessWidget {
 }
 
 class _MastheadTool extends StatefulWidget {
+  final String id;
   final String tooltip;
   final IconData icon;
   final VoidCallback onTap;
   final bool accent;
 
   const _MastheadTool({
+    required this.id,
     required this.tooltip,
     required this.icon,
     required this.onTap,
@@ -358,6 +604,7 @@ class _MastheadTool extends StatefulWidget {
 
 class _MastheadToolState extends State<_MastheadTool> {
   var _hovered = false;
+  var _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -372,35 +619,69 @@ class _MastheadToolState extends State<_MastheadTool> {
           cursor: SystemMouseCursors.click,
           onEnter: (_) => setState(() => _hovered = true),
           onExit: (_) => setState(() => _hovered = false),
-          child: GestureDetector(
-            onTap: widget.onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: widget.accent
-                    ? colors.sky
-                    : _hovered
-                        ? colors.bgHover
-                        : Colors.transparent,
-                border: Border.all(
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(19),
+              onTap: widget.onTap,
+              onFocusChange: (value) => setState(() => _focused = value),
+              hoverColor: Colors.transparent,
+              focusColor: Colors.transparent,
+              splashColor: colors.sky.withValues(alpha: 0.12),
+              highlightColor: colors.sky.withValues(alpha: 0.09),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
                   color: widget.accent
-                      ? colors.sky
+                      ? colors.sky.withValues(alpha: _hovered ? 0.95 : 0.86)
                       : _hovered
-                          ? colors.sky.withValues(alpha: 0.42)
-                          : colors.divider,
-                ),
-                borderRadius: BorderRadius.circular(19),
-              ),
-              child: Icon(
-                widget.icon,
-                size: 19,
-                color: widget.accent
-                    ? Colors.white
-                    : _hovered
+                          ? colors.sky.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                  border: Border.all(
+                    color: _focused
                         ? colors.sky
-                        : colors.textSecondary,
+                        : widget.accent
+                            ? Colors.white.withValues(alpha: 0.58)
+                            : _hovered
+                                ? colors.sky.withValues(alpha: 0.38)
+                                : Colors.transparent,
+                    width: _focused ? 1.5 : 1,
+                  ),
+                  borderRadius: BorderRadius.circular(19),
+                  boxShadow: widget.accent
+                      ? [
+                          BoxShadow(
+                            color: colors.sky.withValues(alpha: 0.24),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (_focused)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: SizedBox(
+                            key: ValueKey('vira-tool-focus-${widget.id}'),
+                          ),
+                        ),
+                      ),
+                    Icon(
+                      widget.icon,
+                      size: 19,
+                      color: widget.accent
+                          ? Colors.white
+                          : _hovered || _focused
+                              ? colors.sky
+                              : colors.textSecondary,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
