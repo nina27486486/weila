@@ -192,6 +192,44 @@ void main() {
     );
   });
 
+  testWidgets('海报卡片只暴露一个完整按钮语义', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: '第一季',
+                imageUrl: null,
+                meta: '12 集',
+              ),
+            ],
+            onOpen: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final button = find.bySemanticsLabel('第一季，12 集');
+    expect(button, findsOneWidget);
+    expect(
+      tester.getSemantics(button),
+      matchesSemantics(
+        label: '第一季，12 集',
+        isButton: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    expect(find.bySemanticsLabel('第一季'), findsNothing);
+    expect(find.bySemanticsLabel('12 集'), findsNothing);
+    semantics.dispose();
+  });
+
   testWidgets('环境背景在减少动态效果时仍能稳定呈现内容', (tester) async {
     await tester.pumpWidget(
       _app(
