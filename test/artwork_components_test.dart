@@ -122,6 +122,39 @@ void main() {
     expect(after, greaterThan(0));
   });
 
+  testWidgets('海报轨道使用柔光卡片并支持键盘打开', (tester) async {
+    String? openedId;
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: '第一季',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (item) => openedId = item.id,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('poster-card-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('poster-cover-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('poster-rank-pill-0')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('poster-focus-ring-0')), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(openedId, 'season-1');
+  });
+
   testWidgets('环境背景在减少动态效果时仍能稳定呈现内容', (tester) async {
     await tester.pumpWidget(
       _app(
