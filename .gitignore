@@ -61,6 +61,7 @@ app.*.map.json
 /.codex/
 /.superpowers/
 /.workbuddy/
+/.worktrees/
 /docs/superpowers/
 /tmp/
 /看番Debug/
