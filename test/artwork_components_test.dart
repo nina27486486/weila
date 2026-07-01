@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/services/artwork_palette_service.dart';
 import 'package:weila/theme/app_theme.dart';
+import 'package:weila/utils/animations.dart';
 import 'package:weila/widgets/artwork_components.dart';
 
 Widget _app(Widget child, {bool disableAnimations = false}) {
@@ -194,6 +195,14 @@ void main() {
 
   testWidgets('海报卡片只暴露一个完整按钮语义', (tester) async {
     final semantics = tester.ensureSemantics();
+    var semanticsDisposed = false;
+    void disposeSemantics() {
+      if (semanticsDisposed) return;
+      semantics.dispose();
+      semanticsDisposed = true;
+    }
+
+    addTearDown(disposeSemantics);
     await tester.pumpWidget(
       _app(
         SizedBox(
@@ -227,7 +236,84 @@ void main() {
     );
     expect(find.bySemanticsLabel('第一季'), findsNothing);
     expect(find.bySemanticsLabel('12 集'), findsNothing);
-    semantics.dispose();
+    disposeSemantics();
+  });
+
+  testWidgets('海报卡片悬停时上浮并放大封面', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: '第一季',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('poster-card-0'))),
+    );
+    await tester.pump();
+    await tester.pump(AppAnimations.fast);
+
+    final card = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('poster-card-0')),
+    );
+    final cover = tester.widget<AnimatedScale>(
+      find.byKey(const ValueKey('poster-cover-scale-0')),
+    );
+    expect(card.transform?.getTranslation().y, -6);
+    expect(cover.scale, 1.025);
+  });
+
+  testWidgets('减少动态效果时海报卡片保持静止', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: '第一季',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (_) {},
+          ),
+        ),
+        disableAnimations: true,
+      ),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('poster-card-0'))),
+    );
+    await tester.pump();
+    await tester.pump(AppAnimations.fast);
+
+    final card = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('poster-card-0')),
+    );
+    final cover = tester.widget<AnimatedScale>(
+      find.byKey(const ValueKey('poster-cover-scale-0')),
+    );
+    expect(card.transform?.getTranslation().y, 0);
+    expect(cover.scale, 1);
   });
 
   testWidgets('环境背景在减少动态效果时仍能稳定呈现内容', (tester) async {

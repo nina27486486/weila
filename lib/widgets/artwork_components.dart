@@ -718,6 +718,11 @@ class _PosterRailCardState extends State<_PosterRailCard> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final disableAnimations =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final visuallyActive = _hovered || _focused;
+    final animate = !disableAnimations;
     final semanticLabel = widget.item.meta.isEmpty
         ? widget.item.title
         : '${widget.item.title}，${widget.item.meta}';
@@ -727,18 +732,60 @@ class _PosterRailCardState extends State<_PosterRailCard> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => _setHovered(true),
         onExit: (_) => _setHovered(false),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ExcludeSemantics(
-              child: AnimatedContainer(
-                key: ValueKey('poster-card-${widget.index}'),
-                duration: AppAnimations.fast,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: colors.paper,
-                  borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          key: ValueKey('poster-card-${widget.index}'),
+          duration: animate ? AppAnimations.fast : Duration.zero,
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(
+            0,
+            animate && visuallyActive ? -6 : 0,
+            0,
+          ),
+          transformAlignment: Alignment.center,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: dark
+                  ? [
+                      colors.paper.withValues(alpha: 0.96),
+                      colors.bgCard.withValues(alpha: 0.90),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.96),
+                      colors.paper.withValues(alpha: 0.90),
+                    ],
+            ),
+            border: Border.all(
+              color: visuallyActive
+                  ? colors.sky.withValues(alpha: 0.82)
+                  : Colors.white.withValues(alpha: dark ? 0.20 : 0.82),
+              width: visuallyActive ? 1.4 : 1,
+              strokeAlign: BorderSide.strokeAlignOutside,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.textPrimary.withValues(
+                  alpha: visuallyActive ? 0.16 : 0.08,
                 ),
+                blurRadius: visuallyActive ? 28 : 18,
+                offset: Offset(0, visuallyActive ? 13 : 8),
+              ),
+              BoxShadow(
+                color: colors.sky.withValues(
+                  alpha: visuallyActive ? 0.14 : 0.06,
+                ),
+                blurRadius: visuallyActive ? 20 : 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -752,7 +799,16 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            CoverImage(url: widget.item.imageUrl),
+                            AnimatedScale(
+                              key: ValueKey(
+                                'poster-cover-scale-${widget.index}',
+                              ),
+                              duration:
+                                  animate ? AppAnimations.fast : Duration.zero,
+                              curve: Curves.easeOutCubic,
+                              scale: animate && visuallyActive ? 1.025 : 1,
+                              child: CoverImage(url: widget.item.imageUrl),
+                            ),
                             Positioned(
                               left: 10,
                               top: 10,
@@ -768,10 +824,17 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                                   color: colors.paper.withValues(alpha: 0.88),
                                   borderRadius: BorderRadius.circular(9),
                                   border: Border.all(
-                                    color: colors.divider.withValues(
-                                      alpha: 0.72,
-                                    ),
+                                    color: Colors.white.withValues(alpha: 0.72),
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: colors.textPrimary.withValues(
+                                        alpha: 0.10,
+                                      ),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
                                 child: Text(
                                   '${widget.index + 1}'.padLeft(2, '0'),
@@ -780,7 +843,8 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                                       .labelSmall
                                       ?.copyWith(
                                         color: colors.sky,
-                                        fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.4,
                                       ),
                                 ),
                               ),
@@ -798,7 +862,10 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                             widget.item.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleSmall
+                                ?.copyWith(color: colors.textPrimary),
                           ),
                           if (widget.item.meta.isNotEmpty) ...[
                             const SizedBox(height: 5),
@@ -806,7 +873,10 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                               widget.item.meta,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.bodySmall,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(color: colors.textSecondary),
                             ),
                           ],
                         ],
@@ -815,40 +885,40 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                   ],
                 ),
               ),
-            ),
-            Positioned.fill(
-              child: Semantics(
-                button: true,
-                label: semanticLabel,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    key: ValueKey('poster-card-action-${widget.index}'),
-                    onTap: widget.onOpen,
-                    onFocusChange: (focused) {
-                      setState(() => _focused = focused);
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    hoverColor: Colors.transparent,
-                    focusColor: Colors.transparent,
-                    splashColor: colors.sky.withValues(alpha: 0.12),
-                    highlightColor: colors.sky.withValues(alpha: 0.08),
-                    child: const SizedBox.expand(),
+              Positioned.fill(
+                child: Semantics(
+                  button: true,
+                  label: semanticLabel,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: ValueKey('poster-card-action-${widget.index}'),
+                      onTap: widget.onOpen,
+                      onFocusChange: (focused) {
+                        setState(() => _focused = focused);
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      hoverColor: Colors.transparent,
+                      focusColor: Colors.transparent,
+                      splashColor: colors.sky.withValues(alpha: 0.12),
+                      highlightColor: colors.sky.withValues(alpha: 0.08),
+                      child: const SizedBox.expand(),
+                    ),
                   ),
                 ),
               ),
-            ),
-            if (_focused)
-              IgnorePointer(
-                key: ValueKey('poster-focus-ring-${widget.index}'),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: colors.sky, width: 2),
+              if (_focused)
+                IgnorePointer(
+                  key: ValueKey('poster-focus-ring-${widget.index}'),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colors.sky, width: 2),
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
