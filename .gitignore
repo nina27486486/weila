@@ -59,6 +59,7 @@ app.*.map.json
 # Local development assistants and notes
 /.agents/
 /.codex/
+/.superpowers/
 /.workbuddy/
 /docs/superpowers/
 /tmp/
