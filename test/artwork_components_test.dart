@@ -9,9 +9,13 @@ import 'package:weila/theme/app_theme.dart';
 import 'package:weila/utils/animations.dart';
 import 'package:weila/widgets/artwork_components.dart';
 
-Widget _app(Widget child, {bool disableAnimations = false}) {
+Widget _app(
+  Widget child, {
+  bool disableAnimations = false,
+  bool darkMode = false,
+}) {
   return MaterialApp(
-    theme: AppTheme.lightTheme,
+    theme: darkMode ? AppTheme.darkTheme : AppTheme.lightTheme,
     home: MediaQuery(
       data: MediaQueryData(disableAnimations: disableAnimations),
       child: Scaffold(body: Center(child: child)),
@@ -154,6 +158,100 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     expect(openedId, 'season-1');
+
+    openedId = null;
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(openedId, 'season-1');
+  });
+
+  testWidgets('poster hover keeps the lifted top edge clickable',
+      (tester) async {
+    String? openedId;
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: 'Season one',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (item) => openedId = item.id,
+          ),
+        ),
+      ),
+    );
+
+    final card = find.byKey(const ValueKey('poster-card-0'));
+    final action = find.byKey(const ValueKey('poster-card-action-0'));
+    final hoverRegion = find.ancestor(
+      of: card,
+      matching: find.byType(MouseRegion),
+    );
+    expect(hoverRegion, findsOneWidget);
+    expect(
+      tester.widget<MouseRegion>(hoverRegion).cursor,
+      isNot(SystemMouseCursors.click),
+    );
+    expect(tester.widget<InkWell>(action).onTap, isNotNull);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(card));
+    await tester.pump();
+    await tester.pump(AppAnimations.fast);
+
+    final topInside =
+        tester.getTopLeft(card) + Offset(tester.getSize(card).width / 2, 2);
+    await mouse.moveTo(topInside);
+    await mouse.down(topInside);
+    await tester.pump();
+    await mouse.up();
+    await tester.pump();
+
+    expect(openedId, 'season-1');
+  });
+
+  testWidgets('poster rail preserves card outlines and shadows',
+      (tester) async {
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: 'Season one',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final rail = find.byKey(const ValueKey('poster-rail'));
+    final listFinder = find.descendant(
+      of: find.byType(PosterRail),
+      matching: find.byType(ListView),
+    );
+    final list = tester.widget<ListView>(listFinder);
+    final padding = list.padding! as EdgeInsets;
+    final card = find.byKey(const ValueKey('poster-card-0'));
+
+    expect(list.clipBehavior, Clip.none);
+    expect(padding.horizontal, greaterThan(0));
+    expect(
+      tester.getTopLeft(card).dx - tester.getTopLeft(rail).dx,
+      greaterThanOrEqualTo(18),
+    );
   });
 
   testWidgets('海报卡片使用全尺寸按钮操作层', (tester) async {
@@ -314,6 +412,39 @@ void main() {
     );
     expect(card.transform?.getTranslation().y, 0);
     expect(cover.scale, 1);
+  });
+
+  testWidgets('poster cards build and hover in dark theme', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: 'Season one',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (_) {},
+          ),
+        ),
+        darkMode: true,
+      ),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(
+      tester.getCenter(find.byKey(const ValueKey('poster-card-0'))),
+    );
+    await tester.pump();
+    await tester.pump(AppAnimations.fast);
+
+    expect(find.byKey(const ValueKey('poster-card-action-0')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('环境背景在减少动态效果时仍能稳定呈现内容', (tester) async {

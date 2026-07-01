@@ -672,7 +672,8 @@ class _PosterRailState extends State<PosterRail> {
           behavior: const _DesktopDragScrollBehavior(),
           child: ListView.separated(
             controller: _controller,
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(18, 2, 18, 8),
+            clipBehavior: Clip.none,
             scrollDirection: Axis.horizontal,
             itemCount: widget.items.length,
             separatorBuilder: (_, __) => const SizedBox(width: 16),
@@ -728,10 +729,8 @@ class _PosterRailCardState extends State<_PosterRailCard> {
         : '${widget.item.title}，${widget.item.meta}';
     return SizedBox(
       width: 188,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => _setHovered(true),
-        onExit: (_) => _setHovered(false),
+      child: _PosterHoverEnvelope(
+        onHoverChanged: _setHovered,
         child: AnimatedContainer(
           key: ValueKey('poster-card-${widget.index}'),
           duration: animate ? AppAnimations.fast : Duration.zero,
@@ -894,6 +893,7 @@ class _PosterRailCardState extends State<_PosterRailCard> {
                     child: InkWell(
                       key: ValueKey('poster-card-action-${widget.index}'),
                       onTap: widget.onOpen,
+                      mouseCursor: SystemMouseCursors.click,
                       onFocusChange: (focused) {
                         setState(() => _focused = focused);
                       },
@@ -920,6 +920,28 @@ class _PosterRailCardState extends State<_PosterRailCard> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PosterHoverEnvelope extends StatelessWidget {
+  final ValueChanged<bool> onHoverChanged;
+  final Widget child;
+
+  const _PosterHoverEnvelope({
+    required this.onHoverChanged,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => onHoverChanged(true),
+      onExit: (_) => onHoverChanged(false),
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: child,
       ),
     );
   }
