@@ -155,6 +155,43 @@ void main() {
     expect(openedId, 'season-1');
   });
 
+  testWidgets('海报卡片使用全尺寸按钮操作层', (tester) async {
+    await tester.pumpWidget(
+      _app(
+        SizedBox(
+          width: 520,
+          child: PosterRail(
+            items: const [
+              PosterRailItem(
+                id: 'season-1',
+                title: '第一季',
+                imageUrl: null,
+              ),
+            ],
+            onOpen: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final card = find.byKey(const ValueKey('poster-card-0'));
+    final action = find.byKey(const ValueKey('poster-card-action-0'));
+    expect(action, findsOneWidget);
+    expect(tester.getSize(action), tester.getSize(card));
+    expect(
+      find.ancestor(
+        of: action,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.button == true &&
+              widget.properties.label == '第一季',
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('环境背景在减少动态效果时仍能稳定呈现内容', (tester) async {
     await tester.pumpWidget(
       _app(

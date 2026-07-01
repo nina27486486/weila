@@ -724,118 +724,124 @@ class _PosterRailCardState extends State<_PosterRailCard> {
         cursor: SystemMouseCursors.click,
         onEnter: (_) => _setHovered(true),
         onExit: (_) => _setHovered(false),
-        child: AnimatedContainer(
-          key: ValueKey('poster-card-${widget.index}'),
-          duration: AppAnimations.fast,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: colors.paper,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: widget.onOpen,
-                  onFocusChange: (focused) {
-                    setState(() => _focused = focused);
-                  },
-                  borderRadius: BorderRadius.circular(16),
-                  hoverColor: Colors.transparent,
-                  focusColor: Colors.transparent,
-                  splashColor: colors.sky.withValues(alpha: 0.12),
-                  highlightColor: colors.sky.withValues(alpha: 0.08),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          key: ValueKey('poster-cover-${widget.index}'),
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(15),
-                            bottom: Radius.circular(8),
-                          ),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              CoverImage(url: widget.item.imageUrl),
-                              Positioned(
-                                left: 10,
-                                top: 10,
-                                child: Container(
-                                  key: ValueKey(
-                                    'poster-rank-pill-${widget.index}',
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colors.paper.withValues(alpha: 0.88),
-                                    borderRadius: BorderRadius.circular(9),
-                                    border: Border.all(
-                                      color: colors.divider.withValues(
-                                        alpha: 0.72,
-                                      ),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    '${widget.index + 1}'.padLeft(2, '0'),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(
-                                          color: colors.sky,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedContainer(
+              key: ValueKey('poster-card-${widget.index}'),
+              duration: AppAnimations.fast,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: colors.paper,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      key: ValueKey('poster-cover-${widget.index}'),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(15),
+                        bottom: Radius.circular(8),
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CoverImage(url: widget.item.imageUrl),
+                          Positioned(
+                            left: 10,
+                            top: 10,
+                            child: Container(
+                              key: ValueKey(
+                                'poster-rank-pill-${widget.index}',
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.paper.withValues(alpha: 0.88),
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: colors.divider.withValues(alpha: 0.72),
                                 ),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.item.title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleSmall,
-                            ),
-                            if (widget.item.meta.isNotEmpty) ...[
-                              const SizedBox(height: 5),
-                              Text(
-                                widget.item.meta,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.bodySmall,
+                              child: Text(
+                                '${widget.index + 1}'.padLeft(2, '0'),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
+                                      color: colors.sky,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                               ),
-                            ],
-                          ],
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        if (widget.item.meta.isNotEmpty) ...[
+                          const SizedBox(height: 5),
+                          Text(
+                            widget.item.meta,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Positioned.fill(
+              child: Semantics(
+                button: true,
+                label: widget.item.title,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: ValueKey('poster-card-action-${widget.index}'),
+                    onTap: widget.onOpen,
+                    onFocusChange: (focused) {
+                      setState(() => _focused = focused);
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    hoverColor: Colors.transparent,
+                    focusColor: Colors.transparent,
+                    splashColor: colors.sky.withValues(alpha: 0.12),
+                    highlightColor: colors.sky.withValues(alpha: 0.08),
+                    child: const SizedBox.expand(),
                   ),
                 ),
               ),
-              if (_focused)
-                IgnorePointer(
-                  key: ValueKey('poster-focus-ring-${widget.index}'),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: colors.sky, width: 2),
-                    ),
+            ),
+            if (_focused)
+              IgnorePointer(
+                key: ValueKey('poster-focus-ring-${widget.index}'),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: colors.sky, width: 2),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
