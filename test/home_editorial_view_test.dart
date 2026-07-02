@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/pages/home/home_editorial_view.dart';
@@ -96,6 +97,177 @@ void main() {
       ),
     );
     expect(pointerRegions.length, greaterThanOrEqualTo(10));
+  });
+
+  testWidgets('今日放送五项使用稳定柔光卡片并打开正确项目', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    Map<String, dynamic>? openedAnime;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: continueStories,
+            onOpenAnime: (item) => openedAnime = item,
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    for (var index = 0; index < 5; index += 1) {
+      expect(
+        find.byKey(ValueKey('artwork-card-today-$index')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('artwork-card-action-today-$index')),
+        findsOneWidget,
+      );
+    }
+
+    final action = find.byKey(const ValueKey('artwork-card-action-today-3'));
+    await tester.ensureVisible(action);
+    await tester.pump();
+    await tester.tap(action);
+    expect(openedAnime, same(animeItems[3]));
+  });
+
+  testWidgets('今日放送窄屏横向列表沿用相同卡片编号', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(960, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: continueStories,
+            onOpenAnime: (_) {},
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('artwork-card-today-0')),
+      findsOneWidget,
+    );
+    final todayScrollable = find.descendant(
+      of: find.byKey(const ValueKey('home-today')),
+      matching: find.byType(Scrollable),
+    );
+    expect(todayScrollable, findsOneWidget);
+
+    tester.state<ScrollableState>(todayScrollable).position.jumpTo(
+          tester
+              .state<ScrollableState>(todayScrollable)
+              .position
+              .maxScrollExtent,
+        );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('artwork-card-today-4')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('artwork-card-action-today-4')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('今日放送卡片悬停时轻推封面并在离开后复位', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: continueStories,
+            onOpenAnime: (_) {},
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    const cardKey = ValueKey('artwork-card-today-0');
+    const coverKey = ValueKey('today-cover-scale-0');
+    await tester.ensureVisible(find.byKey(cardKey));
+    await tester.pump();
+    expect(tester.widget<AnimatedScale>(find.byKey(coverKey)).scale, 1);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byKey(cardKey)));
+    await tester.pump();
+
+    expect(tester.widget<AnimatedScale>(find.byKey(coverKey)).scale, 1.025);
+
+    await mouse.moveTo(const Offset(1400, 20));
+    await tester.pump();
+
+    expect(tester.widget<AnimatedScale>(find.byKey(coverKey)).scale, 1);
+  });
+
+  testWidgets('今日放送在减少动态效果时不缩放封面或抬升卡片', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            body: HomeEditorialView(
+              latestItems: animeItems,
+              seasonalItems: animeItems,
+              trendingItems: animeItems,
+              continueStories: continueStories,
+              onOpenAnime: (_) {},
+              onOpenContinue: (_) {},
+              onRetry: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    const cardKey = ValueKey('artwork-card-today-0');
+    const coverKey = ValueKey('today-cover-scale-0');
+    await tester.ensureVisible(find.byKey(cardKey));
+    await tester.pump();
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(find.byKey(cardKey)));
+    await tester.pump();
+
+    final card = tester.widget<AnimatedContainer>(find.byKey(cardKey));
+    expect(card.duration, Duration.zero);
+    expect(card.transform?.getTranslation().y, 0);
+    expect(tester.widget<AnimatedScale>(find.byKey(coverKey)).scale, 1);
   });
 
   testWidgets('本周主映点击数字后切换番剧并打开当前项目', (tester) async {

@@ -724,6 +724,8 @@ class _TodaySection extends StatelessWidget {
                         width: 286,
                         child: _AiringCard(
                           item: item,
+                          cardId: 'today-$index',
+                          cardIndex: index,
                           featured: index == 0,
                           onOpen: () => onOpen(item),
                         ),
@@ -741,6 +743,8 @@ class _TodaySection extends StatelessWidget {
                       flex: 7,
                       child: _AiringCard(
                         item: visible.first,
+                        cardId: 'today-0',
+                        cardIndex: 0,
                         featured: true,
                         onOpen: () => onOpen(visible.first),
                       ),
@@ -763,6 +767,8 @@ class _TodaySection extends StatelessWidget {
                           final item = visible[index + 1];
                           return _AiringCard(
                             item: item,
+                            cardId: 'today-${index + 1}',
+                            cardIndex: index + 1,
                             onOpen: () => onOpen(item),
                           );
                         },
@@ -780,11 +786,15 @@ class _TodaySection extends StatelessWidget {
 
 class _AiringCard extends StatelessWidget {
   final Map<String, dynamic> item;
+  final String cardId;
+  final int cardIndex;
   final bool featured;
   final VoidCallback onOpen;
 
   const _AiringCard({
     required this.item,
+    required this.cardId,
+    required this.cardIndex,
     required this.onOpen,
     this.featured = false,
   });
@@ -794,94 +804,109 @@ class _AiringCard extends StatelessWidget {
     final colors = context.colors;
     final score = _scoreOf(item);
 
-    return _HoverSurface(
-      onTap: onOpen,
-      child: featured
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                CoverImage(url: item['cover']?.toString(), fit: BoxFit.cover),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.76),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 20,
-                  right: 20,
-                  bottom: 18,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _statusOf(item),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: colors.skyLight,
-                            ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        _nameOf(item),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                            ),
-                      ),
+    return ArtworkCardSurface(
+      id: cardId,
+      semanticLabel: '今日放送第${cardIndex + 1}项：${_nameOf(item)}',
+      onOpen: onOpen,
+      contentBuilder: (context, interaction) {
+        final cover = AnimatedScale(
+          key: ValueKey('today-cover-scale-$cardIndex'),
+          duration: interaction.duration,
+          curve: Curves.easeOutCubic,
+          scale: interaction.coverScale,
+          child: CoverImage(
+            url: item['cover']?.toString(),
+            fit: BoxFit.cover,
+          ),
+        );
+
+        if (featured) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              cover,
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.76),
                     ],
                   ),
                 ),
-              ],
-            )
-          : Row(
-              children: [
-                SizedBox(
-                  width: 104,
-                  height: double.infinity,
-                  child: CoverImage(
-                      url: item['cover']?.toString(), fit: BoxFit.cover),
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(13),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _statusOf(item),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: colors.sky,
-                                  ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          _nameOf(item),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        const Spacer(),
-                        if (score != null)
-                          Text(
-                            '评分 ${score.toStringAsFixed(1)}',
-                            style: Theme.of(context).textTheme.labelSmall,
+              ),
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 18,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _statusOf(item),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.skyLight,
                           ),
-                      ],
                     ),
-                  ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _nameOf(item),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                          ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          children: [
+            SizedBox(
+              width: 104,
+              height: double.infinity,
+              child: cover,
             ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(13),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _statusOf(item),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.sky,
+                          ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      _nameOf(item),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const Spacer(),
+                    if (score != null)
+                      Text(
+                        '评分 ${score.toStringAsFixed(1)}',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
