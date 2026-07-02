@@ -474,7 +474,7 @@ class _PosterArchiveCard extends StatelessWidget {
 
     return ArtworkCardSurface(
       id: 'archive-${entry.id}',
-      semanticLabel: '打开${entry.title}，收藏编号${entry.id}',
+      semanticLabel: '打开第${index + 1}项收藏，${entry.title}',
       onOpen: onOpen,
       foreground: Positioned(
         right: 7,

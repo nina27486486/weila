@@ -122,6 +122,40 @@ void main() {
     expect(opened, first);
   });
 
+  testWidgets('收藏卡语义使用可读序号和番名而不朗读内部地址', (tester) async {
+    final semantics = tester.ensureSemantics();
+    const animeUrl = 'https://anime.example/detail/season-1';
+    const title = '天空日记';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '我的资料库',
+            description: '保存值得重看的作品。',
+            mode: ArchiveDisplayMode.poster,
+            entries: const [
+              ArchiveEntry(
+                id: animeUrl,
+                title: title,
+                coverUrl: null,
+                subtitle: '第 1 集',
+                meta: '刚刚收藏',
+              ),
+            ],
+            onOpen: (_) {},
+            onRemove: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.bySemanticsLabel(RegExp('anime\\.example')), findsNothing);
+    expect(find.bySemanticsLabel('打开第1项收藏，$title'), findsOneWidget);
+    semantics.dispose();
+  });
+
   testWidgets('收藏卡悬停时轻推封面并在离开后复位', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
