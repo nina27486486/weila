@@ -238,7 +238,7 @@ class ArtworkCardBadge extends StatelessWidget {
             : colors.paper.withValues(alpha: 0.88),
         borderRadius: BorderRadius.circular(9),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.72),
+          color: Colors.white.withValues(alpha: dark ? 0.22 : 0.72),
         ),
         boxShadow: [
           BoxShadow(

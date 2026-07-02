@@ -228,11 +228,21 @@ void main() {
     final dark = badgeContainer('dark-badge');
     final lightDecoration = light.decoration! as BoxDecoration;
     final darkDecoration = dark.decoration! as BoxDecoration;
+    final lightBorder = lightDecoration.border! as Border;
+    final darkBorder = darkDecoration.border! as Border;
 
     expect(light.padding, const EdgeInsets.all(8));
     expect(lightDecoration.borderRadius, BorderRadius.circular(9));
     expect(lightDecoration.boxShadow?.single.blurRadius, 12);
+    expect(
+      lightBorder.top.color,
+      Colors.white.withValues(alpha: 0.72),
+    );
     expect(darkDecoration.color, Colors.black.withValues(alpha: 0.62));
+    expect(
+      darkBorder.top.color,
+      Colors.white.withValues(alpha: 0.22),
+    );
   });
 
   final items = List.generate(
