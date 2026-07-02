@@ -229,6 +229,36 @@ void main() {
     expect(tester.widget<AnimatedScale>(find.byKey(coverKey)).scale, 1);
   });
 
+  testWidgets('今日放送紧凑卡在封面槽内裁切悬停缩放', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: HomeEditorialView(
+            latestItems: animeItems,
+            seasonalItems: animeItems,
+            trendingItems: animeItems,
+            continueStories: continueStories,
+            onOpenAnime: (_) {},
+            onOpenContinue: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    final clip = find.byKey(const ValueKey('today-cover-clip-1'));
+    final cover = find.byKey(const ValueKey('today-cover-scale-1'));
+
+    expect(clip, findsOneWidget);
+    expect(tester.widget<ClipRect>(clip).clipBehavior, Clip.hardEdge);
+    expect(find.descendant(of: clip, matching: cover), findsOneWidget);
+    expect(tester.getSize(clip).width, 104);
+  });
+
   testWidgets('今日放送在减少动态效果时不缩放封面或抬升卡片', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));

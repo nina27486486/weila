@@ -871,7 +871,10 @@ class _AiringCard extends StatelessWidget {
             SizedBox(
               width: 104,
               height: double.infinity,
-              child: cover,
+              child: ClipRect(
+                key: ValueKey('today-cover-clip-$cardIndex'),
+                child: cover,
+              ),
             ),
             Expanded(
               child: Padding(
