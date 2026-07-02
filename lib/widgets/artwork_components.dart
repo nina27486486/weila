@@ -42,6 +42,218 @@ class PosterRailItem {
 }
 
 @immutable
+class ArtworkCardInteraction {
+  final bool active;
+  final bool motionEnabled;
+  final Duration duration;
+
+  const ArtworkCardInteraction({
+    required this.active,
+    required this.motionEnabled,
+    required this.duration,
+  });
+
+  double get coverScale => motionEnabled && active ? 1.025 : 1;
+}
+
+typedef ArtworkCardContentBuilder = Widget Function(
+  BuildContext context,
+  ArtworkCardInteraction interaction,
+);
+
+class ArtworkCardSurface extends StatefulWidget {
+  final String id;
+  final String semanticLabel;
+  final VoidCallback onOpen;
+  final ArtworkCardContentBuilder contentBuilder;
+  final Widget? foreground;
+  final double lift;
+  final double borderRadius;
+
+  const ArtworkCardSurface({
+    super.key,
+    required this.id,
+    required this.semanticLabel,
+    required this.onOpen,
+    required this.contentBuilder,
+    this.foreground,
+    this.lift = 6,
+    this.borderRadius = 16,
+  });
+
+  @override
+  State<ArtworkCardSurface> createState() => _ArtworkCardSurfaceState();
+}
+
+class _ArtworkCardSurfaceState extends State<ArtworkCardSurface> {
+  var _hovered = false;
+  var _focused = false;
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() => _hovered = hovered);
+  }
+
+  void _setFocused(bool focused) {
+    if (_focused == focused) return;
+    setState(() => _focused = focused);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final motionEnabled =
+        !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+    final active = _hovered || _focused;
+    final duration = motionEnabled ? AppAnimations.fast : Duration.zero;
+    final interaction = ArtworkCardInteraction(
+      active: active,
+      motionEnabled: motionEnabled,
+      duration: duration,
+    );
+    final radius = BorderRadius.circular(widget.borderRadius);
+
+    return MouseRegion(
+      onEnter: (_) => _setHovered(true),
+      onExit: (_) => _setHovered(false),
+      child: Padding(
+        padding: EdgeInsets.only(top: widget.lift),
+        child: AnimatedContainer(
+          key: ValueKey('artwork-card-${widget.id}'),
+          duration: duration,
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.translationValues(
+            0,
+            motionEnabled && active ? -widget.lift : 0,
+            0,
+          ),
+          transformAlignment: Alignment.center,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: dark
+                  ? [
+                      colors.paper.withValues(alpha: 0.96),
+                      colors.bgCard.withValues(alpha: 0.90),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.96),
+                      colors.paper.withValues(alpha: 0.90),
+                    ],
+            ),
+            border: Border.all(
+              color: active
+                  ? colors.sky.withValues(alpha: 0.82)
+                  : Colors.white.withValues(alpha: dark ? 0.20 : 0.82),
+              width: active ? 1.4 : 1,
+              strokeAlign: BorderSide.strokeAlignOutside,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: colors.textPrimary.withValues(
+                  alpha: active ? 0.16 : 0.08,
+                ),
+                blurRadius: active ? 28 : 18,
+                offset: Offset(0, active ? 13 : 8),
+              ),
+              BoxShadow(
+                color: colors.sky.withValues(
+                  alpha: active ? 0.14 : 0.06,
+                ),
+                blurRadius: active ? 20 : 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ExcludeSemantics(
+                child: widget.contentBuilder(context, interaction),
+              ),
+              Positioned.fill(
+                child: Semantics(
+                  button: true,
+                  label: widget.semanticLabel,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      key: ValueKey('artwork-card-action-${widget.id}'),
+                      onTap: widget.onOpen,
+                      mouseCursor: SystemMouseCursors.click,
+                      onFocusChange: _setFocused,
+                      borderRadius: radius,
+                      hoverColor: Colors.transparent,
+                      focusColor: Colors.transparent,
+                      splashColor: colors.sky.withValues(alpha: 0.12),
+                      highlightColor: colors.sky.withValues(alpha: 0.08),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
+              ),
+              if (_focused)
+                IgnorePointer(
+                  key: ValueKey('artwork-card-focus-${widget.id}'),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      border: Border.all(color: colors.sky, width: 2),
+                    ),
+                  ),
+                ),
+              if (widget.foreground case final foreground?) foreground,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ArtworkCardBadge extends StatelessWidget {
+  final Widget child;
+  final bool dark;
+  final EdgeInsetsGeometry padding;
+
+  const ArtworkCardBadge({
+    super.key,
+    required this.child,
+    this.dark = false,
+    this.padding = const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: dark
+            ? Colors.black.withValues(alpha: 0.62)
+            : colors.paper.withValues(alpha: 0.88),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.72),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colors.textPrimary.withValues(alpha: 0.10),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+@immutable
 class ExpandableToolTab {
   final String id;
   final IconData icon;
@@ -692,7 +904,7 @@ class _PosterRailState extends State<PosterRail> {
   }
 }
 
-class _PosterRailCard extends StatefulWidget {
+class _PosterRailCard extends StatelessWidget {
   final PosterRailItem item;
   final int index;
   final VoidCallback onOpen;
@@ -704,244 +916,87 @@ class _PosterRailCard extends StatefulWidget {
   });
 
   @override
-  State<_PosterRailCard> createState() => _PosterRailCardState();
-}
-
-class _PosterRailCardState extends State<_PosterRailCard> {
-  var _hovered = false;
-  var _focused = false;
-
-  void _setHovered(bool hovered) {
-    if (_hovered == hovered) return;
-    setState(() => _hovered = hovered);
-  }
-
-  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final disableAnimations =
-        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    final visuallyActive = _hovered || _focused;
-    final animate = !disableAnimations;
-    final semanticLabel = widget.item.meta.isEmpty
-        ? widget.item.title
-        : '${widget.item.title}，${widget.item.meta}';
+    final semanticLabel =
+        item.meta.isEmpty ? item.title : '${item.title}，${item.meta}';
     return SizedBox(
       width: 188,
-      child: _PosterHoverEnvelope(
-        onHoverChanged: _setHovered,
-        child: AnimatedContainer(
-          key: ValueKey('poster-card-${widget.index}'),
-          duration: animate ? AppAnimations.fast : Duration.zero,
-          curve: Curves.easeOutCubic,
-          transform: Matrix4.translationValues(
-            0,
-            animate && visuallyActive ? -6 : 0,
-            0,
-          ),
-          transformAlignment: Alignment.center,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: dark
-                  ? [
-                      colors.paper.withValues(alpha: 0.96),
-                      colors.bgCard.withValues(alpha: 0.90),
-                    ]
-                  : [
-                      Colors.white.withValues(alpha: 0.96),
-                      colors.paper.withValues(alpha: 0.90),
-                    ],
-            ),
-            border: Border.all(
-              color: visuallyActive
-                  ? colors.sky.withValues(alpha: 0.82)
-                  : Colors.white.withValues(alpha: dark ? 0.20 : 0.82),
-              width: visuallyActive ? 1.4 : 1,
-              strokeAlign: BorderSide.strokeAlignOutside,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: colors.textPrimary.withValues(
-                  alpha: visuallyActive ? 0.16 : 0.08,
+      child: ArtworkCardSurface(
+        id: 'poster-$index',
+        semanticLabel: semanticLabel,
+        onOpen: onOpen,
+        contentBuilder: (context, interaction) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                key: ValueKey('poster-cover-$index'),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(15),
+                  bottom: Radius.circular(8),
                 ),
-                blurRadius: visuallyActive ? 28 : 18,
-                offset: Offset(0, visuallyActive ? 13 : 8),
-              ),
-              BoxShadow(
-                color: colors.sky.withValues(
-                  alpha: visuallyActive ? 0.14 : 0.06,
-                ),
-                blurRadius: visuallyActive ? 20 : 12,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              ExcludeSemantics(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Expanded(
-                      child: ClipRRect(
-                        key: ValueKey('poster-cover-${widget.index}'),
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(15),
-                          bottom: Radius.circular(8),
-                        ),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            AnimatedScale(
-                              key: ValueKey(
-                                'poster-cover-scale-${widget.index}',
-                              ),
-                              duration:
-                                  animate ? AppAnimations.fast : Duration.zero,
-                              curve: Curves.easeOutCubic,
-                              scale: animate && visuallyActive ? 1.025 : 1,
-                              child: CoverImage(url: widget.item.imageUrl),
-                            ),
-                            Positioned(
-                              left: 10,
-                              top: 10,
-                              child: Container(
-                                key: ValueKey(
-                                  'poster-rank-pill-${widget.index}',
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: colors.paper.withValues(alpha: 0.88),
-                                  borderRadius: BorderRadius.circular(9),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.72),
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: colors.textPrimary.withValues(
-                                        alpha: 0.10,
-                                      ),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: Text(
-                                  '${widget.index + 1}'.padLeft(2, '0'),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelSmall
-                                      ?.copyWith(
-                                        color: colors.sky,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.4,
-                                      ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    AnimatedScale(
+                      key: ValueKey('poster-cover-scale-$index'),
+                      duration: interaction.duration,
+                      curve: Curves.easeOutCubic,
+                      scale: interaction.coverScale,
+                      child: CoverImage(url: item.imageUrl),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.item.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleSmall
-                                ?.copyWith(color: colors.textPrimary),
-                          ),
-                          if (widget.item.meta.isNotEmpty) ...[
-                            const SizedBox(height: 5),
-                            Text(
-                              widget.item.meta,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(color: colors.textSecondary),
-                            ),
-                          ],
-                        ],
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: ArtworkCardBadge(
+                        key: ValueKey('poster-rank-pill-$index'),
+                        child: Text(
+                          '${index + 1}'.padLeft(2, '0'),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: colors.sky,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.4,
+                                  ),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              Positioned.fill(
-                child: Semantics(
-                  button: true,
-                  label: semanticLabel,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      key: ValueKey('poster-card-action-${widget.index}'),
-                      onTap: widget.onOpen,
-                      mouseCursor: SystemMouseCursors.click,
-                      onFocusChange: (focused) {
-                        setState(() => _focused = focused);
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      hoverColor: Colors.transparent,
-                      focusColor: Colors.transparent,
-                      splashColor: colors.sky.withValues(alpha: 0.12),
-                      highlightColor: colors.sky.withValues(alpha: 0.08),
-                      child: const SizedBox.expand(),
-                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(color: colors.textPrimary),
                   ),
-                ),
+                  if (item.meta.isNotEmpty) ...[
+                    const SizedBox(height: 5),
+                    Text(
+                      item.meta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: colors.textSecondary),
+                    ),
+                  ],
+                ],
               ),
-              if (_focused)
-                IgnorePointer(
-                  key: ValueKey('poster-focus-ring-${widget.index}'),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: colors.sky, width: 2),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
-}
-
-class _PosterHoverEnvelope extends StatelessWidget {
-  final ValueChanged<bool> onHoverChanged;
-  final Widget child;
-
-  const _PosterHoverEnvelope({
-    required this.onHoverChanged,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => onHoverChanged(true),
-      onExit: (_) => onHoverChanged(false),
-      child: Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: child,
       ),
     );
   }

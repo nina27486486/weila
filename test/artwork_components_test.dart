@@ -23,7 +23,218 @@ Widget _app(
   );
 }
 
+Widget _sharedSurface({
+  required VoidCallback onOpen,
+  Widget? foreground,
+  ValueChanged<ArtworkCardInteraction>? onInteraction,
+}) {
+  return SizedBox(
+    width: 188,
+    height: 280,
+    child: ArtworkCardSurface(
+      id: 'shared',
+      semanticLabel: 'Shared artwork',
+      onOpen: onOpen,
+      foreground: foreground,
+      contentBuilder: (context, interaction) {
+        onInteraction?.call(interaction);
+        return AnimatedScale(
+          key: const ValueKey('shared-cover-scale'),
+          duration: interaction.duration,
+          scale: interaction.coverScale,
+          child: const ColoredBox(color: Colors.blue),
+        );
+      },
+    ),
+  );
+}
+
 void main() {
+  testWidgets('shared artwork surface activates on hover and focus',
+      (tester) async {
+    ArtworkCardInteraction? interaction;
+    await tester.pumpWidget(
+      _app(
+        _sharedSurface(
+          onOpen: () {},
+          onInteraction: (value) => interaction = value,
+        ),
+      ),
+    );
+
+    expect(interaction?.active, isFalse);
+    expect(interaction?.motionEnabled, isTrue);
+    expect(interaction?.coverScale, 1);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(
+      tester.getCenter(
+        find.byKey(const ValueKey('artwork-card-shared')),
+      ),
+    );
+    await tester.pump();
+
+    expect(interaction?.active, isTrue);
+    expect(interaction?.coverScale, 1.025);
+
+    await mouse.moveTo(Offset.zero);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+
+    expect(interaction?.active, isTrue);
+    expect(
+      find.byKey(const ValueKey('artwork-card-focus-shared')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shared artwork surface opens by click enter and space',
+      (tester) async {
+    var openCount = 0;
+    await tester.pumpWidget(
+      _app(_sharedSurface(onOpen: () => openCount += 1)),
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('artwork-card-action-shared')),
+    );
+    expect(openCount, 1);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(openCount, 3);
+  });
+
+  testWidgets('shared artwork surface disables motion with reduced motion',
+      (tester) async {
+    ArtworkCardInteraction? interaction;
+    await tester.pumpWidget(
+      _app(
+        _sharedSurface(
+          onOpen: () {},
+          onInteraction: (value) => interaction = value,
+        ),
+        disableAnimations: true,
+      ),
+    );
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(
+      tester.getCenter(
+        find.byKey(const ValueKey('artwork-card-shared')),
+      ),
+    );
+    await tester.pump();
+
+    final card = tester.widget<AnimatedContainer>(
+      find.byKey(const ValueKey('artwork-card-shared')),
+    );
+    expect(card.duration, Duration.zero);
+    expect(card.transform?.getTranslation().y, 0);
+    expect(interaction?.active, isTrue);
+    expect(interaction?.motionEnabled, isFalse);
+    expect(interaction?.duration, Duration.zero);
+    expect(interaction?.coverScale, 1);
+  });
+
+  testWidgets('shared artwork surface exposes one complete button semantic',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _app(_sharedSurface(onOpen: () {})),
+    );
+
+    final button = find.bySemanticsLabel('Shared artwork');
+    expect(button, findsOneWidget);
+    expect(
+      tester.getSemantics(button),
+      matchesSemantics(
+        label: 'Shared artwork',
+        isButton: true,
+        isFocusable: true,
+        hasTapAction: true,
+        hasFocusAction: true,
+      ),
+    );
+    semantics.dispose();
+  });
+
+  testWidgets('shared artwork foreground handles input above the open layer',
+      (tester) async {
+    var openCount = 0;
+    var foregroundCount = 0;
+    await tester.pumpWidget(
+      _app(
+        _sharedSurface(
+          onOpen: () => openCount += 1,
+          foreground: Align(
+            alignment: Alignment.topRight,
+            child: GestureDetector(
+              key: const ValueKey('shared-foreground-action'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => foregroundCount += 1,
+              child: const SizedBox(width: 48, height: 48),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('shared-foreground-action')));
+
+    expect(foregroundCount, 1);
+    expect(openCount, 0);
+  });
+
+  testWidgets('artwork card badge applies light and dark glass treatments',
+      (tester) async {
+    await tester.pumpWidget(
+      _app(
+        const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ArtworkCardBadge(
+              key: ValueKey('light-badge'),
+              padding: EdgeInsets.all(8),
+              child: Text('01'),
+            ),
+            ArtworkCardBadge(
+              key: ValueKey('dark-badge'),
+              dark: true,
+              child: Text('9.0'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    Container badgeContainer(String key) => tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(ValueKey(key)),
+            matching: find.byType(Container),
+          ),
+        );
+
+    final light = badgeContainer('light-badge');
+    final dark = badgeContainer('dark-badge');
+    final lightDecoration = light.decoration! as BoxDecoration;
+    final darkDecoration = dark.decoration! as BoxDecoration;
+
+    expect(light.padding, const EdgeInsets.all(8));
+    expect(lightDecoration.borderRadius, BorderRadius.circular(9));
+    expect(lightDecoration.boxShadow?.single.blurRadius, 12);
+    expect(darkDecoration.color, Colors.black.withValues(alpha: 0.62));
+  });
+
   final items = List.generate(
     5,
     (index) => ArtworkStackItem(
@@ -147,13 +358,19 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('poster-card-0')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('artwork-card-poster-0')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('poster-cover-0')), findsOneWidget);
     expect(find.byKey(const ValueKey('poster-rank-pill-0')), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.tab);
     await tester.pump();
-    expect(find.byKey(const ValueKey('poster-focus-ring-0')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('artwork-card-focus-poster-0')),
+      findsOneWidget,
+    );
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
@@ -186,8 +403,10 @@ void main() {
       ),
     );
 
-    final card = find.byKey(const ValueKey('poster-card-0'));
-    final action = find.byKey(const ValueKey('poster-card-action-0'));
+    final card = find.byKey(const ValueKey('artwork-card-poster-0'));
+    final action = find.byKey(
+      const ValueKey('artwork-card-action-poster-0'),
+    );
     final hoverRegion = find.ancestor(
       of: card,
       matching: find.byType(MouseRegion),
@@ -244,7 +463,7 @@ void main() {
     );
     final list = tester.widget<ListView>(listFinder);
     final padding = list.padding! as EdgeInsets;
-    final card = find.byKey(const ValueKey('poster-card-0'));
+    final card = find.byKey(const ValueKey('artwork-card-poster-0'));
 
     expect(list.clipBehavior, Clip.none);
     expect(padding.horizontal, greaterThan(0));
@@ -273,8 +492,10 @@ void main() {
       ),
     );
 
-    final card = find.byKey(const ValueKey('poster-card-0'));
-    final action = find.byKey(const ValueKey('poster-card-action-0'));
+    final card = find.byKey(const ValueKey('artwork-card-poster-0'));
+    final action = find.byKey(
+      const ValueKey('artwork-card-action-poster-0'),
+    );
     expect(action, findsOneWidget);
     expect(tester.getSize(action), tester.getSize(card));
     expect(
@@ -360,13 +581,15 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(
-      tester.getCenter(find.byKey(const ValueKey('poster-card-0'))),
+      tester.getCenter(
+        find.byKey(const ValueKey('artwork-card-poster-0')),
+      ),
     );
     await tester.pump();
     await tester.pump(AppAnimations.fast);
 
     final card = tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('poster-card-0')),
+      find.byKey(const ValueKey('artwork-card-poster-0')),
     );
     final cover = tester.widget<AnimatedScale>(
       find.byKey(const ValueKey('poster-cover-scale-0')),
@@ -399,13 +622,15 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(
-      tester.getCenter(find.byKey(const ValueKey('poster-card-0'))),
+      tester.getCenter(
+        find.byKey(const ValueKey('artwork-card-poster-0')),
+      ),
     );
     await tester.pump();
     await tester.pump(AppAnimations.fast);
 
     final card = tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('poster-card-0')),
+      find.byKey(const ValueKey('artwork-card-poster-0')),
     );
     final cover = tester.widget<AnimatedScale>(
       find.byKey(const ValueKey('poster-cover-scale-0')),
@@ -438,12 +663,17 @@ void main() {
     addTearDown(mouse.removePointer);
     await mouse.addPointer(location: Offset.zero);
     await mouse.moveTo(
-      tester.getCenter(find.byKey(const ValueKey('poster-card-0'))),
+      tester.getCenter(
+        find.byKey(const ValueKey('artwork-card-poster-0')),
+      ),
     );
     await tester.pump();
     await tester.pump(AppAnimations.fast);
 
-    expect(find.byKey(const ValueKey('poster-card-action-0')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('artwork-card-action-poster-0')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
