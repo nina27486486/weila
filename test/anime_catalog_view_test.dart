@@ -125,6 +125,44 @@ void main() {
     semantics.dispose();
   });
 
+  testWidgets('目录网格为抬升预留空间并保持原卡体高度与可见行距', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: AnimeCatalogView(
+            title: '分类浏览',
+            description: '从片库寻找下一段故事。',
+            items: items,
+            onOpenAnime: (_) {},
+            onRetry: () {},
+          ),
+        ),
+      ),
+    );
+
+    final grid = tester.widget<SliverGrid>(find.byType(SliverGrid));
+    final delegate =
+        grid.gridDelegate as SliverGridDelegateWithMaxCrossAxisExtent;
+    expect(delegate.maxCrossAxisExtent, 218);
+    expect(delegate.crossAxisSpacing, 16);
+    expect(delegate.mainAxisExtent, 332);
+    expect(delegate.mainAxisSpacing, 16);
+
+    final firstRowCard = tester.getRect(
+      find.byKey(const ValueKey('artwork-card-catalog-0')),
+    );
+    final secondRowCard = tester.getRect(
+      find.byKey(const ValueKey('artwork-card-catalog-6')),
+    );
+    expect(firstRowCard.height, 326);
+    expect(secondRowCard.height, 326);
+    expect(secondRowCard.top - firstRowCard.bottom, 22);
+  });
+
   testWidgets('目录卡悬停时只在封面槽内缩放并在离开后复位', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1280, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));

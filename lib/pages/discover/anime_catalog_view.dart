@@ -5,6 +5,10 @@ import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/vira_state_view.dart';
 
+const _catalogCardBodyHeight = 326.0;
+const _catalogCardLift = 6.0;
+const _catalogVisibleRowSpacing = 22.0;
+
 @immutable
 class CatalogFilterOption {
   final String id;
@@ -127,9 +131,9 @@ class AnimeCatalogView extends StatelessWidget {
             sliver: SliverGrid.builder(
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 218,
-                mainAxisExtent: 326,
+                mainAxisExtent: _catalogCardBodyHeight + _catalogCardLift,
                 crossAxisSpacing: 16,
-                mainAxisSpacing: 22,
+                mainAxisSpacing: _catalogVisibleRowSpacing - _catalogCardLift,
               ),
               itemCount: items.length,
               itemBuilder: (context, index) {
@@ -480,6 +484,7 @@ class _CatalogAnimeCard extends StatelessWidget {
       id: 'catalog-$index',
       semanticLabel: '打开第${index + 1}部作品，$name',
       onOpen: onTap,
+      lift: _catalogCardLift,
       contentBuilder: (context, interaction) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
