@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/vira_colors.dart';
+import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/vira_state_view.dart';
 
@@ -456,7 +457,7 @@ class _ResultHeading extends StatelessWidget {
   }
 }
 
-class _CatalogAnimeCard extends StatefulWidget {
+class _CatalogAnimeCard extends StatelessWidget {
   final int index;
   final Map<String, dynamic> item;
   final VoidCallback onTap;
@@ -468,142 +469,105 @@ class _CatalogAnimeCard extends StatefulWidget {
   });
 
   @override
-  State<_CatalogAnimeCard> createState() => _CatalogAnimeCardState();
-}
-
-class _CatalogAnimeCardState extends State<_CatalogAnimeCard> {
-  var _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final name = widget.item['name']?.toString() ?? '未命名作品';
-    final status = widget.item['status']?.toString() ?? '';
-    final genres = _genresOf(widget.item);
-    final score = _scoreOf(widget.item);
+    final name = item['name']?.toString() ?? '未命名作品';
+    final status = item['status']?.toString() ?? '';
+    final genres = _genresOf(item);
+    final score = _scoreOf(item);
 
-    return Semantics(
-      button: true,
-      label: '查看$name',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            transform: Matrix4.translationValues(0, _hovered ? -3 : 0, 0),
-            decoration: BoxDecoration(
-              color: colors.paper,
-              border: Border.all(
-                color: _hovered
-                    ? colors.sky.withValues(alpha: 0.58)
-                    : colors.divider,
-              ),
-              boxShadow: _hovered
-                  ? [
-                      BoxShadow(
-                        color: colors.textPrimary.withValues(alpha: 0.08),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
+    return ArtworkCardSurface(
+      id: 'catalog-$index',
+      semanticLabel: '打开第${index + 1}部作品，$name',
+      onOpen: onTap,
+      contentBuilder: (context, interaction) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRect(
+                  key: ValueKey('catalog-cover-clip-$index'),
+                  clipBehavior: Clip.hardEdge,
+                  child: AnimatedScale(
+                    key: ValueKey('catalog-cover-scale-$index'),
+                    duration: interaction.duration,
+                    curve: Curves.easeOutCubic,
+                    scale: interaction.coverScale,
+                    child: CoverImage(
+                      url: item['cover']?.toString(),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 9,
+                  top: 9,
+                  child: ArtworkCardBadge(
+                    key: ValueKey('catalog-rank-$index'),
+                    child: Text(
+                      '${index + 1}'.padLeft(2, '0'),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.sky,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                  ),
+                ),
+                if (score != null)
+                  Positioned(
+                    right: 9,
+                    top: 9,
+                    child: ArtworkCardBadge(
+                      key: ValueKey('catalog-score-$index'),
+                      dark: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.star_rounded,
+                            size: 12,
+                            color: colors.warning,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            score.toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                    ]
-                  : null,
+                    ),
+                  ),
+              ],
             ),
-            clipBehavior: Clip.antiAlias,
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CoverImage(
-                        url: widget.item['cover']?.toString(),
-                        fit: BoxFit.cover,
-                      ),
-                      Positioned(
-                        left: 9,
-                        top: 9,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 4,
-                          ),
-                          color: colors.paper.withValues(alpha: 0.92),
-                          child: Text(
-                            '${widget.index + 1}'.padLeft(2, '0'),
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(
-                                  color: colors.sky,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                        ),
-                      ),
-                      if (score != null)
-                        Positioned(
-                          right: 9,
-                          top: 9,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 4,
-                            ),
-                            color: Colors.black.withValues(alpha: 0.62),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.star_rounded,
-                                  size: 12,
-                                  color: colors.warning,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  score.toStringAsFixed(1),
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        genres.isEmpty ? status : genres.take(2).join(' · '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
+                const SizedBox(height: 5),
+                Text(
+                  genres.isEmpty ? status : genres.take(2).join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
