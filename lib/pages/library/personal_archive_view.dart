@@ -271,7 +271,7 @@ class _FeaturedArchiveStage extends StatelessWidget {
               for (var index = 0; index < count; index++)
                 Positioned(
                   width: cardWidth,
-                  height: 294,
+                  height: 300,
                   left: (constraints.maxWidth - cardWidth) / 2 +
                       (index - center) * spread,
                   top: index == center ? 4 : 14,
@@ -455,7 +455,7 @@ class _ArchiveHeading extends StatelessWidget {
   }
 }
 
-class _PosterArchiveCard extends StatefulWidget {
+class _PosterArchiveCard extends StatelessWidget {
   final ArchiveEntry entry;
   final int index;
   final VoidCallback onOpen;
@@ -469,112 +469,85 @@ class _PosterArchiveCard extends StatefulWidget {
   });
 
   @override
-  State<_PosterArchiveCard> createState() => _PosterArchiveCardState();
-}
-
-class _PosterArchiveCardState extends State<_PosterArchiveCard> {
-  var _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final colors = context.colors;
 
-    return Semantics(
-      button: true,
-      label: '打开${widget.entry.title}',
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onOpen,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            transform: Matrix4.translationValues(0, _hovered ? -3 : 0, 0),
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: colors.paper,
-              border: Border.all(
-                color: _hovered
-                    ? colors.sky.withValues(alpha: 0.56)
-                    : colors.divider,
-              ),
-              boxShadow: _hovered
-                  ? [
-                      BoxShadow(
-                        color: colors.textPrimary.withValues(alpha: 0.08),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CoverImage(url: widget.entry.coverUrl, fit: BoxFit.cover),
-                      Positioned(
-                        left: 9,
-                        top: 9,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 4,
-                          ),
-                          color: colors.paper.withValues(alpha: 0.92),
-                          child: Text(
-                            '${widget.index + 1}'.padLeft(2, '0'),
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
-                                ?.copyWith(color: colors.sky),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 7,
-                        top: 7,
-                        child: _RemoveButton(
-                          title: widget.entry.title,
-                          onRemove: widget.onRemove,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.entry.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        widget.entry.meta.isEmpty
-                            ? widget.entry.sourceLabel
-                            : widget.entry.meta,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+    return ArtworkCardSurface(
+      id: 'archive-${entry.id}',
+      semanticLabel: '打开${entry.title}，收藏编号${entry.id}',
+      onOpen: onOpen,
+      foreground: Positioned(
+        right: 7,
+        top: 7,
+        child: _RemoveButton(
+          title: entry.title,
+          onRemove: onRemove,
         ),
       ),
+      contentBuilder: (context, interaction) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned.fill(
+                    child: ClipRect(
+                      key: ValueKey('archive-cover-clip-${entry.id}'),
+                      child: AnimatedScale(
+                        key: ValueKey('archive-cover-scale-${entry.id}'),
+                        duration: interaction.duration,
+                        curve: Curves.easeOutCubic,
+                        scale: interaction.coverScale,
+                        child: CoverImage(
+                          url: entry.coverUrl,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 9,
+                    top: 9,
+                    child: ArtworkCardBadge(
+                      key: ValueKey('archive-rank-${entry.id}'),
+                      child: Text(
+                        '${index + 1}'.padLeft(2, '0'),
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelSmall
+                            ?.copyWith(color: colors.sky),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    entry.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    entry.meta.isEmpty ? entry.sourceLabel : entry.meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

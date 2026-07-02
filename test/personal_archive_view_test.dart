@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/pages/library/personal_archive_view.dart';
@@ -57,11 +58,218 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('收藏夹'), findsOneWidget);
+    for (final entry in entries) {
+      expect(
+        find.byKey(ValueKey('artwork-card-archive-${entry.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('artwork-card-action-archive-${entry.id}')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(ValueKey('archive-rank-${entry.id}')),
+        findsOneWidget,
+      );
+    }
 
     await tester.tap(find.text('观看足迹'));
-    await tester.tap(find.text('资料库作品 1'));
+    await tester.tap(
+      find.byKey(
+        ValueKey('artwork-card-action-archive-${entries.first.id}'),
+      ),
+    );
     expect(section, 'history');
     expect(opened, entries.first);
+  });
+
+  testWidgets('收藏卡封面局部裁切且删除操作不会打开作品', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    ArchiveEntry? opened;
+    ArchiveEntry? removed;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '我的资料库',
+            description: '保存值得重看的作品。',
+            mode: ArchiveDisplayMode.poster,
+            entries: entries,
+            onOpen: (entry) => opened = entry,
+            onRemove: (entry) => removed = entry,
+          ),
+        ),
+      ),
+    );
+
+    final first = entries.first;
+    final clip = find.byKey(ValueKey('archive-cover-clip-${first.id}'));
+    final cover = find.byKey(ValueKey('archive-cover-scale-${first.id}'));
+    expect(clip, findsOneWidget);
+    expect(tester.widget<ClipRect>(clip).clipBehavior, Clip.hardEdge);
+    expect(find.descendant(of: clip, matching: cover), findsOneWidget);
+
+    await tester.tap(find.byTooltip('移除${first.title}'));
+    expect(removed, first);
+    expect(opened, isNull);
+
+    await tester.tap(
+      find.byKey(ValueKey('artwork-card-action-archive-${first.id}')),
+    );
+    expect(opened, first);
+  });
+
+  testWidgets('收藏卡悬停时轻推封面并在离开后复位', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '我的资料库',
+            description: '保存值得重看的作品。',
+            mode: ArchiveDisplayMode.poster,
+            entries: entries,
+            onOpen: (_) {},
+            onRemove: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final first = entries.first;
+    final card = find.byKey(ValueKey('artwork-card-archive-${first.id}'));
+    final cover = find.byKey(ValueKey('archive-cover-scale-${first.id}'));
+    expect(tester.widget<AnimatedScale>(cover).scale, 1);
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(card));
+    await tester.pump();
+    expect(tester.widget<AnimatedScale>(cover).scale, 1.025);
+
+    await mouse.moveTo(const Offset(1200, 20));
+    await tester.pump();
+    expect(tester.widget<AnimatedScale>(cover).scale, 1);
+  });
+
+  testWidgets('收藏卡在减少动态效果时不缩放封面或抬升卡片', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Scaffold(
+            body: PersonalArchiveView(
+              title: '我的资料库',
+              description: '保存值得重看的作品。',
+              mode: ArchiveDisplayMode.poster,
+              entries: entries,
+              onOpen: (_) {},
+              onRemove: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final first = entries.first;
+    final card = find.byKey(ValueKey('artwork-card-archive-${first.id}'));
+    final cover = find.byKey(ValueKey('archive-cover-scale-${first.id}'));
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: Offset.zero);
+    await mouse.moveTo(tester.getCenter(card));
+    await tester.pump();
+
+    final surface = tester.widget<AnimatedContainer>(card);
+    expect(surface.duration, Duration.zero);
+    expect(surface.transform?.getTranslation().y, 0);
+    expect(tester.widget<AnimatedScale>(cover).scale, 1);
+  });
+
+  testWidgets('收藏卡保留超长标题的单行省略规则', (tester) async {
+    final longTitle = '这是一部标题特别特别长但仍然要维持卡片排版完整的动画作品';
+    final longEntry = ArchiveEntry(
+      id: 'long',
+      title: longTitle,
+      coverUrl: null,
+      subtitle: '第 1 集',
+      meta: '刚刚收藏',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '我的资料库',
+            description: '保存值得重看的作品。',
+            mode: ArchiveDisplayMode.poster,
+            entries: [longEntry],
+            onOpen: (_) {},
+            onRemove: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final title = tester.widget<Text>(find.text(longTitle));
+    expect(title.maxLines, 1);
+    expect(title.overflow, TextOverflow.ellipsis);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('收藏项目更新后按原有顺序补齐精选舞台', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1280, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    Widget buildArchive(List<ArchiveEntry> visibleEntries) {
+      return MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: PersonalArchiveView(
+            title: '我的资料库',
+            description: '保存值得重看的作品。',
+            mode: ArchiveDisplayMode.poster,
+            entries: visibleEntries,
+            onOpen: (_) {},
+            onRemove: (_) {},
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildArchive(entries));
+    expect(
+      find.byKey(ValueKey('artwork-card-archive-${entries[3].id}')),
+      findsOneWidget,
+    );
+
+    final afterRemoval = entries.skip(1).toList(growable: false);
+    await tester.pumpWidget(buildArchive(afterRemoval));
+    await tester.pump();
+
+    for (final entry in afterRemoval) {
+      expect(
+        find.byKey(ValueKey('artwork-card-archive-${entry.id}')),
+        findsOneWidget,
+      );
+    }
+    expect(
+      find.byKey(ValueKey('artwork-card-archive-${entries.first.id}')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('archive-poster-grid')), findsNothing);
   });
 
   testWidgets('追番页使用观看进度手账', (tester) async {
@@ -116,7 +324,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('archive-poster-grid')), findsNothing);
-    await tester.tap(find.text(entries.first.title));
+    await tester.tap(
+      find.byKey(
+        ValueKey('artwork-card-action-archive-${entries.first.id}'),
+      ),
+    );
     expect(opened, entries.first);
     expect(tester.takeException(), isNull);
   });
