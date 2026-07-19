@@ -1,0 +1,82 @@
+name: Bug 报告
+description: 报告可稳定复现的崩溃、播放、数据或界面问题
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请先搜索已有 Issue，并移除日志中的密钥、Cookie、私人源地址和个人路径。
+
+  - type: input
+    id: version
+    attributes:
+      label: 薇拉版本
+      description: 可在设置页或 pubspec.yaml 中查看
+      placeholder: 例如 0.4.0 或源码构建
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows 环境
+      placeholder: 例如 Windows 11 24H2，x64
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 问题模块
+      options:
+        - 播放器
+        - 搜索与数据源
+        - 首页与详情
+        - 下载与离线缓存
+        - 追番、历史与收藏
+        - 设置与插件
+        - 主题与界面
+        - 启动、构建或安装
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请从启动应用开始，写出最短、稳定的操作序列
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 等待……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期与实际结果
+      placeholder: 预期发生什么，实际发生了什么
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 日志、截图或视频
+      description: 可直接拖入附件；请先删除敏感信息
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交确认
+      options:
+        - label: 我已搜索现有 Issue，未发现相同问题
+          required: true
+        - label: 我未提交 API 密钥、Cookie、私人源地址或个人数据
+          required: true
+        - label: 我理解第三方数据源失效不一定是薇拉自身缺陷
+          required: true
