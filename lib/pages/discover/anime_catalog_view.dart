@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../models/catalog/catalog_enums.dart';
+import '../../models/catalog/catalog_values.dart';
 import '../../theme/vira_colors.dart';
 import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
@@ -11,32 +13,103 @@ const _catalogVisibleRowSpacing = 22.0;
 
 @immutable
 class CatalogFilterOption {
+  const CatalogFilterOption({required this.id, required this.label});
+
   final String id;
   final String label;
+}
 
-  const CatalogFilterOption({required this.id, required this.label});
+@immutable
+class CatalogFilterGroup {
+  const CatalogFilterGroup({
+    required this.id,
+    required this.label,
+    required this.options,
+    required this.selectedIds,
+    required this.onSelected,
+    this.multiSelect = false,
+  });
+
+  final String id;
+  final String label;
+  final List<CatalogFilterOption> options;
+  final Set<String> selectedIds;
+  final ValueChanged<String> onSelected;
+  final bool multiSelect;
+}
+
+@immutable
+class CatalogFilterSummary {
+  const CatalogFilterSummary({
+    required this.id,
+    required this.label,
+    required this.onRemove,
+  });
+
+  final String id;
+  final String label;
+  final VoidCallback onRemove;
+}
+
+@immutable
+class CatalogCardData {
+  const CatalogCardData({
+    required this.contentId,
+    required this.name,
+    this.coverUrl,
+    this.score,
+    this.statusLabel = '',
+    this.genres = const [],
+    this.legacyUrl,
+    this.sourcePlugin,
+  });
+
+  final String contentId;
+  final String name;
+  final String? coverUrl;
+  final double? score;
+  final String statusLabel;
+  final List<String> genres;
+  final String? legacyUrl;
+  final String? sourcePlugin;
+
+  factory CatalogCardData.fromContent(CatalogContent content) {
+    final playable = content.playableRefs.firstOrNull;
+    return CatalogCardData(
+      contentId: content.contentId,
+      name: content.titles.chinese ?? content.titles.primary,
+      coverUrl: content.coverUrl,
+      score: _bestScore(content),
+      statusLabel: _statusLabel(content.status),
+      genres: content.genres.map(_genreLabel).toList(growable: false),
+      legacyUrl: playable == null
+          ? null
+          : '${playable.providerId}:${playable.sourceItemId}',
+      sourcePlugin: playable?.providerId,
+    );
+  }
+
+  factory CatalogCardData.fromLegacyMap(Map<String, dynamic> item) {
+    final rawGenres = item['genres'];
+    return CatalogCardData(
+      contentId: item['contentId']?.toString() ??
+          item['url']?.toString() ??
+          item['id']?.toString() ??
+          '',
+      name: item['name']?.toString() ?? '未命名作品',
+      coverUrl: item['cover']?.toString(),
+      score: _scoreOf(item['score']),
+      statusLabel: item['status']?.toString() ?? '',
+      genres: rawGenres is List
+          ? rawGenres.map((entry) => entry.toString()).toList(growable: false)
+          : const [],
+      legacyUrl: item['url']?.toString(),
+      sourcePlugin: item['sourcePlugin']?.toString(),
+    );
+  }
 }
 
 class AnimeCatalogView extends StatelessWidget {
-  final String title;
-  final String description;
-  final List<CatalogFilterOption> sourceOptions;
-  final String? selectedSourceId;
-  final ValueChanged<String>? onSourceSelected;
-  final List<CatalogFilterOption> categoryOptions;
-  final String? selectedCategoryId;
-  final ValueChanged<String>? onCategorySelected;
-  final List<CatalogFilterOption> genreOptions;
-  final String? selectedGenreId;
-  final ValueChanged<String>? onGenreSelected;
-  final List<Map<String, dynamic>> items;
-  final bool isLoading;
-  final bool isLoadingMore;
-  final String? errorMessage;
-  final ValueChanged<Map<String, dynamic>> onOpenAnime;
-  final VoidCallback onRetry;
-  final ScrollController? scrollController;
-
   const AnimeCatalogView({
     super.key,
     required this.title,
@@ -44,20 +117,35 @@ class AnimeCatalogView extends StatelessWidget {
     required this.items,
     required this.onOpenAnime,
     required this.onRetry,
-    this.sourceOptions = const [],
-    this.selectedSourceId,
-    this.onSourceSelected,
-    this.categoryOptions = const [],
-    this.selectedCategoryId,
-    this.onCategorySelected,
-    this.genreOptions = const [],
-    this.selectedGenreId,
-    this.onGenreSelected,
+    this.filterGroups = const [],
+    this.activeFilters = const [],
+    this.onClearFilters,
+    this.toolbar,
+    this.progressLabel,
+    this.warningMessage,
     this.isLoading = false,
     this.isLoadingMore = false,
+    this.isRefreshing = false,
     this.errorMessage,
     this.scrollController,
   });
+
+  final String title;
+  final String description;
+  final List<CatalogFilterGroup> filterGroups;
+  final List<CatalogFilterSummary> activeFilters;
+  final VoidCallback? onClearFilters;
+  final Widget? toolbar;
+  final String? progressLabel;
+  final String? warningMessage;
+  final List<CatalogCardData> items;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool isRefreshing;
+  final String? errorMessage;
+  final ValueChanged<CatalogCardData> onOpenAnime;
+  final VoidCallback onRetry;
+  final ScrollController? scrollController;
 
   @override
   Widget build(BuildContext context) {
@@ -71,31 +159,45 @@ class AnimeCatalogView extends StatelessWidget {
               title: title,
               description: description,
               itemCount: items.length,
+              progressLabel: progressLabel,
+              isRefreshing: isRefreshing,
             ),
           ),
         ),
-        if (sourceOptions.isNotEmpty ||
-            categoryOptions.isNotEmpty ||
-            genreOptions.isNotEmpty)
+        if (toolbar != null)
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(top: 26),
-              child: _CatalogFilters(
-                sourceOptions: sourceOptions,
-                selectedSourceId: selectedSourceId,
-                onSourceSelected: onSourceSelected,
-                categoryOptions: categoryOptions,
-                selectedCategoryId: selectedCategoryId,
-                onCategorySelected: onCategorySelected,
-                genreOptions: genreOptions,
-                selectedGenreId: selectedGenreId,
-                onGenreSelected: onGenreSelected,
+              padding: const EdgeInsets.only(top: 22),
+              child: toolbar,
+            ),
+          ),
+        if (filterGroups.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: _CatalogFilters(groups: filterGroups),
+            ),
+          ),
+        if (activeFilters.isNotEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: _CatalogFilterSummaries(
+                summaries: activeFilters,
+                onClear: onClearFilters,
               ),
+            ),
+          ),
+        if (warningMessage != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 14),
+              child: _CatalogWarning(message: warningMessage!),
             ),
           ),
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.only(top: 34, bottom: 16),
+            padding: const EdgeInsets.only(top: 30, bottom: 16),
             child: _ResultHeading(itemCount: items.length),
           ),
         ),
@@ -104,7 +206,7 @@ class AnimeCatalogView extends StatelessWidget {
             hasScrollBody: false,
             child: ViraStateView.loading(
               title: '正在翻阅片库',
-              message: '片源与作品信息正在汇合。',
+              message: '元数据、索引与播放能力正在汇合。',
             ),
           )
         else if (errorMessage != null && items.isEmpty)
@@ -121,7 +223,7 @@ class AnimeCatalogView extends StatelessWidget {
             hasScrollBody: false,
             child: ViraStateView.empty(
               title: '这一格还是空白',
-              message: '换一个片源或筛选条件再看看。',
+              message: '换一个标签或筛选条件再看看。',
             ),
           )
         else
@@ -168,20 +270,23 @@ class AnimeCatalogView extends StatelessWidget {
 }
 
 class _CatalogIntroduction extends StatelessWidget {
-  final String title;
-  final String description;
-  final int itemCount;
-
   const _CatalogIntroduction({
     required this.title,
     required this.description,
     required this.itemCount,
+    required this.progressLabel,
+    required this.isRefreshing,
   });
+
+  final String title;
+  final String description;
+  final int itemCount;
+  final String? progressLabel;
+  final bool isRefreshing;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-
     return Container(
       padding: const EdgeInsets.only(bottom: 28),
       decoration: BoxDecoration(
@@ -216,15 +321,13 @@ class _CatalogIntroduction extends StatelessWidget {
                       ),
                 ),
                 const SizedBox(height: 9),
-                Text(
-                  description,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+                Text(description,
+                    style: Theme.of(context).textTheme.bodyMedium),
               ],
             ),
           ),
           Container(
-            width: 118,
+            width: 150,
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             decoration: BoxDecoration(
               color: colors.paper,
@@ -233,15 +336,33 @@ class _CatalogIntroduction extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  itemCount.toString().padLeft(2, '0'),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: colors.sky,
+                Row(
+                  children: [
+                    Text(
+                      itemCount.toString().padLeft(2, '0'),
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                color: colors.sky,
+                              ),
+                    ),
+                    if (isRefreshing) ...[
+                      const Spacer(),
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: colors.sky,
+                        ),
                       ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '当前结果',
+                  progressLabel ?? '当前结果',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelSmall,
                 ),
               ],
@@ -254,32 +375,14 @@ class _CatalogIntroduction extends StatelessWidget {
 }
 
 class _CatalogFilters extends StatelessWidget {
-  final List<CatalogFilterOption> sourceOptions;
-  final String? selectedSourceId;
-  final ValueChanged<String>? onSourceSelected;
-  final List<CatalogFilterOption> categoryOptions;
-  final String? selectedCategoryId;
-  final ValueChanged<String>? onCategorySelected;
-  final List<CatalogFilterOption> genreOptions;
-  final String? selectedGenreId;
-  final ValueChanged<String>? onGenreSelected;
+  const _CatalogFilters({required this.groups});
 
-  const _CatalogFilters({
-    required this.sourceOptions,
-    required this.selectedSourceId,
-    required this.onSourceSelected,
-    required this.categoryOptions,
-    required this.selectedCategoryId,
-    required this.onCategorySelected,
-    required this.genreOptions,
-    required this.selectedGenreId,
-    required this.onGenreSelected,
-  });
+  final List<CatalogFilterGroup> groups;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
         color: context.colors.paper,
         border: Border(
@@ -289,32 +392,10 @@ class _CatalogFilters extends StatelessWidget {
       ),
       child: Column(
         children: [
-          if (sourceOptions.isNotEmpty)
-            _FilterLine(
-              label: '片源',
-              options: sourceOptions,
-              selectedId: selectedSourceId,
-              onSelected: onSourceSelected,
-            ),
-          if (sourceOptions.isNotEmpty && categoryOptions.isNotEmpty)
-            Divider(height: 1, color: context.colors.divider),
-          if (categoryOptions.isNotEmpty)
-            _FilterLine(
-              label: '栏目',
-              options: categoryOptions,
-              selectedId: selectedCategoryId,
-              onSelected: onCategorySelected,
-            ),
-          if ((sourceOptions.isNotEmpty || categoryOptions.isNotEmpty) &&
-              genreOptions.isNotEmpty)
-            Divider(height: 1, color: context.colors.divider),
-          if (genreOptions.isNotEmpty)
-            _FilterLine(
-              label: '类型',
-              options: genreOptions,
-              selectedId: selectedGenreId,
-              onSelected: onGenreSelected,
-            ),
+          for (var index = 0; index < groups.length; index++) ...[
+            if (index > 0) Divider(height: 1, color: context.colors.divider),
+            _FilterLine(group: groups[index]),
+          ],
         ],
       ),
     );
@@ -322,17 +403,9 @@ class _CatalogFilters extends StatelessWidget {
 }
 
 class _FilterLine extends StatelessWidget {
-  final String label;
-  final List<CatalogFilterOption> options;
-  final String? selectedId;
-  final ValueChanged<String>? onSelected;
+  const _FilterLine({required this.group});
 
-  const _FilterLine({
-    required this.label,
-    required this.options,
-    required this.selectedId,
-    required this.onSelected,
-  });
+  final CatalogFilterGroup group;
 
   @override
   Widget build(BuildContext context) {
@@ -342,11 +415,11 @@ class _FilterLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 58,
+            width: 64,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(
-                label,
+                group.label,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                       color: context.colors.textMuted,
                     ),
@@ -358,13 +431,12 @@ class _FilterLine extends StatelessWidget {
               spacing: 6,
               runSpacing: 6,
               children: [
-                for (final option in options)
+                for (final option in group.options)
                   _FilterChoice(
+                    key: ValueKey('catalog-filter-${group.id}-${option.id}'),
                     option: option,
-                    selected: option.id == selectedId,
-                    onTap: onSelected == null
-                        ? null
-                        : () => onSelected!(option.id),
+                    selected: group.selectedIds.contains(option.id),
+                    onTap: () => group.onSelected(option.id),
                   ),
               ],
             ),
@@ -375,64 +447,135 @@ class _FilterLine extends StatelessWidget {
   }
 }
 
-class _FilterChoice extends StatefulWidget {
-  final CatalogFilterOption option;
-  final bool selected;
-  final VoidCallback? onTap;
-
+class _FilterChoice extends StatelessWidget {
   const _FilterChoice({
+    super.key,
     required this.option,
     required this.selected,
-    this.onTap,
+    required this.onTap,
   });
 
-  @override
-  State<_FilterChoice> createState() => _FilterChoiceState();
-}
-
-class _FilterChoiceState extends State<_FilterChoice> {
-  var _hovered = false;
+  final CatalogFilterOption option;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-
     return Semantics(
       button: true,
-      selected: widget.selected,
-      label: widget.option.label,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? colors.skyLight
-                  : _hovered
-                      ? colors.bgHover
-                      : Colors.transparent,
-              border: Border(
-                bottom: BorderSide(
-                  color: widget.selected ? colors.sky : Colors.transparent,
-                  width: 1.5,
-                ),
-              ),
-            ),
-            child: Text(
-              widget.option.label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: widget.selected || _hovered
-                        ? colors.sky
-                        : colors.textSecondary,
-                  ),
+      selected: selected,
+      label: option.label,
+      child: TextButton(
+        onPressed: onTap,
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(Size(0, 34)),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          ),
+          foregroundColor: WidgetStateProperty.resolveWith(
+            (states) => selected || states.contains(WidgetState.hovered)
+                ? colors.sky
+                : colors.textSecondary,
+          ),
+          backgroundColor: WidgetStatePropertyAll(
+            selected ? colors.skyLight : Colors.transparent,
+          ),
+          shape: const WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          ),
+          side: WidgetStatePropertyAll(
+            BorderSide(
+              color: selected ? colors.sky : Colors.transparent,
+              width: 1,
             ),
           ),
+        ),
+        child: Text(option.label),
+      ),
+    );
+  }
+}
+
+class _CatalogFilterSummaries extends StatelessWidget {
+  const _CatalogFilterSummaries({
+    required this.summaries,
+    required this.onClear,
+  });
+
+  final List<CatalogFilterSummary> summaries;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 8, right: 10),
+          child: Text('已选', style: Theme.of(context).textTheme.labelMedium),
+        ),
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final summary in summaries)
+                Container(
+                  key: ValueKey('catalog-summary-${summary.id}'),
+                  height: 34,
+                  padding: const EdgeInsets.only(left: 10),
+                  decoration: BoxDecoration(
+                    color: context.colors.skyLight,
+                    border: Border.all(
+                        color: context.colors.sky.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(summary.label),
+                      IconButton(
+                        tooltip: '移除${summary.label}',
+                        onPressed: summary.onRemove,
+                        icon: const Icon(Icons.close, size: 15),
+                        padding: const EdgeInsets.symmetric(horizontal: 7),
+                        constraints: const BoxConstraints(minWidth: 30),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (onClear != null)
+          TextButton(onPressed: onClear, child: const Text('清空条件')),
+      ],
+    );
+  }
+}
+
+class _CatalogWarning extends StatelessWidget {
+  const _CatalogWarning({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: context.colors.warning.withValues(alpha: 0.1),
+          border:
+              Border(left: BorderSide(color: context.colors.warning, width: 3)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, size: 18, color: context.colors.warning),
+            const SizedBox(width: 8),
+            Expanded(child: Text(message)),
+          ],
         ),
       ),
     );
@@ -440,9 +583,9 @@ class _FilterChoiceState extends State<_FilterChoice> {
 }
 
 class _ResultHeading extends StatelessWidget {
-  final int itemCount;
-
   const _ResultHeading({required this.itemCount});
+
+  final int itemCount;
 
   @override
   Widget build(BuildContext context) {
@@ -453,7 +596,7 @@ class _ResultHeading extends StatelessWidget {
         Text('片单', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(width: 10),
         Text(
-          '共 $itemCount 部作品',
+          '已加载 $itemCount 部',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
@@ -462,27 +605,22 @@ class _ResultHeading extends StatelessWidget {
 }
 
 class _CatalogAnimeCard extends StatelessWidget {
-  final int index;
-  final Map<String, dynamic> item;
-  final VoidCallback onTap;
-
   const _CatalogAnimeCard({
     required this.index,
     required this.item,
     required this.onTap,
   });
 
+  final int index;
+  final CatalogCardData item;
+  final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final name = item['name']?.toString() ?? '未命名作品';
-    final status = item['status']?.toString() ?? '';
-    final genres = _genresOf(item);
-    final score = _scoreOf(item);
-
     return ArtworkCardSurface(
       id: 'catalog-$index',
-      semanticLabel: '打开第${index + 1}部作品，$name',
+      semanticLabel: '打开第${index + 1}部作品，${item.name}',
       onOpen: onTap,
       lift: _catalogCardLift,
       contentBuilder: (context, interaction) => Column(
@@ -500,10 +638,7 @@ class _CatalogAnimeCard extends StatelessWidget {
                     duration: interaction.duration,
                     curve: Curves.easeOutCubic,
                     scale: interaction.coverScale,
-                    child: CoverImage(
-                      url: item['cover']?.toString(),
-                      fit: BoxFit.cover,
-                    ),
+                    child: CoverImage(url: item.coverUrl, fit: BoxFit.cover),
                   ),
                 ),
                 Positioned(
@@ -520,7 +655,7 @@ class _CatalogAnimeCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (score != null)
+                if (item.score != null)
                   Positioned(
                     right: 9,
                     top: 9,
@@ -530,14 +665,11 @@ class _CatalogAnimeCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.star_rounded,
-                            size: 12,
-                            color: colors.warning,
-                          ),
+                          Icon(Icons.star_rounded,
+                              size: 12, color: colors.warning),
                           const SizedBox(width: 2),
                           Text(
-                            score.toStringAsFixed(1),
+                            item.score!.toStringAsFixed(1),
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
@@ -557,14 +689,16 @@ class _CatalogAnimeCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
+                  item.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  genres.isEmpty ? status : genres.take(2).join(' · '),
+                  item.genres.isEmpty
+                      ? item.statusLabel
+                      : item.genres.take(2).join(' · '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall,
@@ -578,13 +712,50 @@ class _CatalogAnimeCard extends StatelessWidget {
   }
 }
 
-List<String> _genresOf(Map<String, dynamic> item) {
-  final raw = item['genres'];
-  if (raw is! List) return const [];
-  return raw.map((entry) => entry.toString()).toList(growable: false);
+double? _scoreOf(Object? raw) =>
+    raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '');
+
+double? _bestScore(CatalogContent content) {
+  double? result;
+  for (final rating in content.ratings.values) {
+    final score = rating.score;
+    if (score != null && (result == null || score > result)) result = score;
+  }
+  return result;
 }
 
-double? _scoreOf(Map<String, dynamic> item) {
-  final raw = item['score'];
-  return raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '');
-}
+String _statusLabel(CatalogStatus status) => switch (status) {
+      CatalogStatus.upcoming => '即将播出',
+      CatalogStatus.airing => '连载中',
+      CatalogStatus.completed => '已完结',
+      CatalogStatus.hiatus => '暂停播出',
+      CatalogStatus.cancelled => '已取消',
+      CatalogStatus.unknown => '',
+    };
+
+String _genreLabel(String genre) =>
+    const {
+      'action': '动作',
+      'adventure': '冒险',
+      'comedy': '喜剧',
+      'drama': '剧情',
+      'fantasy': '奇幻',
+      'sciFi': '科幻',
+      'romance': '恋爱',
+      'school': '校园',
+      'sliceOfLife': '日常',
+      'healing': '治愈',
+      'mystery': '悬疑',
+      'thriller': '惊悚',
+      'horror': '恐怖',
+      'sports': '运动',
+      'music': '音乐',
+      'historical': '历史',
+      'military': '战争',
+      'mecha': '机甲',
+      'magicalGirl': '魔法少女',
+      'isekai': '异世界',
+      'family': '家庭',
+      'supernatural': '超自然',
+    }[genre] ??
+    genre;

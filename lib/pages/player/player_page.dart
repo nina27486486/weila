@@ -9,12 +9,20 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../models/anime.dart';
+import '../../models/playback/playback_source.dart';
 import '../../services/plugin/plugin_service.dart';
+import '../../services/http/http_client.dart';
 import '../../services/download/download_service.dart';
+import '../../services/danmaku/danmaku_load_result.dart';
+import '../../services/danmaku/danmaku_matcher.dart';
 import '../../services/danmaku/danmaku_service.dart';
 import '../../services/library/playback_entry_factory.dart';
+import '../../services/playback/hls_variant_resolver.dart';
+import '../../services/playback/playback_diagnostics.dart';
+import '../../services/playback/playback_probe_service.dart';
+import '../../services/playback/playback_route_health.dart';
+import '../../services/playback/playback_route_health_repository.dart';
 import '../../services/storage/storage_service.dart';
-import '../../models/danmaku_item.dart';
 import '../../widgets/artwork_components.dart';
 import '../../widgets/danmaku_overlay.dart';
 import '../../stores/history_collect_store.dart';
@@ -25,18 +33,10 @@ import 'widgets/player_diagnostics_overlay.dart';
 import 'widgets/episode_sidebar.dart';
 import 'widgets/player_next_episode_prompt.dart';
 import 'widgets/player_shortcut_panel.dart';
+import 'playback_session.dart';
+import 'playback_health_coordinator.dart';
 
-class _PlaybackIssue {
-  const _PlaybackIssue({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-}
+part 'widgets/player_page_components.dart';
 
 class PlayerPage extends StatefulWidget {
   final String videoUrl;
@@ -46,6 +46,7 @@ class PlayerPage extends StatefulWidget {
   final String? coverUrl;
   final int episodeIndex;
   final String sourcePlugin;
+  final String? contentId;
 
   const PlayerPage({
     super.key,
@@ -56,17 +57,19 @@ class PlayerPage extends StatefulWidget {
     this.coverUrl,
     this.episodeIndex = 0,
     this.sourcePlugin = '',
+    this.contentId,
   });
 
   @override
   State<PlayerPage> createState() => _PlayerPageState();
 }
 
-class _PlayerPageState extends State<PlayerPage> {
-  static bool _danmakuServiceInitialized = false;
-
+class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController _controller;
+  late PlaybackSession _playbackSession;
+  late final HlsVariantResolver _hlsVariantResolver;
+  late final PlaybackHealthCoordinator _playbackHealth;
   final PluginService _pluginService = PluginService();
   final HistoryCollectStore _historyStore = HistoryCollectStore();
   final DownloadService _downloadService = DownloadService();
@@ -93,6 +96,10 @@ class _PlayerPageState extends State<PlayerPage> {
   double _danmakuArea = 1.0;
   double _danmakuSpeed = 1.0;
   double _danmakuFontScale = 1.0;
+  DanmakuLoadResult _danmakuLoadResult = DanmakuLoadResult(
+    status: DanmakuLoadStatus.notConfigured,
+  );
+  int _danmakuLoadGeneration = 0;
   String? _currentVideoUrl;
   bool _isOpeningVideo = false;
   bool _isReconnecting = false;
@@ -100,11 +107,14 @@ class _PlayerPageState extends State<PlayerPage> {
   bool _hasVideoSignal = false;
   bool _firstFrameRendered = false;
   _PlaybackIssue? _playbackIssue;
-  List<String> _videoCandidates = [];
-  int _videoCandidateIndex = 0;
+  PlaybackOpenRequest? _activeOpenRequest;
   int _openGeneration = 0;
+  int _playbackRequestGeneration = 0;
+  int _episodeLoadGeneration = 0;
   int _automaticRetryCount = 0;
-  Duration _resumePositionAfterOpen = Duration.zero;
+  PlaybackDiagnosticsSession? _playbackDiagnostics;
+  PlaybackDiagnosticsSnapshot? _lastPlaybackDiagnostics;
+  AppLifecycleState _appLifecycleState = AppLifecycleState.resumed;
 
   // 集数列表
   List<Episode> _episodes = [];
@@ -118,6 +128,10 @@ class _PlayerPageState extends State<PlayerPage> {
 
   String get _animeName =>
       widget.animeName.trim().isEmpty ? widget.title : widget.animeName;
+
+  String get _playbackProviderId => widget.sourcePlugin.trim().isEmpty
+      ? 'direct'
+      : widget.sourcePlugin.trim();
 
   // 控制栏自动隐藏
   Timer? _hideTimer;
@@ -138,10 +152,27 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _player = Player();
     _controller = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(hwdec: 'auto-safe'),
+    );
+    _playbackSession = PlaybackSession(_directPlaybackSources(widget.videoUrl));
+    final http = HttpClient();
+    final storage = StorageService();
+    _hlsVariantResolver = HlsVariantResolver(
+      loadManifest: (uri, headers) => http
+          .getHtml(uri.toString(), headers: headers)
+          .timeout(const Duration(seconds: 4)),
+    );
+    _playbackHealth = PlaybackHealthCoordinator(
+      probes: PlaybackProbeService(load: DioPlaybackProbeLoader().call),
+      repository: SettingsPlaybackRouteHealthRepository(
+        read: (key) => storage.getSetting<Object>(key),
+        write: storage.setSetting,
+        remove: storage.removeSetting,
+      ),
     );
 
     // 监听播放状态（存储订阅，dispose时cancel）
@@ -186,7 +217,9 @@ class _PlayerPageState extends State<PlayerPage> {
     _subscriptions.add(_player.stream.error.listen(_handlePlayerError));
 
     // 打开视频
-    _openVideoCandidates([widget.videoUrl]);
+    unawaited(
+      _openPlaybackRequest(_playbackSession.openAt(Duration.zero)),
+    );
 
     // 加载集数列表
     _loadEpisodes();
@@ -197,12 +230,6 @@ class _PlayerPageState extends State<PlayerPage> {
     // 检查当前视频是否已下载
     _checkDownloadStatus();
 
-    // DanmakuService 是单例，重复进入播放器时不能再次写入其 late final Dio。
-    if (!_danmakuServiceInitialized) {
-      _danmakuService.init();
-      _danmakuServiceInitialized = true;
-    }
-    final storage = StorageService();
     final danmakuAppId = storage.getSetting<String>('dandanplay_app_id') ?? '';
     final danmakuAppSecret =
         storage.getSetting<String>('dandanplay_app_secret') ?? '';
@@ -221,13 +248,42 @@ class _PlayerPageState extends State<PlayerPage> {
     _loadDanmaku();
   }
 
-  Future<void> _openVideoCandidates(List<String> urls) async {
-    final candidates = urls
-        .map((url) => url.trim())
-        .where((url) => url.isNotEmpty)
-        .toSet()
-        .toList();
-    if (candidates.isEmpty) {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appLifecycleState = state;
+    if (state != AppLifecycleState.resumed) {
+      _playbackDiagnostics?.suspendBuffering();
+    }
+  }
+
+  List<PlaybackSource> _directPlaybackSources(String url) {
+    final normalized = url.trim();
+    if (normalized.isEmpty) return const [];
+    return [
+      PlaybackSource(
+        id: 'direct',
+        label: '默认线路',
+        kind: PlaybackSourceKind.direct,
+        variants: [
+          PlaybackVariant(
+            id: 'direct-original',
+            label: '原始',
+            url: normalized,
+            kind: PlaybackVariantKind.original,
+          ),
+        ],
+      ),
+    ];
+  }
+
+  Future<void> _openPlaybackRequest(
+    PlaybackOpenRequest? request, {
+    bool automaticRetry = false,
+    bool resolveVariants = true,
+    PlaybackDiagnosticsSession? diagnostics,
+  }) async {
+    final requestGeneration = ++_playbackRequestGeneration;
+    if (request == null) {
       _showPlaybackIssue(
         const _PlaybackIssue(
           icon: Icons.link_off_rounded,
@@ -237,17 +293,35 @@ class _PlayerPageState extends State<PlayerPage> {
       );
       return;
     }
-    _videoCandidates = candidates;
-    _videoCandidateIndex = 0;
-    _resumePositionAfterOpen = Duration.zero;
-    await _openVideo(candidates.first);
+    final diagnosticsSession =
+        diagnostics ?? _playbackHealth.beginOpen(_openGeneration + 1);
+    var effectiveRequest = request;
+    if (resolveVariants) {
+      diagnosticsSession.manifestStarted();
+      if (mounted) setState(() {});
+      final resolvedSource = await _hlsVariantResolver.resolve(request.source);
+      if (!mounted || requestGeneration != _playbackRequestGeneration) return;
+      diagnosticsSession.manifestResolved();
+      _playbackSession.replaceSource(resolvedSource);
+      effectiveRequest =
+          _playbackSession.openAt(request.resumePosition) ?? request;
+      setState(() {});
+    }
+    await _openVideo(
+      effectiveRequest,
+      automaticRetry: automaticRetry,
+      diagnostics: diagnosticsSession,
+    );
   }
 
   Future<void> _openVideo(
-    String url, {
+    PlaybackOpenRequest request, {
     bool automaticRetry = false,
+    required PlaybackDiagnosticsSession diagnostics,
   }) async {
+    final url = request.url;
     if (url.isEmpty || !mounted) return;
+    _finishPlaybackDiagnostics();
     final generation = ++_openGeneration;
     _cancelPlaybackWatchdogs();
     if (!automaticRetry) _automaticRetryCount = 0;
@@ -259,28 +333,35 @@ class _PlayerPageState extends State<PlayerPage> {
       _isBuffering = true;
       _hasAudioSignal = false;
       _hasVideoSignal = false;
+      _firstFrameRendered = false;
       _playbackIssue = null;
       _position = Duration.zero;
       _duration = Duration.zero;
       _showControls = true;
     });
+    _activeOpenRequest = request;
+    _playbackDiagnostics = diagnostics.openGeneration == generation
+        ? diagnostics
+        : _playbackHealth.beginOpen(generation);
 
-    final headers = <String, String>{};
-    if (url.contains('.m3u8') ||
-        url.contains('/hls/') ||
-        url.contains('type=hls')) {
+    final headers = Map<String, String>.from(request.headers);
+    if (!headers.containsKey('Referer') &&
+        (url.contains('.m3u8') ||
+            url.contains('/hls/') ||
+            url.contains('type=hls'))) {
       final uri = Uri.tryParse(url);
       if (uri != null) headers['Referer'] = '${uri.scheme}://${uri.host}/';
     }
 
+    _playbackDiagnostics?.openRequested();
     _startPlaybackWatchdogs(generation);
     try {
       await _player
           .open(Media(url, httpHeaders: headers))
           .timeout(const Duration(seconds: 20));
       if (!mounted || generation != _openGeneration) return;
-      final resumePosition = _resumePositionAfterOpen;
-      _resumePositionAfterOpen = Duration.zero;
+      _playbackDiagnostics?.openCompleted();
+      final resumePosition = request.resumePosition;
       if (resumePosition > const Duration(seconds: 1)) {
         await _player.seek(resumePosition);
       }
@@ -288,6 +369,7 @@ class _PlayerPageState extends State<PlayerPage> {
         unawaited(_waitForFirstFrame(generation));
       }
     } on TimeoutException catch (e) {
+      _playbackDiagnostics?.fail(PlaybackFailureKind.timeout);
       Log.e('Player', '连接视频源超时: $url', e);
       _recoverOrShow(
         const _PlaybackIssue(
@@ -298,6 +380,7 @@ class _PlayerPageState extends State<PlayerPage> {
         generation,
       );
     } catch (e) {
+      _playbackDiagnostics?.fail(_failureKindFromError(e.toString()));
       Log.e('Player', '播放失败: $url', e);
       _recoverOrShow(_issueFromError(e.toString()), generation);
     }
@@ -307,6 +390,7 @@ class _PlayerPageState extends State<PlayerPage> {
     _openTimeoutTimer = Timer(const Duration(seconds: 20), () {
       if (!mounted || generation != _openGeneration) return;
       if (_position > const Duration(seconds: 1) || _hasVideoSignal) return;
+      _playbackDiagnostics?.fail(PlaybackFailureKind.timeout);
       _recoverOrShow(
         const _PlaybackIssue(
           icon: Icons.wifi_tethering_error_rounded,
@@ -321,6 +405,7 @@ class _PlayerPageState extends State<PlayerPage> {
       if (!mounted || generation != _openGeneration || _hasVideoSignal) return;
       final mediaIsAdvancing = _position > const Duration(seconds: 2);
       if (_hasAudioSignal || mediaIsAdvancing) {
+        _playbackDiagnostics?.fail(PlaybackFailureKind.noVideo);
         _recoverOrShow(
           const _PlaybackIssue(
             icon: Icons.videocam_off_outlined,
@@ -338,11 +423,12 @@ class _PlayerPageState extends State<PlayerPage> {
       await _controller.waitUntilFirstFrameRendered
           .timeout(const Duration(seconds: 15));
       if (!mounted || generation != _openGeneration) return;
-      _firstFrameRendered = true;
+      _recordFirstFrame();
       _markVideoSignalDetected();
     } on TimeoutException {
       if (!mounted || generation != _openGeneration || _hasVideoSignal) return;
       if (_hasAudioSignal || _position > const Duration(seconds: 2)) {
+        _playbackDiagnostics?.fail(PlaybackFailureKind.noVideo);
         _recoverOrShow(
           const _PlaybackIssue(
             icon: Icons.videocam_off_outlined,
@@ -357,6 +443,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _markVideoSignalDetected() {
     if (!mounted) return;
+    _recordFirstFrame();
     if (_hasVideoSignal && !_isOpeningVideo && !_isReconnecting) return;
     _openTimeoutTimer?.cancel();
     _noVideoTimer?.cancel();
@@ -370,6 +457,9 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _handleBufferingChanged(bool buffering) {
     if (!mounted) return;
+    if (_appLifecycleState == AppLifecycleState.resumed) {
+      _playbackDiagnostics?.bufferingChanged(buffering);
+    }
     setState(() => _isBuffering = buffering);
     _bufferingTimeoutTimer?.cancel();
     if (!buffering) {
@@ -385,6 +475,7 @@ class _PlayerPageState extends State<PlayerPage> {
       if (!mounted || generation != _openGeneration || !_isBuffering) return;
       final advanced = _position - _bufferingStartedPosition;
       if (advanced > const Duration(seconds: 1)) return;
+      _playbackDiagnostics?.fail(PlaybackFailureKind.network);
       _recoverOrShow(
         const _PlaybackIssue(
           icon: Icons.signal_wifi_connected_no_internet_4_rounded,
@@ -398,6 +489,7 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _handlePlayerError(String message) {
     if (!mounted || message.trim().isEmpty) return;
+    _playbackDiagnostics?.fail(_failureKindFromError(message));
     Log.e('Player', 'media_kit: $message');
     _recoverOrShow(_issueFromError(message), _openGeneration);
   }
@@ -441,15 +533,54 @@ class _PlayerPageState extends State<PlayerPage> {
     );
   }
 
+  PlaybackFailureKind _failureKindFromError(String error) {
+    final message = error.toLowerCase();
+    if (message.contains('403') || message.contains('forbidden')) {
+      return PlaybackFailureKind.forbidden;
+    }
+    if (message.contains('404') || message.contains('not found')) {
+      return PlaybackFailureKind.notFound;
+    }
+    if (message.contains('decode') ||
+        message.contains('codec') ||
+        message.contains('hwdec')) {
+      return PlaybackFailureKind.decode;
+    }
+    if (message.contains('timeout') || message.contains('timed out')) {
+      return PlaybackFailureKind.timeout;
+    }
+    if (message.contains('500') ||
+        message.contains('502') ||
+        message.contains('503')) {
+      return PlaybackFailureKind.server;
+    }
+    return PlaybackFailureKind.unknown;
+  }
+
   void _recoverOrShow(_PlaybackIssue issue, int generation) {
     if (!mounted || generation != _openGeneration || _playbackIssue != null) {
       return;
     }
     if (_reconnectTimer?.isActive ?? false) return;
-    final url = _currentVideoUrl;
-    if (_automaticRetryCount < 1 && url != null && url.isNotEmpty) {
+    final activeRequest = _activeOpenRequest;
+    final sourceCount = _playbackSession.sources.length;
+    final maximumRecoveries = sourceCount > 1 ? sourceCount - 1 : 1;
+    if (_automaticRetryCount < maximumRecoveries && activeRequest != null) {
+      final recoveryRequest = sourceCount > 1
+          ? _playbackSession.selectNextSourceAfter(
+              activeRequest.source.id,
+              _position,
+            )
+          : PlaybackOpenRequest(
+              source: activeRequest.source,
+              variant: activeRequest.variant,
+              resumePosition: _position,
+            );
+      if (recoveryRequest == null) {
+        _showPlaybackIssue(issue);
+        return;
+      }
       _automaticRetryCount++;
-      _resumePositionAfterOpen = _position;
       _cancelPlaybackWatchdogs();
       unawaited(_player.stop());
       setState(() {
@@ -459,7 +590,14 @@ class _PlayerPageState extends State<PlayerPage> {
       });
       _reconnectTimer = Timer(const Duration(milliseconds: 900), () {
         if (!mounted || generation != _openGeneration) return;
-        _openVideo(url, automaticRetry: true);
+        unawaited(
+          _openPlaybackRequest(
+            recoveryRequest,
+            automaticRetry: true,
+            resolveVariants:
+                recoveryRequest.source.id != activeRequest.source.id,
+          ),
+        );
       });
       return;
     }
@@ -470,6 +608,7 @@ class _PlayerPageState extends State<PlayerPage> {
     if (!mounted) return;
     _cancelPlaybackWatchdogs();
     unawaited(_player.pause());
+    _finishPlaybackDiagnostics();
     setState(() {
       _playbackIssue = issue;
       _isOpeningVideo = false;
@@ -479,23 +618,70 @@ class _PlayerPageState extends State<PlayerPage> {
     });
   }
 
-  void _retryCurrentVideo() {
-    final url = _currentVideoUrl;
-    if (url == null || url.isEmpty) return;
-    _resumePositionAfterOpen = _position;
-    _automaticRetryCount = 0;
-    _openVideo(url);
+  void _recordFirstFrame() {
+    if (_firstFrameRendered) return;
+    _firstFrameRendered = true;
+    _playbackDiagnostics?.firstFrameRendered();
   }
 
-  bool get _hasNextVideoSource =>
-      _videoCandidateIndex + 1 < _videoCandidates.length;
+  void _finishPlaybackDiagnostics() {
+    final diagnostics = _playbackDiagnostics;
+    final source = _activeOpenRequest?.source;
+    if (diagnostics == null) return;
+    final snapshot = diagnostics.end();
+    _playbackDiagnostics = null;
+    _lastPlaybackDiagnostics = snapshot;
+    if (source == null) return;
+    unawaited(
+      _playbackHealth.finishOpen(
+        providerId: _playbackProviderId,
+        source: source,
+        diagnostics: snapshot,
+        playedDuration: _position,
+      ),
+    );
+  }
+
+  void _retryCurrentVideo() {
+    final activeRequest = _activeOpenRequest;
+    if (activeRequest == null) return;
+    _automaticRetryCount = 0;
+    unawaited(
+      _openPlaybackRequest(
+        PlaybackOpenRequest(
+          source: activeRequest.source,
+          variant: activeRequest.variant,
+          resumePosition: _position,
+        ),
+        resolveVariants: false,
+      ),
+    );
+  }
+
+  ResolvedPlayback? get _resolvedPlayback =>
+      _playbackSession.selection.resolve(_playbackSession.sources);
+
+  int get _currentSourceIndex {
+    final resolved = _resolvedPlayback;
+    if (resolved == null) return 0;
+    final index = _playbackSession.sources.indexWhere(
+      (source) => source.id == resolved.source.id,
+    );
+    return index < 0 ? 0 : index;
+  }
+
+  int get _currentSourceCount => _playbackSession.sources.length;
+
+  bool get _hasNextVideoSource => _currentSourceIndex + 1 < _currentSourceCount;
 
   void _switchToNextVideoSource() {
     if (!_hasNextVideoSource) return;
-    _resumePositionAfterOpen = _position;
-    _videoCandidateIndex++;
     _automaticRetryCount = 0;
-    _openVideo(_videoCandidates[_videoCandidateIndex]);
+    unawaited(
+      _openPlaybackRequest(
+        _playbackSession.selectNextSource(_position),
+      ),
+    );
   }
 
   void _cancelPlaybackWatchdogs() {
@@ -510,19 +696,69 @@ class _PlayerPageState extends State<PlayerPage> {
     setState(() => _loadingEpisodes = true);
 
     try {
-      final anime = Anime(
-        name: widget.title,
-        url: widget.animeUrl,
-        sourcePlugin:
-            widget.sourcePlugin.isNotEmpty ? widget.sourcePlugin : 'bangumi',
-      );
-      final eps = await _pluginService.getEpisodes(anime);
+      final anime = _pageAnime;
+      var playbackEpisodes = <PlaybackEpisode>[];
+      List<Episode> eps;
+      if (anime.sourcePlugin.startsWith('cms_')) {
+        playbackEpisodes = await _pluginService.getPlaybackEpisodes(anime);
+        eps = playbackEpisodes
+            .map(
+              (episode) => Episode(
+                name: episode.name,
+                index: episode.index,
+                url: const PlaybackSelection.auto()
+                        .resolve(episode.sources)
+                        ?.variant
+                        .url ??
+                    '',
+              ),
+            )
+            .toList(growable: false);
+        if (widget.episodeIndex >= 0 &&
+            widget.episodeIndex < playbackEpisodes.length &&
+            widget.episodeIndex < eps.length) {
+          final resolvedCurrent = await _pluginService.resolvePlaybackEpisode(
+            anime: anime,
+            episode: eps[widget.episodeIndex],
+          );
+          playbackEpisodes = List<PlaybackEpisode>.from(playbackEpisodes)
+            ..[widget.episodeIndex] = resolvedCurrent;
+          final resolved =
+              const PlaybackSelection.auto().resolve(resolvedCurrent.sources);
+          if (resolved != null) {
+            eps[widget.episodeIndex] = Episode(
+              name: eps[widget.episodeIndex].name,
+              index: eps[widget.episodeIndex].index,
+              url: resolved.variant.url,
+            );
+          }
+        }
+      } else {
+        eps = await _pluginService.getEpisodes(anime);
+      }
       if (mounted) {
+        PlaybackSession? sessionToHydrate;
         setState(() {
           _episodes = eps;
           _currentEpisodeIndex = widget.episodeIndex;
           _loadingEpisodes = false;
+          if (playbackEpisodes.isNotEmpty &&
+              widget.episodeIndex >= 0 &&
+              widget.episodeIndex < playbackEpisodes.length &&
+              playbackEpisodes[widget.episodeIndex].sources.isNotEmpty) {
+            sessionToHydrate = PlaybackSession(
+              playbackEpisodes[widget.episodeIndex].sources,
+            );
+            _playbackSession = sessionToHydrate!;
+          }
         });
+        if (sessionToHydrate != null) {
+          unawaited(
+            _openPlaybackRequest(
+              sessionToHydrate!.openAt(_position),
+            ),
+          );
+        }
       }
     } catch (e) {
       Log.d('Player', '加载集数失败: $e');
@@ -532,6 +768,9 @@ class _PlayerPageState extends State<PlayerPage> {
 
   void _playEpisode(int index) async {
     if (index < 0 || index >= _episodes.length) return;
+    final loadGeneration = ++_episodeLoadGeneration;
+    final diagnostics = _playbackHealth.beginOpen(_openGeneration + 1)
+      ..sourceResolveStarted();
     setState(() {
       _currentEpisodeIndex = index;
       _isOpeningVideo = true;
@@ -541,33 +780,32 @@ class _PlayerPageState extends State<PlayerPage> {
     _danmakuController.loadDanmaku(const []);
     final ep = _episodes[index];
 
-    // 尝试获取视频源
-    if (widget.sourcePlugin.isNotEmpty) {
-      try {
-        final plugins = _pluginService.plugins;
-        if (plugins.isEmpty) {
-          _showPlaybackIssue(
-            const _PlaybackIssue(
-              icon: Icons.extension_off_outlined,
-              title: '没有可用的视频源',
-              message: '请先在设置中启用一个视频源插件。',
-            ),
-          );
-          return;
-        }
-        final plugin = plugins.firstWhere(
-          (p) => p.api == widget.sourcePlugin,
-          orElse: () => plugins.first,
+    try {
+      final playbackEpisode = await _pluginService.resolvePlaybackEpisode(
+        anime: _pageAnime,
+        episode: ep,
+      );
+      diagnostics.sourceResolved();
+      if (loadGeneration != _episodeLoadGeneration || !mounted) return;
+      if (playbackEpisode.sources.isNotEmpty) {
+        final orderedSources = playbackEpisode.sources.length > 1
+            ? await _playbackHealth.prepareAutoSources(
+                providerId: _playbackProviderId,
+                sources: playbackEpisode.sources,
+              )
+            : playbackEpisode.sources;
+        if (loadGeneration != _episodeLoadGeneration || !mounted) return;
+        _playbackSession = PlaybackSession(orderedSources);
+        await _openPlaybackRequest(
+          _playbackSession.openAt(Duration.zero),
+          diagnostics: diagnostics,
         );
-        final urls = await _pluginService.getVideoUrls(ep.url, plugin);
-        if (urls.isNotEmpty && mounted) {
-          await _openVideoCandidates(urls);
-          if (mounted) _loadDanmaku();
-          return;
-        }
-      } catch (e) {
-        Log.d('Player', '获取视频源失败: $e');
+        if (mounted) _loadDanmaku();
+        return;
       }
+    } catch (e) {
+      diagnostics.fail(PlaybackFailureKind.network);
+      Log.d('Player', '获取视频源失败: $e');
     }
 
     if (mounted) {
@@ -579,6 +817,29 @@ class _PlayerPageState extends State<PlayerPage> {
         ),
       );
     }
+  }
+
+  Anime get _pageAnime => Anime(
+        name: widget.title,
+        url: widget.animeUrl,
+        sourcePlugin:
+            widget.sourcePlugin.isNotEmpty ? widget.sourcePlugin : 'bangumi',
+      );
+
+  Future<void> _selectAutomaticSource() async {
+    final session = _playbackSession;
+    final ordered = session.sources.length > 1
+        ? await _playbackHealth.prepareAutoSources(
+            providerId: _playbackProviderId,
+            sources: session.sources,
+          )
+        : session.sources;
+    if (!mounted || !identical(_playbackSession, session)) return;
+    session.replaceSources(ordered);
+    final request = session.selectAuto(_position);
+    if (request == null) return;
+    setState(() {});
+    await _openPlaybackRequest(request);
   }
 
   void _startHideTimer() {
@@ -701,40 +962,52 @@ class _PlayerPageState extends State<PlayerPage> {
     }
   }
 
-  Future<void> _loadDanmaku() async {
-    if (!_danmakuService.hasCredentials) {
-      Log.d('Player', '弹幕未配置API Key，使用测试弹幕');
-      _loadTestDanmaku();
-      return;
+  Future<void> _loadDanmaku({bool refresh = false}) async {
+    final generation = ++_danmakuLoadGeneration;
+    final episode = _currentEpisodeIndex + 1;
+    if (mounted) {
+      setState(() {
+        _danmakuLoadResult = DanmakuLoadResult(
+          status: _danmakuService.hasCredentials
+              ? DanmakuLoadStatus.searching
+              : DanmakuLoadStatus.notConfigured,
+        );
+      });
     }
-    try {
-      final epNum = _currentEpisodeIndex + 1;
+    _danmakuController.loadDanmaku(const []);
 
-      Log.d('Player', '加载弹幕: ${widget.title} 第$epNum集');
-      final danmakuList = await _danmakuService.fetchDanmaku(_animeName, epNum);
-
-      if (mounted && danmakuList.isNotEmpty) {
-        _danmakuController.loadDanmaku(danmakuList);
-        Log.d('Player', '弹幕加载完成: ${danmakuList.length} 条');
-      }
-    } catch (e) {
-      Log.e('Player', '弹幕加载失败', e);
-    }
+    final result = await _danmakuService.load(
+      anime: _animeName,
+      episode: episode,
+      refresh: refresh,
+    );
+    if (!mounted || generation != _danmakuLoadGeneration) return;
+    _danmakuController.loadDanmaku(result.items);
+    setState(() => _danmakuLoadResult = result);
+    Log.d(
+      'Player',
+      '弹幕状态: ${result.status.name}, 数量: ${result.items.length}',
+    );
   }
 
-  /// 加载测试弹幕（无 API Key 时使用）
-  void _loadTestDanmaku() {
-    final comments = ['好看', '神作', '泪目', '哈哈', '666', '前方高能', '名场面', '太强了'];
-    final testItems = List.generate(50, (i) {
-      return DanmakuItem(
-        text: '${comments[i % comments.length]} ${i + 1}',
-        time: (i * 3.0) + 1.0,
-        color: 0xFFFFFFFF,
-        fontSize: 16,
+  Future<void> _chooseDanmakuCandidate(
+    DanmakuMatchCandidate candidate,
+  ) async {
+    final generation = ++_danmakuLoadGeneration;
+    setState(() {
+      _danmakuLoadResult = DanmakuLoadResult(
+        status: DanmakuLoadStatus.loading,
+        selected: candidate,
       );
     });
-    _danmakuController.loadDanmaku(testItems);
-    Log.d('Player', '测试弹幕已加载: ${testItems.length} 条');
+    final result = await _danmakuService.choose(
+      anime: _animeName,
+      episode: _currentEpisodeIndex + 1,
+      candidate: candidate,
+    );
+    if (!mounted || generation != _danmakuLoadGeneration) return;
+    _danmakuController.loadDanmaku(result.items);
+    setState(() => _danmakuLoadResult = result);
   }
 
   void _startDownload() {
@@ -753,6 +1026,8 @@ class _PlayerPageState extends State<PlayerPage> {
       episodeName: epName,
       episodeUrl: url,
       sourcePlugin: widget.sourcePlugin,
+      contentId: widget.contentId,
+      episodeId: 'episode:${_currentEpisodeIndex + 1}',
     );
 
     // 自动设置 Referer（m3u8 CDN 需要）
@@ -771,6 +1046,9 @@ class _PlayerPageState extends State<PlayerPage> {
   @override
   void dispose() {
     _openGeneration++;
+    WidgetsBinding.instance.removeObserver(this);
+    _playbackDiagnostics?.suspendBuffering();
+    _finishPlaybackDiagnostics();
     _cancelPlaybackWatchdogs();
     // 取消所有Stream订阅，防止内存泄漏
     for (final s in _subscriptions) {
@@ -803,9 +1081,12 @@ class _PlayerPageState extends State<PlayerPage> {
       sourcePlugin: widget.sourcePlugin,
       position: _position,
       duration: _duration,
+      contentId: widget.contentId,
+      episodeId: 'episode:${_currentEpisodeIndex + 1}',
     ));
 
     _player.dispose();
+    _historyStore.dispose();
     super.dispose();
   }
 
@@ -1105,6 +1386,38 @@ class _PlayerPageState extends State<PlayerPage> {
 
   /// 底部控制栏
   Widget _buildControls() {
+    final resolved = _resolvedPlayback;
+    final sourceOptions = <PlayerControlMenuOption>[
+      PlayerControlMenuOption(
+        id: 'auto',
+        label: '自动',
+        selected: _playbackSession.selection.sourceId == null,
+        detail: resolved == null ? null : '实际使用 ${resolved.source.label}',
+      ),
+      for (final source in _playbackSession.sources)
+        PlayerControlMenuOption(
+          id: source.id,
+          label: source.label,
+          selected: _playbackSession.selection.sourceId == source.id,
+          detail: _healthDetail(source),
+        ),
+    ];
+    final qualityOptions = resolved == null ||
+            resolved.source.variants.length <= 1
+        ? const <PlayerControlMenuOption>[]
+        : <PlayerControlMenuOption>[
+            PlayerControlMenuOption(
+              id: 'auto',
+              label: '自动',
+              selected: _playbackSession.selection.variantId == null,
+            ),
+            for (final variant in resolved.source.variants)
+              PlayerControlMenuOption(
+                id: variant.id,
+                label: variant.label,
+                selected: _playbackSession.selection.variantId == variant.id,
+              ),
+          ];
     return PlayerControlBar(
       position: _position,
       duration: _duration,
@@ -1128,36 +1441,109 @@ class _PlayerPageState extends State<PlayerPage> {
         _player.setRate(speed);
       },
       onToggleFullscreen: _toggleFullscreen,
+      sourceOptions:
+          _playbackSession.sources.isEmpty ? const [] : sourceOptions,
+      qualityOptions: qualityOptions,
+      qualityUnavailableMessage:
+          resolved != null && resolved.source.variants.length <= 1
+              ? '当前线路未提供可切换清晰度'
+              : null,
+      onSourceSelected: (sourceId) {
+        if (sourceId == 'auto') {
+          unawaited(_selectAutomaticSource());
+          return;
+        }
+        final request = _playbackSession.selectSource(sourceId, _position);
+        if (request == null) return;
+        setState(() {});
+        unawaited(_openPlaybackRequest(request));
+      },
+      onQualitySelected: (variantId) {
+        final request = variantId == 'auto'
+            ? _playbackSession.selectAutoVariant(_position)
+            : _playbackSession.selectVariant(variantId, _position);
+        if (request == null) return;
+        setState(() {});
+        unawaited(
+          _openPlaybackRequest(request, resolveVariants: false),
+        );
+      },
     );
   }
 
   Widget _buildBufferingIndicator() {
+    final stage = _playbackDiagnostics?.snapshot.stage;
     final title = _isReconnecting
         ? '正在重新连接'
         : _isOpeningVideo
             ? '正在连接视频源'
             : '正在缓冲视频';
     final subtitle = _isReconnecting
-        ? '自动重试 $_automaticRetryCount/1'
-        : _isOpeningVideo
-            ? '正在等待首帧画面'
-            : '正在等待视频数据';
+        ? '自动切换 $_automaticRetryCount/'
+            '${_currentSourceCount > 1 ? _currentSourceCount - 1 : 1}'
+        : switch (stage) {
+            PlaybackDiagnosticStage.resolvingSource => '解析播放源',
+            PlaybackDiagnosticStage.resolvingManifest => '读取清晰度',
+            PlaybackDiagnosticStage.opening => '连接视频源',
+            PlaybackDiagnosticStage.waitingForFirstFrame => '等待首帧',
+            _ => _isOpeningVideo ? '等待首帧' : '正在等待视频数据',
+          };
     return PlayerLoadingOverlay(title: title, subtitle: subtitle);
   }
 
   Widget _buildPlaybackIssuePanel(_PlaybackIssue issue) {
+    final resolved = _resolvedPlayback;
     return PlayerDiagnosticsOverlay(
       issue: PlayerDiagnosticIssue(
         icon: issue.icon,
         title: issue.title,
         message: issue.message,
+        sourceLabel: resolved?.source.label,
+        variantLabel: _playbackSession.selection.variantId == null
+            ? '自动'
+            : resolved?.variant.label,
       ),
-      currentSourceIndex: _videoCandidateIndex,
-      sourceCount: _videoCandidates.length,
+      currentSourceIndex: _currentSourceIndex,
+      sourceCount: _currentSourceCount,
       position: _position,
+      metrics: _diagnosticMetrics,
       onRetry: _retryCurrentVideo,
       onSwitchSource: _hasNextVideoSource ? _switchToNextVideoSource : null,
       onBack: () => Modular.to.pop(),
+    );
+  }
+
+  PlaybackRouteHealth? _routeHealth(PlaybackSource source) {
+    final url = source.variants.isEmpty ? '' : source.variants.first.url;
+    final host = Uri.tryParse(url)?.host ?? '';
+    final key = PlaybackRouteKey(
+      providerId: _playbackProviderId,
+      sourceKind: source.kind.name,
+      sourceId: source.id,
+      host: host,
+    );
+    return _playbackHealth.health[key.storageKey];
+  }
+
+  String _healthDetail(PlaybackSource source) {
+    final health = _routeHealth(source);
+    if (health == null || !health.hasEnoughSamples) return '未知';
+    final firstFrame = health.firstFrameMs < 1000
+        ? '${health.firstFrameMs.round()}ms'
+        : '${(health.firstFrameMs / 1000).toStringAsFixed(1)}s';
+    return '${health.label} · 首帧 $firstFrame';
+  }
+
+  PlayerDiagnosticMetrics get _diagnosticMetrics {
+    final snapshot = _lastPlaybackDiagnostics ?? _playbackDiagnostics?.snapshot;
+    if (snapshot == null) return const PlayerDiagnosticMetrics();
+    return PlayerDiagnosticMetrics(
+      sourceResolveDuration: snapshot.sourceResolveDuration,
+      manifestDuration: snapshot.manifestDuration,
+      firstFrameDuration: snapshot.firstFrameDuration,
+      rebufferCount: snapshot.rebufferCount,
+      totalRebufferDuration: snapshot.totalRebufferDuration,
+      autoSwitchCount: 0,
     );
   }
 
@@ -1204,6 +1590,7 @@ class _PlayerPageState extends State<PlayerPage> {
       area: _danmakuArea,
       speed: _danmakuSpeed,
       fontScale: _danmakuFontScale,
+      loadResult: _danmakuLoadResult,
       onToggleVisible: () {
         setState(() => _showDanmaku = !_showDanmaku);
         _danmakuController.setVisible(_showDanmaku);
@@ -1212,6 +1599,8 @@ class _PlayerPageState extends State<PlayerPage> {
       onAreaChanged: _applyDanmakuArea,
       onSpeedChanged: _applyDanmakuSpeed,
       onFontScaleChanged: _applyDanmakuFontScale,
+      onRefresh: () => _loadDanmaku(refresh: true),
+      onCandidateSelected: _chooseDanmakuCandidate,
     );
   }
 
@@ -1229,58 +1618,6 @@ class _PlayerPageState extends State<PlayerPage> {
         setState(() => _showEpisodeDrawer = false);
         _playEpisode(index);
       },
-    );
-  }
-}
-
-class _PlayerIconButton extends StatefulWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback? onTap;
-
-  const _PlayerIconButton({
-    required this.icon,
-    required this.tooltip,
-    this.onTap,
-  });
-
-  @override
-  State<_PlayerIconButton> createState() => _PlayerIconButtonState();
-}
-
-class _PlayerIconButtonState extends State<_PlayerIconButton> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = widget.onTap != null;
-    return Tooltip(
-      message: widget.tooltip,
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        onEnter: (_) => setState(() => _hovering = true),
-        onExit: (_) => setState(() => _hovering = false),
-        child: GestureDetector(
-          onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 170),
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: Colors.white
-                  .withValues(alpha: _hovering && enabled ? 0.10 : 0.02),
-              borderRadius: BorderRadius.circular(7),
-            ),
-            child: Icon(
-              widget.icon,
-              color: enabled
-                  ? Colors.white.withValues(alpha: 0.82)
-                  : Colors.white.withValues(alpha: 0.32),
-              size: 19,
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

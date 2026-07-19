@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../services/artwork_palette_service.dart';
 import '../../theme/vira_colors.dart';
 import '../../utils/animations.dart';
 import '../../widgets/artwork_components.dart';
@@ -17,6 +16,7 @@ class HomeContinueStory {
   final String progressLabel;
   final String updatedLabel;
   final String animeUrl;
+  final String? contentId;
 
   const HomeContinueStory({
     required this.title,
@@ -24,6 +24,7 @@ class HomeContinueStory {
     required this.progressLabel,
     required this.updatedLabel,
     required this.animeUrl,
+    this.contentId,
   });
 }
 

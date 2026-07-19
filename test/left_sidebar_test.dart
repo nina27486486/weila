@@ -24,5 +24,7 @@ void main() {
     expect(find.text('个人中心'), findsNothing);
     expect(find.text('离线缓存'), findsOneWidget);
     expect(find.text('收藏夹'), findsOneWidget);
+    expect(find.byKey(const ValueKey('left-sidebar-mascot-badge')),
+        findsOneWidget);
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter_modular/flutter_modular.dart';
+import 'debug/danmaku_debug_config.dart';
 import 'pages/home/home_page.dart';
 import 'pages/search/search_page.dart';
 import 'pages/detail/detail_page.dart';
@@ -15,6 +16,7 @@ import 'pages/discover/calendar_page.dart';
 import 'pages/discover/ranking_page.dart';
 import 'pages/discover/category_browse_page.dart';
 import 'pages/download/download_page.dart';
+import 'pages/debug/danmaku_debug_page.dart';
 import 'services/plugin/plugin_service.dart';
 import 'stores/theme_store.dart';
 
@@ -39,6 +41,7 @@ class AppModule extends Module {
     r.child(
       '/detail',
       child: (context) => DetailPage(
+        contentId: r.args.queryParams['contentId'],
         animeUrl: r.args.queryParams['url'] ?? '',
         animeName: r.args.queryParams['name'] ?? '',
       ),
@@ -53,6 +56,7 @@ class AppModule extends Module {
         coverUrl: r.args.queryParams['cover'],
         episodeIndex: int.tryParse(r.args.queryParams['ep'] ?? '0') ?? 0,
         sourcePlugin: r.args.queryParams['source'] ?? '',
+        contentId: r.args.queryParams['contentId'],
       ),
     );
     r.child(
@@ -71,6 +75,12 @@ class AppModule extends Module {
       '/settings',
       child: (context) => const SettingsPage(),
     );
+    if (danmakuDebugModeEnabled) {
+      r.child(
+        '/danmaku-debug',
+        child: (context) => const DanmakuDebugPage(),
+      );
+    }
     r.child(
       '/settings/plugins',
       child: (context) => const PluginListPage(),

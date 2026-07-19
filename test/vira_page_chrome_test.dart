@@ -38,6 +38,8 @@ void main() {
     expect(find.byTooltip('搜索'), findsOneWidget);
     expect(find.byTooltip('切换主题'), findsOneWidget);
     expect(find.byTooltip('个人与设置'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('vira-brand-mascot-badge')), findsOneWidget);
     expect(find.text('页面内容'), findsOneWidget);
 
     await tester.tap(find.text('发现'));

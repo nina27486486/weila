@@ -8,12 +8,45 @@ class PlayerDiagnosticIssue {
   final IconData icon;
   final String title;
   final String message;
+  final String? sourceLabel;
+  final String? variantLabel;
 
   const PlayerDiagnosticIssue({
     required this.icon,
     required this.title,
     required this.message,
+    this.sourceLabel,
+    this.variantLabel,
   });
+
+  String? get selectionLabel {
+    final source = sourceLabel?.trim();
+    final variant = variantLabel?.trim();
+    if (source?.isNotEmpty == true && variant?.isNotEmpty == true) {
+      return '线路：$source · 清晰度：$variant';
+    }
+    if (source?.isNotEmpty == true) return '线路：$source';
+    if (variant?.isNotEmpty == true) return '清晰度：$variant';
+    return null;
+  }
+}
+
+class PlayerDiagnosticMetrics {
+  const PlayerDiagnosticMetrics({
+    this.sourceResolveDuration,
+    this.manifestDuration,
+    this.firstFrameDuration,
+    this.rebufferCount = 0,
+    this.totalRebufferDuration = Duration.zero,
+    this.autoSwitchCount = 0,
+  });
+
+  final Duration? sourceResolveDuration;
+  final Duration? manifestDuration;
+  final Duration? firstFrameDuration;
+  final int rebufferCount;
+  final Duration totalRebufferDuration;
+  final int autoSwitchCount;
 }
 
 class PlayerLoadingOverlay extends StatelessWidget {
@@ -126,6 +159,7 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
   final int currentSourceIndex;
   final int sourceCount;
   final Duration position;
+  final PlayerDiagnosticMetrics metrics;
   final VoidCallback onRetry;
   final VoidCallback? onSwitchSource;
   final VoidCallback onBack;
@@ -136,6 +170,7 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
     this.currentSourceIndex = 0,
     this.sourceCount = 1,
     this.position = Duration.zero,
+    this.metrics = const PlayerDiagnosticMetrics(),
     required this.onRetry,
     this.onSwitchSource,
     required this.onBack,
@@ -181,8 +216,7 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                AppTheme.primaryBlue.withValues(alpha: 0.16),
+                            color: AppTheme.primaryBlue.withValues(alpha: 0.16),
                             blurRadius: 42,
                             spreadRadius: -12,
                             offset: const Offset(0, 18),
@@ -251,6 +285,17 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
+                          if (issue.selectionLabel != null) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              issue.selectionLabel!,
+                              style: const TextStyle(
+                                color: AppTheme.primaryBlue,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 18),
                           Wrap(
                             spacing: 10,
@@ -268,6 +313,35 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
                                 icon: Icons.auto_fix_high_rounded,
                                 label: '已尝试自动恢复',
                               ),
+                              if (metrics.sourceResolveDuration != null)
+                                _DiagnosticMetricChip(
+                                  icon: Icons.account_tree_outlined,
+                                  label:
+                                      '源解析 ${_formatMetricDuration(metrics.sourceResolveDuration!)}',
+                                ),
+                              if (metrics.manifestDuration != null)
+                                _DiagnosticMetricChip(
+                                  icon: Icons.description_outlined,
+                                  label:
+                                      'Manifest ${_formatMetricDuration(metrics.manifestDuration!)}',
+                                ),
+                              if (metrics.firstFrameDuration != null)
+                                _DiagnosticMetricChip(
+                                  icon: Icons.video_stable_outlined,
+                                  label:
+                                      '首帧 ${_formatMetricDuration(metrics.firstFrameDuration!)}',
+                                ),
+                              if (metrics.rebufferCount > 0)
+                                _DiagnosticMetricChip(
+                                  icon: Icons.hourglass_bottom_rounded,
+                                  label:
+                                      '重缓冲 ${metrics.rebufferCount} 次 · ${_formatMetricDuration(metrics.totalRebufferDuration)}',
+                                ),
+                              if (metrics.autoSwitchCount > 0)
+                                _DiagnosticMetricChip(
+                                  icon: Icons.swap_horiz_rounded,
+                                  label: '自动切线 ${metrics.autoSwitchCount} 次',
+                                ),
                             ],
                           ),
                           const SizedBox(height: 20),
@@ -363,6 +437,11 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
     final seconds = value.inSeconds.remainder(60).toString().padLeft(2, '0');
     if (hours > 0) return '$hours:$minutes:$seconds';
     return '$minutes:$seconds';
+  }
+
+  static String _formatMetricDuration(Duration value) {
+    if (value.inMilliseconds < 1000) return '${value.inMilliseconds}ms';
+    return '${(value.inMilliseconds / 1000).toStringAsFixed(1)}s';
   }
 
   static ButtonStyle get _primaryButtonStyle => FilledButton.styleFrom(

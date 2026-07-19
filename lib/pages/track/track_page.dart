@@ -24,6 +24,12 @@ class _TrackPageState extends State<TrackPage> {
   }
 
   @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ViraPageScaffold(
       activeDestination: ViraDestination.following,
@@ -65,10 +71,16 @@ class _TrackPageState extends State<TrackPage> {
             onSectionSelected: (section) {
               if (section == 'calendar') Modular.to.navigate('/calendar');
             },
-            onOpen: (entry) => Modular.to.pushNamed(
-              '/detail?url=${Uri.encodeComponent(entry.id)}'
-              '&name=${Uri.encodeComponent(entry.title)}',
-            ),
+            onOpen: (entry) {
+              final item = _store.trackList
+                  .where((candidate) => candidate.animeUrl == entry.id)
+                  .firstOrNull;
+              Modular.to.pushNamed(
+                '/detail?url=${Uri.encodeComponent(entry.id)}'
+                '&name=${Uri.encodeComponent(entry.title)}'
+                '${item?.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item!.contentId!)}' : ''}',
+              );
+            },
             onRemove: (entry) => _store.removeTrack(entry.id),
           );
         },

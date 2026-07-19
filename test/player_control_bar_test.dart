@@ -20,6 +20,11 @@ Widget _buildControlBar({
   ValueChanged<double>? onVolumeChanged,
   ValueChanged<double>? onSpeedChanged,
   VoidCallback? onToggleFullscreen,
+  List<PlayerControlMenuOption> sourceOptions = const [],
+  List<PlayerControlMenuOption> qualityOptions = const [],
+  String? qualityUnavailableMessage,
+  ValueChanged<String>? onSourceSelected,
+  ValueChanged<String>? onQualitySelected,
 }) {
   return MaterialApp(
     theme: AppTheme.darkTheme,
@@ -45,6 +50,11 @@ Widget _buildControlBar({
             onVolumeChanged: onVolumeChanged ?? (_) {},
             onSpeedChanged: onSpeedChanged ?? (_) {},
             onToggleFullscreen: onToggleFullscreen ?? () {},
+            sourceOptions: sourceOptions,
+            qualityOptions: qualityOptions,
+            qualityUnavailableMessage: qualityUnavailableMessage,
+            onSourceSelected: onSourceSelected,
+            onQualitySelected: onQualitySelected,
           ),
         ),
       ),
@@ -189,5 +199,88 @@ void main() {
         findsOneWidget,
       );
     }
+  });
+
+  testWidgets('控制条展示线路和清晰度菜单并转发选择', (tester) async {
+    String? selectedSource;
+    String? selectedQuality;
+    await tester.pumpWidget(
+      _buildControlBar(
+        sourceOptions: const [
+          PlayerControlMenuOption(
+            id: 'auto',
+            label: '自动',
+            selected: false,
+          ),
+          PlayerControlMenuOption(
+            id: 'primary',
+            label: '主线',
+            selected: true,
+          ),
+          PlayerControlMenuOption(
+            id: 'backup',
+            label: '备用',
+            selected: false,
+            detail: '良好 · 首帧 1.8s',
+          ),
+        ],
+        qualityOptions: const [
+          PlayerControlMenuOption(
+            id: 'auto',
+            label: '自动',
+            selected: false,
+          ),
+          PlayerControlMenuOption(
+            id: '1080p',
+            label: '1080P',
+            selected: true,
+          ),
+          PlayerControlMenuOption(
+            id: '720p',
+            label: '720P',
+            selected: false,
+          ),
+        ],
+        onSourceSelected: (value) => selectedSource = value,
+        onQualitySelected: (value) => selectedQuality = value,
+      ),
+    );
+
+    expect(find.byTooltip('线路'), findsOneWidget);
+    expect(find.byTooltip('清晰度'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('线路'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    expect(find.text('良好 · 首帧 1.8s'), findsOneWidget);
+    await tester.tap(find.text('备用').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('清晰度'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    await tester.tap(find.text('720P').last);
+    await tester.pumpAndSettle();
+
+    expect(selectedSource, 'backup');
+    expect(selectedQuality, '720p');
+  });
+
+  testWidgets('单一原始画质显示不可切换说明', (tester) async {
+    await tester.pumpWidget(
+      _buildControlBar(
+        qualityUnavailableMessage: '当前线路未提供可切换清晰度',
+      ),
+    );
+
+    await tester.tap(find.byTooltip('清晰度'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('当前线路未提供可切换清晰度'), findsOneWidget);
+    final entries = tester.widgetList<PopupMenuItem<String>>(
+      find.byType(PopupMenuItem<String>),
+    );
+    expect(entries, isNotEmpty);
+    expect(entries.every((entry) => !entry.enabled), isTrue);
   });
 }

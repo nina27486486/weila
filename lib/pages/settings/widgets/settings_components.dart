@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/vira_colors.dart';
 import '../../../utils/animations.dart';
+import '../../../widgets/vira_mascot_badge.dart';
+import '../../../services/download/download_settings.dart';
 
 class SettingsNavDestination {
   const SettingsNavDestination({
@@ -278,18 +280,10 @@ class SettingsNavigation extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryBlue.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(
-                      Icons.movie_filter_rounded,
-                      color: AppTheme.primaryBlue,
-                      size: 16,
-                    ),
+                  const ViraMascotBadge(
+                    key: ValueKey('settings-navigation-mascot-badge'),
+                    size: 30,
+                    borderRadius: 8,
                   ),
                   const SizedBox(width: 9),
                   Expanded(
@@ -1294,6 +1288,239 @@ class _StatusBadge extends StatelessWidget {
                 Theme.of(context).textTheme.labelSmall?.copyWith(color: color),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class DownloadNetworkSettingsPanel extends StatefulWidget {
+  const DownloadNetworkSettingsPanel({
+    super.key,
+    required this.settings,
+    required this.onSave,
+  });
+
+  final DownloadSettings settings;
+  final ValueChanged<DownloadSettings> onSave;
+
+  @override
+  State<DownloadNetworkSettingsPanel> createState() =>
+      _DownloadNetworkSettingsPanelState();
+}
+
+class _DownloadNetworkSettingsPanelState
+    extends State<DownloadNetworkSettingsPanel> {
+  late DownloadProxyMode _proxyMode;
+  late final TextEditingController _customProxyController;
+  late final TextEditingController _concurrencyController;
+  late final TextEditingController _retriesController;
+
+  @override
+  void initState() {
+    super.initState();
+    final settings = widget.settings.normalized();
+    _proxyMode = settings.proxyMode;
+    _customProxyController = TextEditingController(text: settings.customProxy);
+    _concurrencyController = TextEditingController(
+      text: settings.segmentConcurrency.toString(),
+    );
+    _retriesController = TextEditingController(
+      text: settings.segmentRetries.toString(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _customProxyController.dispose();
+    _concurrencyController.dispose();
+    _retriesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '下载网络',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '为离线缓存配置代理、单集分片并发和失败重试次数。',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 16),
+          _ProxyModeOption(
+            key: const ValueKey('download-proxy-direct'),
+            selected: _proxyMode == DownloadProxyMode.direct,
+            title: '直连',
+            subtitle: '不使用代理，适合大多数 CDN 直连场景',
+            onTap: () => _setProxyMode(DownloadProxyMode.direct),
+          ),
+          _ProxyModeOption(
+            key: const ValueKey('download-proxy-system'),
+            selected: _proxyMode == DownloadProxyMode.system,
+            title: '跟随系统代理',
+            subtitle: '读取系统/环境代理配置',
+            onTap: () => _setProxyMode(DownloadProxyMode.system),
+          ),
+          _ProxyModeOption(
+            key: const ValueKey('download-proxy-custom'),
+            selected: _proxyMode == DownloadProxyMode.custom,
+            title: '自定义 HTTP 代理',
+            subtitle: '例如 127.0.0.1:7890',
+            onTap: () => _setProxyMode(DownloadProxyMode.custom),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            key: const ValueKey('download-custom-proxy-field'),
+            controller: _customProxyController,
+            decoration: const InputDecoration(
+              labelText: '代理地址',
+              hintText: '127.0.0.1:7890',
+              prefixIcon: Icon(Icons.route_outlined),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('download-segment-concurrency-field'),
+                  controller: _concurrencyController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '分片并发',
+                    helperText: '范围 1-8，默认 4',
+                    prefixIcon: Icon(Icons.call_split_rounded),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('download-segment-retries-field'),
+                  controller: _retriesController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: '分片重试',
+                    helperText: '范围 0-5，默认 3',
+                    prefixIcon: Icon(Icons.refresh_rounded),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.icon(
+              key: const ValueKey('download-network-save'),
+              onPressed: _save,
+              icon: const Icon(Icons.check_rounded),
+              label: const Text('保存下载网络设置'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _setProxyMode(DownloadProxyMode? mode) {
+    if (mode == null) return;
+    setState(() => _proxyMode = mode);
+  }
+
+  void _save() {
+    final settings = DownloadSettings(
+      proxyMode: _proxyMode,
+      customProxy: _customProxyController.text,
+      segmentConcurrency: int.tryParse(_concurrencyController.text) ?? 4,
+      segmentRetries: int.tryParse(_retriesController.text) ?? 3,
+    ).normalized();
+    widget.onSave(settings);
+  }
+}
+
+class _ProxyModeOption extends StatelessWidget {
+  const _ProxyModeOption({
+    super.key,
+    required this.selected,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: title,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: AppAnimations.fast,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppTheme.primaryBlue.withValues(alpha: 0.09)
+                    : colors.bgSurface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected ? AppTheme.primaryBlue : colors.divider,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    selected
+                        ? Icons.radio_button_checked_rounded
+                        : Icons.radio_button_off_rounded,
+                    color: selected
+                        ? AppTheme.primaryBlue
+                        : colors.textSecondary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style:
+                              Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

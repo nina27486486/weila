@@ -24,6 +24,12 @@ class _CollectPageState extends State<CollectPage> {
   }
 
   @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ViraPageScaffold(
       activeDestination: ViraDestination.library,
@@ -59,10 +65,16 @@ class _CollectPageState extends State<CollectPage> {
             onSectionSelected: (section) {
               if (section == 'history') Modular.to.navigate('/history');
             },
-            onOpen: (entry) => Modular.to.pushNamed(
-              '/detail?url=${Uri.encodeComponent(entry.id)}'
-              '&name=${Uri.encodeComponent(entry.title)}',
-            ),
+            onOpen: (entry) {
+              final item = _store.collectList
+                  .where((candidate) => candidate.animeUrl == entry.id)
+                  .firstOrNull;
+              Modular.to.pushNamed(
+                '/detail?url=${Uri.encodeComponent(entry.id)}'
+                '&name=${Uri.encodeComponent(entry.title)}'
+                '${item?.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item!.contentId!)}' : ''}',
+              );
+            },
             onRemove: (entry) => _store.removeCollect(entry.id),
           );
         },

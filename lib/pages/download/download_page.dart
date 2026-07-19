@@ -5,6 +5,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 
 import '../../models/download_item.dart';
 import '../../services/download/download_service.dart';
+import '../../services/library/library_event_bus.dart';
 import '../../stores/theme_store.dart';
 import '../../theme/vira_colors.dart';
 import '../../utils/error_handler.dart';
@@ -12,7 +13,14 @@ import '../../widgets/vira_page_chrome.dart';
 import 'offline_library_view.dart';
 
 class DownloadPage extends StatefulWidget {
-  const DownloadPage({super.key});
+  final DownloadLibrary? service;
+  final LibraryEventBus? events;
+
+  const DownloadPage({
+    super.key,
+    this.service,
+    this.events,
+  });
 
   @override
   State<DownloadPage> createState() => _DownloadPageState();
@@ -20,27 +28,30 @@ class DownloadPage extends StatefulWidget {
 
 class _DownloadPageState extends State<DownloadPage>
     with WidgetsBindingObserver {
-  final _service = DownloadService();
+  late final DownloadLibrary _service;
+  late final LibraryEventBus _events;
+  late final StreamSubscription<LibraryChangedEvent> _downloadSubscription;
   List<DownloadItem> _downloads = [];
-  Timer? _refreshTimer;
   bool _refreshingMetadata = false;
 
   @override
   void initState() {
     super.initState();
+    _service = widget.service ?? DownloadService();
+    _events = widget.events ?? LibraryEventBus.instance;
     WidgetsBinding.instance.addObserver(this);
+    _downloadSubscription =
+        _events.streamFor(LibraryEventScope.download).listen((_) {
+      _loadDownloads();
+    });
     _loadDownloads();
     unawaited(_refreshMetadata());
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 1),
-      (_) => _loadDownloads(),
-    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _refreshTimer?.cancel();
+    unawaited(_downloadSubscription.cancel());
     super.dispose();
   }
 
@@ -88,6 +99,7 @@ class _DownloadPageState extends State<DownloadPage>
             segmentLabel: item.totalSegments > 0
                 ? '${item.downloadedSegments} / ${item.totalSegments} 分段'
                 : '',
+            failureReason: item.failureReason ?? '',
           ),
         )
         .toList(growable: false);
@@ -102,15 +114,12 @@ class _DownloadPageState extends State<DownloadPage>
         episodes: episodes,
         onPause: (episode) async {
           await _service.pauseDownload(episode.id);
-          _loadDownloads();
         },
         onResume: (episode) async {
           await _service.resumeDownload(episode.id);
-          _loadDownloads();
         },
         onRetry: (episode) async {
           await _service.retryDownload(episode.id);
-          _loadDownloads();
         },
         onPlay: (episode) {
           final item = _findItem(episode.id);
@@ -164,7 +173,8 @@ class _DownloadPageState extends State<DownloadPage>
       '&animeUrl=${Uri.encodeComponent(item.animeUrl)}'
       '&animeName=${Uri.encodeComponent(item.animeName)}'
       '&cover=${Uri.encodeComponent(item.cover ?? '')}'
-      '&source=${Uri.encodeComponent(item.sourcePlugin)}',
+      '&source=${Uri.encodeComponent(item.sourcePlugin)}'
+      '${item.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item.contentId!)}' : ''}',
     );
   }
 
@@ -197,7 +207,6 @@ class _DownloadPageState extends State<DownloadPage>
 
     if (confirmed == true) {
       await _service.cancelDownload(item.episodeUrl);
-      _loadDownloads();
     }
   }
 

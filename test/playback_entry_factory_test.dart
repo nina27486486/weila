@@ -10,11 +10,15 @@ void main() {
       episodeName: '第01集',
       episodeUrl: 'https://example.com/ep-1.m3u8',
       sourcePlugin: 'cms_yinhua',
+      contentId: 'opaque-content',
+      episodeId: 'episode:1',
     );
 
     expect(item.animeName, '世界在起舞');
     expect(item.episodeName, '第01集');
     expect(item.cover, 'https://example.com/cover.webp');
+    expect(item.contentId, 'opaque-content');
+    expect(item.episodeId, 'episode:1');
   });
 
   test('history entry keeps anime title and cover for the timeline', () {
@@ -27,10 +31,14 @@ void main() {
       sourcePlugin: 'cms_yinhua',
       position: const Duration(minutes: 3),
       duration: const Duration(minutes: 24),
+      contentId: 'opaque-content',
+      episodeId: 'episode:1',
     );
 
     expect(item.animeName, '世界在起舞');
     expect(item.episodeName, '第01集');
     expect(item.cover, 'https://example.com/cover.webp');
+    expect(item.contentId, 'opaque-content');
+    expect(item.episodeId, 'episode:1');
   });
 }

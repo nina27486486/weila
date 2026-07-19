@@ -6,13 +6,27 @@ import 'package:dio/io.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/download_item.dart';
+import '../storage/storage_service.dart';
+import 'download_settings.dart';
+import 'segment_downloader.dart';
+import '../library/library_event_bus.dart';
 import '../library/media_metadata_service.dart';
 import '../../utils/constants.dart';
 import '../../utils/logger.dart';
 
 /// 下载服务 — 管理 M3U8 视频流下载
 /// 单例模式，最大并发 3 个下载任务
-class DownloadService {
+abstract class DownloadLibrary {
+  List<DownloadItem> getAllDownloads();
+  Future<int> refreshMetadata();
+  Future<void> pauseDownload(String episodeUrl);
+  Future<void> resumeDownload(String episodeUrl);
+  Future<void> cancelDownload(String episodeUrl);
+  Future<void> retryDownload(String episodeUrl);
+  String? getLocalPath(String episodeUrl);
+}
+
+class DownloadService implements DownloadLibrary {
   static final DownloadService _instance = DownloadService._();
   factory DownloadService() => _instance;
   DownloadService._();
@@ -22,6 +36,7 @@ class DownloadService {
   late Dio _dio;
   late Directory _downloadDir;
   late Box<DownloadItem> _downloadBox;
+  DownloadSettings _settings = DownloadSettings.defaults;
 
   /// episodeUrl -> CancelToken（用于暂停/取消）
   final Map<String, CancelToken> _activeTokens = {};
@@ -51,13 +66,8 @@ class DownloadService {
       },
     ));
     // 禁用系统代理（CDN 直连，避免代理未开导致连接失败）
-    _dio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: () {
-        final client = HttpClient();
-        client.findProxy = (uri) => 'DIRECT';
-        return client;
-      },
-    );
+    _settings = StorageService().getDownloadSettings();
+    _applyProxySettings();
 
     // 获取应用支持目录 & 创建 downloads 子目录
     final appDir = await getApplicationSupportDirectory();
@@ -96,14 +106,31 @@ class DownloadService {
   // ============================================================
 
   /// 获取所有下载任务
+  @override
   List<DownloadItem> getAllDownloads() {
     _ensureInitialized();
     return _downloadBox.values.toList();
   }
 
+  @override
   Future<int> refreshMetadata() async {
     _ensureInitialized();
-    return _metadataService.hydrateDownloads(_downloadBox.values);
+    final changed =
+        await _metadataService.hydrateDownloads(_downloadBox.values);
+    if (changed > 0) {
+      _publishDownloadChanged('metadata-refresh');
+    }
+    return changed;
+  }
+
+  Future<void> configure(DownloadSettings settings) async {
+    final normalized = settings.normalized();
+    _settings = normalized;
+    if (_initialized) {
+      await StorageService().setDownloadSettings(normalized);
+      _applyProxySettings();
+      _publishDownloadChanged('download-settings-updated');
+    }
   }
 
   /// 添加下载任务到队列
@@ -127,14 +154,17 @@ class DownloadService {
 
     item.status = 0; // 等待中
     item.progress = 0.0;
+    item.failureReason = null;
     await _downloadBox.put(item.episodeUrl, item);
     _activeTasks[item.episodeUrl] = item;
+    _publishDownloadChanged('add-download', item.episodeUrl);
 
     Log.d('Download', '添加下载: ${item.animeName} - ${item.episodeName}');
     _processQueue();
   }
 
   /// 暂停下载
+  @override
   Future<void> pauseDownload(String episodeUrl) async {
     _ensureInitialized();
     final item = _activeTasks[episodeUrl];
@@ -146,12 +176,14 @@ class DownloadService {
 
     item.status = 3; // 已暂停
     await item.save();
+    _publishDownloadChanged('pause-download', item.episodeUrl);
 
     Log.d('Download', '已暂停: ${item.episodeName}');
     _processQueue();
   }
 
   /// 恢复下载
+  @override
   Future<void> resumeDownload(String episodeUrl) async {
     _ensureInitialized();
     final item = _activeTasks[episodeUrl];
@@ -159,13 +191,16 @@ class DownloadService {
     if (item.status != 3) return; // 只有暂停状态才能恢复
 
     item.status = 0; // 重置为等待中
+    item.failureReason = null;
     await item.save();
+    _publishDownloadChanged('resume-download', item.episodeUrl);
 
     Log.d('Download', '恢复下载: ${item.episodeName}');
     _processQueue();
   }
 
   /// 取消下载并删除部分文件
+  @override
   Future<void> cancelDownload(String episodeUrl) async {
     _ensureInitialized();
     final item = _activeTasks[episodeUrl];
@@ -181,12 +216,14 @@ class DownloadService {
     // 从队列中移除
     await _downloadBox.delete(episodeUrl);
     _activeTasks.remove(episodeUrl);
+    _publishDownloadChanged('cancel-download', episodeUrl);
 
     Log.d('Download', '已取消: ${item.episodeName}');
     _processQueue();
   }
 
   /// 重试失败的下载
+  @override
   Future<void> retryDownload(String episodeUrl) async {
     _ensureInitialized();
     final item = _activeTasks[episodeUrl];
@@ -196,7 +233,9 @@ class DownloadService {
     item.status = 0;
     item.progress = 0.0;
     item.downloadedSegments = 0;
+    item.failureReason = null;
     await item.save();
+    _publishDownloadChanged('retry-download', item.episodeUrl);
 
     Log.d('Download', '重试下载: ${item.episodeName}');
     _processQueue();
@@ -219,6 +258,7 @@ class DownloadService {
   }
 
   /// 获取本地文件路径（用于播放）
+  @override
   String? getLocalPath(String episodeUrl) {
     _ensureInitialized();
     final item = _downloadBox.get(episodeUrl);
@@ -255,7 +295,9 @@ class DownloadService {
 
   Future<void> _startDownload(DownloadItem item) async {
     item.status = 1; // 下载中
+    item.failureReason = null;
     await item.save();
+    _publishDownloadChanged('start-download', item.episodeUrl);
 
     final cancelToken = CancelToken();
     _activeTokens[item.episodeUrl] = cancelToken;
@@ -287,6 +329,7 @@ class DownloadService {
 
       item.totalSegments = segmentUrls.length;
       await item.save();
+      _publishDownloadChanged('download-segments-ready', item.episodeUrl);
       Log.d('Download', '共 ${segmentUrls.length} 个分片');
 
       // 3. 准备临时目录和最终文件路径
@@ -305,27 +348,30 @@ class DownloadService {
       final outputPath = '${animeDir.path}/$safeEpisode.mp4';
 
       // 4. 下载每个分片（从已下载的分片继续）
-      int startIndex = item.downloadedSegments;
-      for (int i = startIndex; i < segmentUrls.length; i++) {
-        if (cancelToken.isCancelled) return;
-
-        final segmentFile = File('${tempDir.path}/seg_$i.ts');
-        // 如果分片已存在（断点续传），跳过下载
-        if (!await segmentFile.exists()) {
-          final segmentData = await _fetchSegment(
-            segmentUrls[i],
-            item.referer,
-            cancelToken,
-          );
-          if (cancelToken.isCancelled) return;
-          await segmentFile.writeAsBytes(segmentData);
-        }
-
-        item.downloadedSegments = i + 1;
-        item.progress = (i + 1) / segmentUrls.length;
-        await item.save();
-      }
-
+      final downloader = DownloadSegmentDownloader(
+        fetcher: (request) => _fetchSegment(
+          request.url,
+          request.referer,
+          request.cancelToken,
+        ),
+      );
+      await downloader.downloadAll(
+        urls: segmentUrls,
+        referer: item.referer,
+        cancelToken: cancelToken,
+        concurrency: _settings.segmentConcurrency,
+        retries: _settings.segmentRetries,
+        exists: (index) => File('${tempDir.path}/seg_$index.ts').exists(),
+        write: (index, bytes) async {
+          await File('${tempDir.path}/seg_$index.ts').writeAsBytes(bytes);
+        },
+        onProgress: (completedSegments) async {
+          item.downloadedSegments = completedSegments;
+          item.progress = completedSegments / segmentUrls.length;
+          await item.save();
+          _publishDownloadChanged('download-progress', item.episodeUrl);
+        },
+      );
       if (cancelToken.isCancelled) return;
 
       // 5. 合并所有分片为 .mp4 文件
@@ -350,7 +396,9 @@ class DownloadService {
       item.status = 2;
       item.progress = 1.0;
       item.localPath = outputPath;
+      item.failureReason = null;
       await item.save();
+      _publishDownloadChanged('download-complete', item.episodeUrl);
 
       Log.d('Download', '下载完成: ${item.episodeName} -> $outputPath');
     } catch (e) {
@@ -365,13 +413,16 @@ class DownloadService {
           // 异常中断：标记为失败，释放槽位
           Log.d('Download', '异常中断，标记为失败');
           item.status = 4;
+          item.failureReason = _failureReasonFor(e);
           await item.save();
+          _publishDownloadChanged('download-failed', item.episodeUrl);
         }
         return;
       }
 
       Log.e('Download', '下载失败: ${item.episodeName}', e);
       item.status = 4; // 失败
+      item.failureReason = _failureReasonFor(e);
       // DEBUG: 写错误详情到文件
       try {
         final f = File('${_downloadDir.path}/error_log.txt');
@@ -385,6 +436,7 @@ class DownloadService {
         );
       } catch (_) {}
       await item.save();
+      _publishDownloadChanged('download-failed', item.episodeUrl);
     } finally {
       _activeTokens.remove(item.episodeUrl);
       _processQueue(); // 尝试启动下一个任务
@@ -568,5 +620,46 @@ class DownloadService {
     } catch (_) {
       return null;
     }
+  }
+
+  String _failureReasonFor(Object error) {
+    if (error is SegmentDownloadException) {
+      return error.userMessage;
+    }
+    if (error is DioException) {
+      return switch (error.type) {
+        DioExceptionType.connectionTimeout => '连接超时，请检查网络或代理设置',
+        DioExceptionType.sendTimeout => '发送超时，请稍后重试',
+        DioExceptionType.receiveTimeout => '接收超时，请稍后重试',
+        DioExceptionType.badCertificate => '证书校验失败',
+        DioExceptionType.badResponse =>
+          '服务器响应异常 ${error.response?.statusCode ?? ''}'.trim(),
+        DioExceptionType.cancel => '下载已取消',
+        DioExceptionType.connectionError => '连接失败，请检查网络或代理设置',
+        DioExceptionType.unknown => error.message ?? '未知网络错误',
+        _ => error.message ?? '未知网络错误',
+      };
+    }
+    final message = error.toString();
+    return message.length > 140 ? '${message.substring(0, 140)}…' : message;
+  }
+
+  void _applyProxySettings() {
+    final settings = _settings.normalized();
+    _dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient();
+        client.findProxy = settings.proxyRuleFor;
+        return client;
+      },
+    );
+  }
+
+  void _publishDownloadChanged(String reason, [String? key]) {
+    LibraryEventBus.instance.publish(LibraryChangedEvent.now(
+      scope: LibraryEventScope.download,
+      reason: reason,
+      key: key,
+    ));
   }
 }

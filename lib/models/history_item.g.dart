@@ -26,13 +26,15 @@ class HistoryItemAdapter extends TypeAdapter<HistoryItem> {
       position: fields[6] == null ? Duration.zero : fields[6] as Duration,
       duration: fields[7] == null ? Duration.zero : fields[7] as Duration,
       watchedAt: fields[8] as DateTime?,
+      contentId: fields[9] as String?,
+      episodeId: fields[10] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, HistoryItem obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.animeName)
       ..writeByte(1)
@@ -50,7 +52,11 @@ class HistoryItemAdapter extends TypeAdapter<HistoryItem> {
       ..writeByte(7)
       ..write(obj.duration)
       ..writeByte(8)
-      ..write(obj.watchedAt);
+      ..write(obj.watchedAt)
+      ..writeByte(9)
+      ..write(obj.contentId)
+      ..writeByte(10)
+      ..write(obj.episodeId);
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:flutter_modular/flutter_modular.dart';
 import '../theme/app_theme.dart';
 import '../theme/vira_colors.dart';
 import '../utils/animations.dart';
+import 'vira_mascot_badge.dart';
 
 class LeftSidebar extends StatefulWidget {
   const LeftSidebar({
@@ -36,23 +37,10 @@ class _LeftSidebarState extends State<LeftSidebar> {
             padding: const EdgeInsets.fromLTRB(18, 20, 14, 18),
             child: Row(
               children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryBlue,
-                    borderRadius: BorderRadius.circular(9),
-                    border:
-                        Border.all(color: Colors.white.withValues(alpha: 0.16)),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Text(
-                    '薇',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700),
-                  ),
+                const ViraMascotBadge(
+                  key: ValueKey('left-sidebar-mascot-badge'),
+                  size: 34,
+                  borderRadius: 10,
                 ),
                 const SizedBox(width: 10),
                 Column(

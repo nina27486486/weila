@@ -3,11 +3,16 @@ import '../../utils/logger.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import '../../models/plugin.dart';
+import '../../models/plugin_catalog.dart';
 import '../../models/anime.dart';
+import '../../models/playback/playback_source.dart';
 import '../../utils/constants.dart';
 import '../http/http_client.dart';
 import '../parser/xpath_parser.dart';
 import '../jikan/jikan_service.dart';
+import '../playback/cms_playback_source_parser.dart';
+import '../playback/plugin_playback_episode_adapter.dart';
+import '../playback/yinhua_playback_resolver.dart';
 
 class PluginService {
   static final PluginService _instance = PluginService._();
@@ -15,6 +20,16 @@ class PluginService {
   PluginService._();
 
   final HttpClient _http = HttpClient();
+  final CmsPlaybackSourceParser _cmsPlaybackParser =
+      const CmsPlaybackSourceParser();
+  final PluginPlaybackEpisodeAdapter _playbackEpisodeAdapter =
+      const PluginPlaybackEpisodeAdapter();
+  late final YinhuaPlaybackResolver _yinhuaPlaybackResolver =
+      YinhuaPlaybackResolver(
+    loadHtml: (uri, headers) =>
+        _http.getHtml(uri.toString(), headers: headers),
+  );
+  final Map<String, List<PlaybackEpisode>> _cmsPlaybackCache = {};
   List<Plugin> _plugins = [];
   List<Plugin> get plugins => List.unmodifiable(_plugins);
 
@@ -48,6 +63,17 @@ class PluginService {
         Log.d('Plugin', '添加默认插件: ${defaultPlugin.name}');
       }
     }
+    for (final plugin in _plugins) {
+      if (plugin.catalog != null) continue;
+      final builtIn = PluginCatalogDefaults.forPlugin(
+        plugin.api,
+        plugin.baseUrl,
+      );
+      if (builtIn != null) {
+        plugin.catalog = builtIn;
+        changed = true;
+      }
+    }
     if (changed) {
       await _savePlugins();
     }
@@ -56,6 +82,26 @@ class PluginService {
   /// 获取已启用的插件
   List<Plugin> getEnabledPlugins() {
     return _plugins.where((p) => p.enabled).toList();
+  }
+
+  static List<Plugin> enabledCatalogPlugins(Iterable<Plugin> plugins) {
+    return plugins
+        .where((plugin) => plugin.enabled && plugin.catalog != null)
+        .toList(growable: false);
+  }
+
+  static Plugin? findEnabledCatalogPlugin(
+    Iterable<Plugin> plugins,
+    String providerId,
+  ) {
+    for (final plugin in plugins) {
+      if (plugin.api == providerId &&
+          plugin.enabled &&
+          plugin.catalog != null) {
+        return plugin;
+      }
+    }
+    return null;
   }
 
   /// 搜索所有已启用的插件
@@ -312,35 +358,95 @@ class PluginService {
     }
   }
 
-  Future<Map<String, dynamic>?> _getCmsDetail(String animeUrl, String sourcePlugin) async {
+  Future<_CmsRecord?> _fetchCmsRecord(Anime anime) async {
+    final parts = anime.url.split(':');
+    if (parts.length < 2 || _plugins.isEmpty) return null;
+    final cmsId = parts[1];
+    final plugin = _plugins.firstWhere(
+      (candidate) => candidate.api == anime.sourcePlugin,
+      orElse: () => _plugins.first,
+    );
+    final url = '${plugin.baseUrl}/api.php/provide/vod/?ac=detail&ids=$cmsId';
+    Log.d('CMS', '获取详情: $url');
+    final data = await _http.getJson(
+      url,
+      headers: {'User-Agent': plugin.userAgent},
+    );
+    if (data is! Map<String, dynamic>) return null;
+    final list = data['list'] as List? ?? [];
+    if (list.isEmpty || list.first is! Map) return null;
+    return _CmsRecord(
+      plugin: plugin,
+      item: Map<String, dynamic>.from(list.first as Map),
+    );
+  }
+
+  List<PlaybackEpisode> _parseCmsPlaybackEpisodes(
+    String animeUrl,
+    _CmsRecord record,
+  ) {
+    final cached = _cmsPlaybackCache[animeUrl];
+    if (cached != null) return cached;
+    final headers = <String, String>{
+      if (record.plugin.userAgent.trim().isNotEmpty)
+        'User-Agent': record.plugin.userAgent.trim(),
+      if (record.plugin.referer?.trim().isNotEmpty == true)
+        'Referer': record.plugin.referer!.trim(),
+    };
+    final episodes = _cmsPlaybackParser.parse(
+      playFrom: record.item['vod_play_from']?.toString() ?? '',
+      playUrl: record.item['vod_play_url']?.toString() ?? '',
+      headers: headers,
+    );
+    final stable = List<PlaybackEpisode>.unmodifiable(episodes);
+    _cmsPlaybackCache[animeUrl] = stable;
+    return stable;
+  }
+
+  Future<Map<String, dynamic>?> _getCmsDetail(
+      String animeUrl, String sourcePlugin) async {
     try {
-      final parts = animeUrl.split(':');
-      if (parts.length < 2) return null;
-      final cmsId = parts[1];
-      if (_plugins.isEmpty) return null;
-      final plugin = _plugins.firstWhere((p) => p.api == sourcePlugin, orElse: () => _plugins.first);
-      final url = '${plugin.baseUrl}/api.php/provide/vod/?ac=detail&ids=$cmsId';
-      Log.d('CMS', '获取详情: $url');
-      final data = await _http.getJson(url, headers: {'User-Agent': plugin.userAgent});
-      if (data is! Map<String, dynamic>) return null;
-      final list = data['list'] as List? ?? [];
-      if (list.isEmpty) return null;
-      final item = list.first as Map<String, dynamic>;
-      final playUrl = item['vod_play_url']?.toString() ?? '';
-      final playFrom = item['vod_play_from']?.toString() ?? '';
-      final episodes = playUrl.isNotEmpty ? _parseCmsPlayUrl(playUrl, playFrom) : <Map<String, dynamic>>[];
-      final tags = (item['vod_class']?.toString() ?? '').split(',').where((t) => t.trim().isNotEmpty).toList();
+      final anime = Anime(
+        name: '',
+        url: animeUrl,
+        sourcePlugin: sourcePlugin,
+      );
+      final record = await _fetchCmsRecord(anime);
+      if (record == null) return null;
+      final plugin = record.plugin;
+      final item = record.item;
+      final playbackEpisodes = _parseCmsPlaybackEpisodes(animeUrl, record);
+      final episodes = <Map<String, dynamic>>[];
+      for (final episode in playbackEpisodes) {
+        final resolved =
+            const PlaybackSelection.auto().resolve(episode.sources);
+        if (resolved == null) continue;
+        episodes.add({
+          'sort': episode.index,
+          'name': episode.name,
+          'url': resolved.variant.url,
+        });
+      }
+      final tags = (item['vod_class']?.toString() ?? '')
+          .split(',')
+          .where((t) => t.trim().isNotEmpty)
+          .toList();
       return {
         'name': item['vod_name']?.toString() ?? '',
         'name_cn': item['vod_name']?.toString() ?? '',
         'name_ja': item['vod_sub']?.toString() ?? '',
-        'summary': _stripHtml(item['vod_content']?.toString() ?? item['vod_blurb']?.toString() ?? ''),
+        'summary': _stripHtml(item['vod_content']?.toString() ??
+            item['vod_blurb']?.toString() ??
+            ''),
         'cover': _fixCoverUrl(item['vod_pic']?.toString(), plugin.baseUrl),
         'rating': double.tryParse(item['vod_score']?.toString() ?? ''),
         'tags': tags,
-        'date': item['vod_pubdate']?.toString() ?? item['vod_year']?.toString() ?? '',
+        'date': item['vod_pubdate']?.toString() ??
+            item['vod_year']?.toString() ??
+            '',
         'platform': item['vod_area']?.toString() ?? '',
-        'total_episodes': int.tryParse(item['vod_total']?.toString() ?? '') ?? episodes.length,
+        'total_episodes': int.tryParse(item['vod_total']?.toString() ?? '') ??
+            episodes.length,
         'episodes': episodes,
         'status': item['vod_remarks']?.toString(),
       };
@@ -350,38 +456,18 @@ class PluginService {
     }
   }
 
-  Future<List<Episode>> _getCmsEpisodes(String animeUrl, String sourcePlugin) async {
+  Future<List<Episode>> _getCmsEpisodes(
+      String animeUrl, String sourcePlugin) async {
     final detail = await _getCmsDetail(animeUrl, sourcePlugin);
     if (detail == null) return [];
     final eps = detail['episodes'] as List? ?? [];
-    return eps.map((ep) => Episode(
-      name: ep['name'] ?? '第${ep['sort']}集',
-      url: ep['url'] ?? '',
-      index: ep['sort'] ?? 0,
-    )).toList();
-  }
-
-  List<Map<String, dynamic>> _parseCmsPlayUrl(String playUrl, String playFrom) {
-    final episodes = <Map<String, dynamic>>[];
-    final groups = playUrl.split(r'$$$');
-    int preferredGroup = 0;
-    for (int i = 0; i < groups.length; i++) {
-      if (groups[i].contains('.m3u8')) { preferredGroup = i; break; }
-    }
-    if (preferredGroup < groups.length) {
-      final group = groups[preferredGroup];
-      int epNum = 1;
-      for (final ep in group.split('#')) {
-        final idx = ep.indexOf(r'$');
-        if (idx > 0) {
-          final title = ep.substring(0, idx).trim();
-          final url = ep.substring(idx + 1).trim();
-          episodes.add({'sort': epNum, 'name': title.isEmpty ? '第$epNum集' : title, 'url': url});
-          epNum++;
-        }
-      }
-    }
-    return episodes;
+    return eps
+        .map((ep) => Episode(
+              name: ep['name'] ?? '第${ep['sort']}集',
+              url: ep['url'] ?? '',
+              index: ep['sort'] ?? 0,
+            ))
+        .toList();
   }
 
   Future<List<Map<String, dynamic>>> getCmsLatest({String? pluginApi, int page = 1}) async {
@@ -768,6 +854,103 @@ class PluginService {
     }
   }
 
+  /// 获取保留线路信息的运行时章节列表。
+  Future<List<PlaybackEpisode>> getPlaybackEpisodes(Anime anime) async {
+    if (anime.sourcePlugin.startsWith('cms_')) {
+      final cached = _cmsPlaybackCache[anime.url];
+      if (cached != null) return cached;
+      try {
+        final record = await _fetchCmsRecord(anime);
+        if (record == null) return [];
+        return _parseCmsPlaybackEpisodes(anime.url, record);
+      } catch (e) {
+        Log.d('Plugin', '获取 CMS 播放线路失败: $e');
+        return [];
+      }
+    }
+
+    final episodes = await getEpisodes(anime);
+    return episodes
+        .map(
+          (episode) => PlaybackEpisode(
+            name: episode.name,
+            index: episode.index,
+            sources: const [],
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  /// 按需解析指定章节的播放线路。
+  Future<PlaybackEpisode> resolvePlaybackEpisode({
+    required Anime anime,
+    required Episode episode,
+  }) async {
+    if (anime.sourcePlugin.startsWith('cms_')) {
+      final episodes = await getPlaybackEpisodes(anime);
+      PlaybackEpisode? matched;
+      for (final candidate in episodes) {
+        if (candidate.index == episode.index) {
+          matched = candidate;
+          break;
+        }
+      }
+      if (matched == null) {
+        final normalizedName = _normalizeEpisodeName(episode.name);
+        for (final candidate in episodes) {
+          if (_normalizeEpisodeName(candidate.name) == normalizedName) {
+            matched = candidate;
+            break;
+          }
+        }
+      }
+      if (matched == null) {
+        return PlaybackEpisode(
+          name: episode.name,
+          index: episode.index,
+          sources: const [],
+        );
+      }
+      if (anime.sourcePlugin == 'cms_yinhua') {
+        final cmsId = anime.url.split(':').skip(1).join(':').trim();
+        if (cmsId.isNotEmpty) {
+          final plugin = _plugins.firstWhere(
+            (candidate) => candidate.api == anime.sourcePlugin,
+            orElse: () => _plugins.first,
+          );
+          return _yinhuaPlaybackResolver.resolveEpisode(
+            baseUrl: Uri.parse(plugin.baseUrl),
+            cmsId: cmsId,
+            episode: matched,
+          );
+        }
+      }
+      return matched;
+    }
+
+    if (_plugins.isEmpty) {
+      return PlaybackEpisode(
+        name: episode.name,
+        index: episode.index,
+        sources: const [],
+      );
+    }
+    final plugin = _plugins.firstWhere(
+      (candidate) => candidate.api == anime.sourcePlugin,
+      orElse: () => _plugins.first,
+    );
+    final urls = await getVideoUrls(episode.url, plugin);
+    return _playbackEpisodeAdapter.fromHtml(
+      episode: episode,
+      plugin: plugin,
+      urls: urls,
+    );
+  }
+
+  String _normalizeEpisodeName(String value) {
+    return value.toLowerCase().replaceAll(RegExp(r'\s+'), '');
+  }
+
   /// 获取视频源URL
   Future<List<String>> getVideoUrls(String episodeUrl, Plugin plugin) async {
     try {
@@ -925,6 +1108,7 @@ class PluginService {
         chapterResult: '',
         userAgent: AppConstants.defaultUserAgent,
         enabled: true,
+        catalog: PluginCatalogDefaults.ffzy,
       ),
       // 樱花动漫 CMS API
       Plugin(
@@ -940,6 +1124,7 @@ class PluginService {
         chapterResult: '',
         userAgent: AppConstants.defaultUserAgent,
         enabled: true,
+        catalog: PluginCatalogDefaults.yinhua,
       ),
     ];
   }
@@ -985,4 +1170,14 @@ class PluginService {
   Future<List<Map<String, dynamic>>> getJikanCharacters(int malId) async {
     return await JikanService().getAnimeCharacters(malId);
   }
+}
+
+class _CmsRecord {
+  const _CmsRecord({
+    required this.plugin,
+    required this.item,
+  });
+
+  final Plugin plugin;
+  final Map<String, dynamic> item;
 }

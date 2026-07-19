@@ -62,4 +62,34 @@ void main() {
     );
     expect(pointerRegions.length, greaterThanOrEqualTo(5));
   });
+
+  testWidgets('设置侧栏版本卡使用看板娘品牌徽章', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 700));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: SettingsNavigation(
+            destinations: const [
+              SettingsNavDestination(
+                icon: Icons.palette_outlined,
+                selectedIcon: Icons.palette,
+                label: '外观',
+              ),
+            ],
+            selectedIndex: 0,
+            version: '0.4.0',
+            onSelected: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('settings-navigation-mascot-badge')),
+      findsOneWidget,
+    );
+  });
 }

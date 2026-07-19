@@ -31,6 +31,9 @@ class DownloadItemAdapter extends TypeAdapter<DownloadItem> {
       downloadedSegments: fields[10] == null ? 0 : (fields[10] as num).toInt(),
       fileSize: fields[12] == null ? 0 : (fields[12] as num).toInt(),
       referer: fields[14] as String?,
+      failureReason: fields[15] as String?,
+      contentId: fields[16] as String?,
+      episodeId: fields[17] as String?,
       createdAt: fields[11] as DateTime?,
     );
   }
@@ -38,7 +41,7 @@ class DownloadItemAdapter extends TypeAdapter<DownloadItem> {
   @override
   void write(BinaryWriter writer, DownloadItem obj) {
     writer
-      ..writeByte(15)
+      ..writeByte(18)
       ..writeByte(0)
       ..write(obj.animeName)
       ..writeByte(1)
@@ -68,7 +71,13 @@ class DownloadItemAdapter extends TypeAdapter<DownloadItem> {
       ..writeByte(13)
       ..write(obj.m3u8Url)
       ..writeByte(14)
-      ..write(obj.referer);
+      ..write(obj.referer)
+      ..writeByte(15)
+      ..write(obj.failureReason)
+      ..writeByte(16)
+      ..write(obj.contentId)
+      ..writeByte(17)
+      ..write(obj.episodeId);
   }
 
   @override

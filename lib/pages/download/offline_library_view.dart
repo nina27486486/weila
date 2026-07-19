@@ -17,6 +17,7 @@ class OfflineEpisode {
   final double progress;
   final String fileSizeLabel;
   final String segmentLabel;
+  final String failureReason;
 
   const OfflineEpisode({
     required this.id,
@@ -27,6 +28,7 @@ class OfflineEpisode {
     required this.progress,
     this.fileSizeLabel = '',
     this.segmentLabel = '',
+    this.failureReason = '',
   });
 }
 
@@ -458,6 +460,18 @@ class _OfflineEpisodeRowState extends State<_OfflineEpisodeRow> {
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
+                  if (widget.episode.status == OfflineStatus.failed &&
+                      widget.episode.failureReason.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      widget.episode.failureReason,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colors.danger,
+                          ),
+                    ),
+                  ],
                 ],
               ),
             ),

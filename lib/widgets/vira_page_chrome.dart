@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/vira_colors.dart';
 import 'liquid_glass_surface.dart';
+import 'vira_mascot_badge.dart';
 
 enum ViraDestination { home, discover, following, library, downloads }
 
@@ -386,29 +387,8 @@ class _Brand extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: colors.sky,
-              borderRadius: BorderRadius.circular(9),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.sky.withValues(alpha: 0.18),
-                  blurRadius: 14,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: const Text(
-              '薇',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          const ViraMascotBadge(
+            key: ValueKey('vira-brand-mascot-badge'),
           ),
           const SizedBox(width: 10),
           Column(

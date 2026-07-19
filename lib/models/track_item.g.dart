@@ -26,13 +26,14 @@ class TrackItemAdapter extends TypeAdapter<TrackItem> {
       watchedEpisodes: fields[6] == null ? 0 : (fields[6] as num).toInt(),
       trackedAt: fields[7] as DateTime?,
       lastUpdated: fields[8] as DateTime?,
+      contentId: fields[9] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, TrackItem obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.animeName)
       ..writeByte(1)
@@ -50,7 +51,9 @@ class TrackItemAdapter extends TypeAdapter<TrackItem> {
       ..writeByte(7)
       ..write(obj.trackedAt)
       ..writeByte(8)
-      ..write(obj.lastUpdated);
+      ..write(obj.lastUpdated)
+      ..writeByte(9)
+      ..write(obj.contentId);
   }
 
   @override

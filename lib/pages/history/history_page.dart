@@ -32,6 +32,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _store.dispose();
     super.dispose();
   }
 
@@ -107,12 +108,13 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
                 '&animeName=${Uri.encodeComponent(item.animeName)}'
                 '&cover=${Uri.encodeComponent(item.cover ?? '')}'
                 '&ep=${item.episodeUrl.split('/ep/').last}'
-                '&source=${Uri.encodeComponent(item.sourcePlugin)}',
+                '&source=${Uri.encodeComponent(item.sourcePlugin)}'
+                '${item.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item.contentId!)}' : ''}',
               );
             },
             onRemove: (entry) async {
-              await historyById[entry.id]?.delete();
-              _store.loadHistory();
+              final item = historyById[entry.id];
+              if (item != null) await _store.removeHistory(item.animeUrl);
             },
             onClearAll: () => _confirmClear(context),
           );

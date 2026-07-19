@@ -12,6 +12,8 @@ class PlaybackEntryFactory {
     required String episodeUrl,
     required String sourcePlugin,
     String? m3u8Url,
+    String? contentId,
+    String? episodeId,
   }) {
     return DownloadItem(
       animeName: animeName,
@@ -21,6 +23,8 @@ class PlaybackEntryFactory {
       sourcePlugin: sourcePlugin,
       m3u8Url: m3u8Url ?? episodeUrl,
       cover: coverUrl,
+      contentId: contentId,
+      episodeId: episodeId,
     );
   }
 
@@ -34,6 +38,8 @@ class PlaybackEntryFactory {
     Duration position = Duration.zero,
     Duration duration = Duration.zero,
     DateTime? watchedAt,
+    String? contentId,
+    String? episodeId,
   }) {
     return HistoryItem(
       animeName: animeName,
@@ -45,6 +51,8 @@ class PlaybackEntryFactory {
       position: position,
       duration: duration,
       watchedAt: watchedAt,
+      contentId: contentId,
+      episodeId: episodeId,
     );
   }
 }

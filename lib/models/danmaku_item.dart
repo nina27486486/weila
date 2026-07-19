@@ -34,14 +34,21 @@ class DanmakuItem extends HiveObject {
     this.fontSize = 16,
   });
 
-  /// 从弹弹play API格式解析
-  /// p="时间,模式,字号,颜色" 格式
-  factory DanmakuItem.fromDandanPlay(String p, String text) {
+  /// 从弹弹play API格式解析。
+  /// p="时间,模式,颜色,用户ID"。
+  static DanmakuItem? tryParseDandanplay(String p, String text) {
     final parts = p.split(',');
-    final time = double.tryParse(parts.isNotEmpty ? parts[0] : '0') ?? 0;
+    final normalizedText = text.trim();
+    if (parts.length < 4 || normalizedText.isEmpty) return null;
+    final time = double.tryParse(parts[0]);
+    if (time == null || !time.isFinite || time < 0) return null;
     final mode = int.tryParse(parts.length > 1 ? parts[1] : '1') ?? 1;
-    final fontSize = int.tryParse(parts.length > 2 ? parts[2] : '25') ?? 25;
-    final colorValue = int.tryParse(parts.length > 3 ? parts[3] : '16777215') ?? 16777215;
+    final parsedColor = int.tryParse(parts[2]);
+    final colorValue = parsedColor != null &&
+            parsedColor >= 0 &&
+            parsedColor <= 0xFFFFFF
+        ? parsedColor
+        : 0xFFFFFF;
 
     // 弹弹play模式：1=滚动, 4=底部, 5=顶部
     int type = 0;
@@ -52,11 +59,16 @@ class DanmakuItem extends HiveObject {
     final color = 0xFF000000 | colorValue;
 
     return DanmakuItem(
-      text: text,
+      text: normalizedText,
       time: time,
       type: type,
       color: color,
-      fontSize: fontSize > 30 ? 16 : fontSize, // 限制最大字号
+      fontSize: 16,
     );
+  }
+
+  factory DanmakuItem.fromDandanPlay(String p, String text) {
+    return tryParseDandanplay(p, text) ??
+        DanmakuItem(text: text.trim(), time: 0);
   }
 }

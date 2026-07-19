@@ -6,7 +6,12 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../debug/danmaku_debug_config.dart';
 import '../../services/danmaku/danmaku_service.dart';
+import '../../services/danmaku/danmaku_credential_draft.dart';
+import '../../services/catalog/catalog_settings.dart';
+import '../../services/download/download_service.dart';
+import '../../services/download/download_settings.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/storage/storage_service.dart';
 import '../../stores/theme_store.dart';
@@ -35,6 +40,8 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _scanningCache = true;
   bool _clearingCache = false;
   String _version = AppConstants.appVersion;
+  DownloadSettings _downloadSettings = DownloadSettings.defaults;
+  bool _includeAdultCatalog = false;
 
   List<SettingsNavDestination> get _destinations => const [
         SettingsNavDestination(
@@ -70,6 +77,12 @@ class _SettingsPageState extends State<SettingsPage> {
     unawaited(_loadCacheSize());
     unawaited(_loadPackageInfo());
     _restoreDanmakuCredentials();
+    _downloadSettings = StorageService().getDownloadSettings();
+    _includeAdultCatalog = StorageService().getSetting<bool>(
+          CatalogSettings.includeAdultKey,
+          defaultValue: false,
+        ) ??
+        false;
   }
 
   @override
@@ -132,7 +145,7 @@ class _SettingsPageState extends State<SettingsPage> {
       PaintingBinding.instance.imageCache
         ..clear()
         ..clearLiveImages();
-      DanmakuService().clearCache();
+      await DanmakuService().clearCache();
       await DefaultCacheManager().emptyCache();
 
       if (!mounted) return;
@@ -162,13 +175,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _showDanmakuSettings() async {
     final storage = StorageService();
+    final draft = DanmakuCredentialDraft(
+      storedAppId: storage.getSetting<String>(_danmakuAppIdKey) ?? '',
+      storedAppSecret: storage.getSetting<String>(_danmakuAppSecretKey) ?? '',
+    );
     final appIdController = TextEditingController(
-      text: storage.getSetting<String>(_danmakuAppIdKey) ?? '',
+      text: draft.initialAppId,
     );
     final appSecretController = TextEditingController(
-      text: storage.getSetting<String>(_danmakuAppSecretKey) ?? '',
+      text: draft.initialSecret,
     );
     var obscureSecret = true;
+    var testingConnection = false;
 
     await showDialog<void>(
       context: context,
@@ -207,7 +225,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   obscureText: obscureSecret,
                   decoration: InputDecoration(
                     labelText: '应用密钥',
-                    hintText: '输入弹弹play应用密钥',
+                    hintText: draft.secretHint,
                     prefixIcon: const Icon(Icons.key_outlined),
                     suffixIcon: IconButton(
                       tooltip: obscureSecret ? '显示密钥' : '隐藏密钥',
@@ -226,14 +244,59 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           actions: [
+            if (draft.storedAppSecret.isNotEmpty)
+              TextButton(
+                onPressed: () async {
+                  await Future.wait([
+                    storage.removeSetting(_danmakuAppIdKey),
+                    storage.removeSetting(_danmakuAppSecretKey),
+                  ]);
+                  DanmakuService().clearCredentials();
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  if (mounted) {
+                    setState(() {});
+                    ErrorHandler.showSuccess(this.context, '弹幕服务凭证已清除');
+                  }
+                },
+                child: const Text('清除凭证'),
+              ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('取消'),
             ),
+            OutlinedButton.icon(
+              onPressed: testingConnection
+                  ? null
+                  : () async {
+                      final appId = appIdController.text.trim();
+                      final appSecret =
+                          draft.resolveSecret(appSecretController.text);
+                      setDialogState(() => testingConnection = true);
+                      final result = await DanmakuService().testCredentials(
+                        appId: appId,
+                        appSecret: appSecret,
+                      );
+                      if (!dialogContext.mounted) return;
+                      setDialogState(() => testingConnection = false);
+                      if (result.success) {
+                        ErrorHandler.showSuccess(context, result.message);
+                      } else {
+                        ErrorHandler.showError(context, result.message);
+                      }
+                    },
+              icon: testingConnection
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wifi_tethering_rounded, size: 17),
+              label: Text(testingConnection ? '测试中…' : '测试连接'),
+            ),
             FilledButton(
               onPressed: () async {
                 final appId = appIdController.text.trim();
-                final appSecret = appSecretController.text.trim();
+                final appSecret = draft.resolveSecret(appSecretController.text);
                 if (appId.isEmpty || appSecret.isEmpty) {
                   ErrorHandler.showError(context, '请完整填写应用 ID 与密钥');
                   return;
@@ -258,6 +321,38 @@ class _SettingsPageState extends State<SettingsPage> {
 
     appIdController.dispose();
     appSecretController.dispose();
+  }
+
+  Future<void> _showDownloadNetworkSettings() async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: SizedBox(
+          width: 560,
+          child: DownloadNetworkSettingsPanel(
+            settings: _downloadSettings,
+            onSave: (settings) async {
+              await StorageService().setDownloadSettings(settings);
+              await DownloadService().configure(settings);
+              if (!mounted) return;
+              setState(() => _downloadSettings = settings);
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
+              ErrorHandler.showSuccess(
+                context,
+                '下载网络设置已保存',
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleAdultCatalog() async {
+    final value = !_includeAdultCatalog;
+    await StorageService().setSetting(CatalogSettings.includeAdultKey, value);
+    if (!mounted) return;
+    setState(() => _includeAdultCatalog = value);
   }
 
   @override
@@ -407,6 +502,16 @@ class _SettingsPageState extends State<SettingsPage> {
                                 : SettingsStatusTone.neutral,
                             onTap: _showDanmakuSettings,
                           ),
+                          if (danmakuDebugModeEnabled)
+                            SettingsActionRow(
+                              icon: Icons.science_outlined,
+                              title: 'Danmaku Debug Mode',
+                              subtitle: '使用真实弹弹play数据与本地时间轴诊断弹幕',
+                              statusLabel: '无视频请求',
+                              statusTone: SettingsStatusTone.success,
+                              onTap: () =>
+                                  Modular.to.pushNamed('/danmaku-debug'),
+                            ),
                           SettingsActionRow(
                             icon: Icons.keyboard_outlined,
                             title: '播放器快捷键',
@@ -449,6 +554,20 @@ class _SettingsPageState extends State<SettingsPage> {
                                   '/settings/plugin-add',
                                 ),
                               ),
+                              SettingsActionRow(
+                                key: const ValueKey(
+                                  'settings-catalog-include-adult',
+                                ),
+                                icon: Icons.visibility_off_outlined,
+                                title: '显示 18+ 目录内容',
+                                subtitle: '默认隐藏；开启后发现动画与片库请求会包含成人内容',
+                                statusLabel:
+                                    _includeAdultCatalog ? '已显示' : '默认隐藏',
+                                statusTone: _includeAdultCatalog
+                                    ? SettingsStatusTone.warning
+                                    : SettingsStatusTone.neutral,
+                                onTap: _toggleAdultCatalog,
+                              ),
                             ],
                           ),
                         ],
@@ -462,12 +581,38 @@ class _SettingsPageState extends State<SettingsPage> {
                       indexLabel: '04',
                       title: '存储',
                       description: '临时缓存用于加快封面与弹幕加载，可安全地定期清理。',
-                      child: StorageOverview(
-                        bytes: _cacheBytes,
-                        loading: _scanningCache,
-                        clearing: _clearingCache,
-                        onRefresh: _loadCacheSize,
-                        onClear: _clearCache,
+                      child: Column(
+                        children: [
+                          SettingsActionList(
+                            children: [
+                              SettingsActionRow(
+                                icon: Icons.cloud_download_outlined,
+                                title: '下载网络',
+                                subtitle:
+                                    '代理：${_downloadSettings.proxySummary()} · '
+                                    '分片并发 ${_downloadSettings.segmentConcurrency} · '
+                                    '重试 ${_downloadSettings.segmentRetries}',
+                                statusLabel: _downloadSettings.proxyMode ==
+                                        DownloadProxyMode.direct
+                                    ? '直连'
+                                    : '代理',
+                                statusTone: _downloadSettings.proxyMode ==
+                                        DownloadProxyMode.direct
+                                    ? SettingsStatusTone.neutral
+                                    : SettingsStatusTone.success,
+                                onTap: _showDownloadNetworkSettings,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          StorageOverview(
+                            bytes: _cacheBytes,
+                            loading: _scanningCache,
+                            clearing: _clearingCache,
+                            onRefresh: _loadCacheSize,
+                            onClear: _clearCache,
+                          ),
+                        ],
                       ),
                     ),
                   ),

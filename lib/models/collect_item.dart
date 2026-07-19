@@ -6,22 +6,25 @@ part 'collect_item.g.dart';
 class CollectItem extends HiveObject {
   @HiveField(0)
   String animeName;
-  
+
   @HiveField(1)
   String animeUrl;
-  
+
   @HiveField(2)
   String sourcePlugin;
-  
+
   @HiveField(3)
   String? cover;
-  
+
   @HiveField(4)
   String? description;
-  
+
   @HiveField(5)
   DateTime collectedAt;
-  
+
+  @HiveField(6)
+  String? contentId;
+
   CollectItem({
     required this.animeName,
     required this.animeUrl,
@@ -29,5 +32,6 @@ class CollectItem extends HiveObject {
     this.cover,
     this.description,
     DateTime? collectedAt,
+    this.contentId,
   }) : collectedAt = collectedAt ?? DateTime.now();
 }

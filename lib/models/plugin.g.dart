@@ -30,13 +30,14 @@ class PluginAdapter extends TypeAdapter<Plugin> {
       userAgent: fields[10] == null ? '' : fields[10] as String,
       referer: fields[11] as String?,
       enabled: fields[12] == null ? true : fields[12] as bool,
+      catalog: PluginCatalogConfig.tryFromJson(fields[13]),
     );
   }
 
   @override
   void write(BinaryWriter writer, Plugin obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.api)
       ..writeByte(1)
@@ -62,7 +63,9 @@ class PluginAdapter extends TypeAdapter<Plugin> {
       ..writeByte(11)
       ..write(obj.referer)
       ..writeByte(12)
-      ..write(obj.enabled);
+      ..write(obj.enabled)
+      ..writeByte(13)
+      ..write(obj.catalog?.toJson());
   }
 
   @override

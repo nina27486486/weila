@@ -23,13 +23,14 @@ class CollectItemAdapter extends TypeAdapter<CollectItem> {
       cover: fields[3] as String?,
       description: fields[4] as String?,
       collectedAt: fields[5] as DateTime?,
+      contentId: fields[6] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, CollectItem obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.animeName)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class CollectItemAdapter extends TypeAdapter<CollectItem> {
       ..writeByte(4)
       ..write(obj.description)
       ..writeByte(5)
-      ..write(obj.collectedAt);
+      ..write(obj.collectedAt)
+      ..writeByte(6)
+      ..write(obj.contentId);
   }
 
   @override

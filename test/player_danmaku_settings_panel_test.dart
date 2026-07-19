@@ -1,44 +1,69 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:weila/services/danmaku/danmaku_load_result.dart';
+import 'package:weila/services/danmaku/danmaku_matcher.dart';
 import 'package:weila/pages/player/widgets/player_danmaku_settings_panel.dart';
 
 void main() {
-  testWidgets('弹幕设置面板展示当前参数并支持切换显示状态', (tester) async {
-    var toggled = false;
+  testWidgets('shows an explicit configuration state and retry action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_host(
+      result: DanmakuLoadResult(status: DanmakuLoadStatus.notConfigured),
+    ));
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: PlayerDanmakuSettingsPanel(
-              visible: true,
-              opacity: 0.8,
-              area: 0.5,
-              speed: 1.5,
-              fontScale: 1.2,
-              onToggleVisible: () => toggled = true,
-              onOpacityChanged: (_) {},
-              onAreaChanged: (_) {},
-              onSpeedChanged: (_) {},
-              onFontScaleChanged: (_) {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('弹幕设置'), findsOneWidget);
-    expect(find.text('显示'), findsOneWidget);
-    expect(find.text('不透明度'), findsOneWidget);
-    expect(find.text('80%'), findsOneWidget);
-    expect(find.text('显示区域'), findsOneWidget);
-    expect(find.text('50%'), findsOneWidget);
-    expect(find.text('滚动速度'), findsOneWidget);
-    expect(find.text('1.5x'), findsOneWidget);
-    expect(find.text('字号'), findsOneWidget);
-    expect(find.text('1.2x'), findsOneWidget);
-
-    await tester.tap(find.text('显示'));
-    expect(toggled, isTrue);
+    expect(find.text('未配置弹幕服务'), findsOneWidget);
+    expect(find.text('刷新匹配'), findsOneWidget);
   });
+
+  testWidgets('renders ambiguous candidates as accessible choices', (
+    tester,
+  ) async {
+    final candidate = DanmakuMatchCandidate(
+      animeId: 1,
+      animeTitle: '葬送的芙莉莲',
+      typeDescription: 'TV',
+      episodeId: 2,
+      episodeTitle: '第1话',
+      score: 88,
+    );
+    DanmakuMatchCandidate? selected;
+    await tester.pumpWidget(_host(
+      result: DanmakuLoadResult(
+        status: DanmakuLoadStatus.ambiguous,
+        candidates: [candidate],
+      ),
+      onCandidateSelected: (value) => selected = value,
+    ));
+
+    expect(find.text('请选择匹配剧集'), findsOneWidget);
+    expect(find.text('葬送的芙莉莲'), findsOneWidget);
+    await tester.tap(find.text('葬送的芙莉莲'));
+    expect(selected, same(candidate));
+  });
+}
+
+Widget _host({
+  required DanmakuLoadResult result,
+  ValueChanged<DanmakuMatchCandidate>? onCandidateSelected,
+}) {
+  return MaterialApp(
+    home: Scaffold(
+      body: PlayerDanmakuSettingsPanel(
+        visible: true,
+        opacity: 1,
+        area: 1,
+        speed: 1,
+        fontScale: 1,
+        loadResult: result,
+        onToggleVisible: () {},
+        onOpacityChanged: (_) {},
+        onAreaChanged: (_) {},
+        onSpeedChanged: (_) {},
+        onFontScaleChanged: (_) {},
+        onRefresh: () {},
+        onCandidateSelected: onCandidateSelected ?? (_) {},
+      ),
+    ),
+  );
 }

@@ -3,6 +3,22 @@ import 'package:flutter/material.dart';
 import '../../../theme/app_theme.dart';
 import '../../../theme/vira_colors.dart';
 
+class PlayerControlMenuOption {
+  const PlayerControlMenuOption({
+    required this.id,
+    required this.label,
+    required this.selected,
+    this.enabled = true,
+    this.detail,
+  });
+
+  final String id;
+  final String label;
+  final bool selected;
+  final bool enabled;
+  final String? detail;
+}
+
 class PlayerControlBar extends StatelessWidget {
   const PlayerControlBar({
     super.key,
@@ -21,6 +37,11 @@ class PlayerControlBar extends StatelessWidget {
     required this.onVolumeChanged,
     required this.onSpeedChanged,
     required this.onToggleFullscreen,
+    this.sourceOptions = const [],
+    this.qualityOptions = const [],
+    this.qualityUnavailableMessage,
+    this.onSourceSelected,
+    this.onQualitySelected,
   });
 
   final Duration position;
@@ -38,6 +59,11 @@ class PlayerControlBar extends StatelessWidget {
   final ValueChanged<double> onVolumeChanged;
   final ValueChanged<double> onSpeedChanged;
   final VoidCallback onToggleFullscreen;
+  final List<PlayerControlMenuOption> sourceOptions;
+  final List<PlayerControlMenuOption> qualityOptions;
+  final String? qualityUnavailableMessage;
+  final ValueChanged<String>? onSourceSelected;
+  final ValueChanged<String>? onQualitySelected;
 
   static const _speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
 
@@ -86,6 +112,36 @@ class PlayerControlBar extends StatelessWidget {
                     onSeek(Duration(milliseconds: milliseconds));
                   },
                 ),
+                if (sourceOptions.isNotEmpty ||
+                    qualityOptions.isNotEmpty ||
+                    qualityUnavailableMessage != null) ...[
+                  SizedBox(height: compact ? 6 : 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (sourceOptions.isNotEmpty)
+                          _PlaybackMenu(
+                            tooltip: '线路',
+                            icon: Icons.route_rounded,
+                            options: sourceOptions,
+                            onSelected: onSourceSelected,
+                          ),
+                        if (qualityOptions.isNotEmpty ||
+                            qualityUnavailableMessage != null)
+                          _PlaybackMenu(
+                            tooltip: '清晰度',
+                            icon: Icons.high_quality_rounded,
+                            options: qualityOptions,
+                            unavailableMessage: qualityUnavailableMessage,
+                            onSelected: onQualitySelected,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 SizedBox(height: compact ? 4 : 7),
                 _TransportRow(
                   playing: playing,
@@ -108,6 +164,141 @@ class PlayerControlBar extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _PlaybackMenu extends StatelessWidget {
+  const _PlaybackMenu({
+    required this.tooltip,
+    required this.icon,
+    required this.options,
+    required this.onSelected,
+    this.unavailableMessage,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final List<PlayerControlMenuOption> options;
+  final String? unavailableMessage;
+  final ValueChanged<String>? onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedLabel = options
+        .where((option) => option.selected)
+        .map((option) => option.label)
+        .firstOrNull;
+    return PopupMenuButton<String>(
+      tooltip: tooltip,
+      color: context.colors.bgCard,
+      surfaceTintColor: Colors.transparent,
+      position: PopupMenuPosition.over,
+      onSelected: onSelected,
+      itemBuilder: (context) {
+        if (options.isEmpty) {
+          return [
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 42,
+              child: Text(
+                unavailableMessage ?? '暂无可用选项',
+                style: TextStyle(
+                  color: context.colors.textMuted,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ];
+        }
+        return options
+            .map(
+              (option) => PopupMenuItem<String>(
+                value: option.id,
+                enabled: option.enabled && onSelected != null,
+                height: option.detail == null ? 40 : 54,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      child: option.selected
+                          ? const Icon(
+                              Icons.check_rounded,
+                              size: 17,
+                              color: AppTheme.primaryBlue,
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            option.label,
+                            style: TextStyle(
+                              color: option.enabled
+                                  ? context.colors.textPrimary
+                                  : context.colors.textMuted,
+                              fontSize: 13,
+                              fontWeight: option.selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                          if (option.detail != null)
+                            Text(
+                              option.detail!,
+                              style: TextStyle(
+                                color: context.colors.textMuted,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+            .toList(growable: false);
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          height: 34,
+          constraints: const BoxConstraints(minWidth: 74),
+          padding: const EdgeInsets.symmetric(horizontal: 9),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: Colors.white.withValues(alpha: 0.72)),
+              const SizedBox(width: 6),
+              Text(
+                selectedLabel ?? tooltip,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 3),
+              Icon(
+                Icons.arrow_drop_down_rounded,
+                size: 17,
+                color: Colors.white.withValues(alpha: 0.58),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

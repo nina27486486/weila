@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../services/artwork_palette_service.dart';
 import '../../theme/vira_colors.dart';
 import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';

@@ -6,31 +6,37 @@ part 'history_item.g.dart';
 class HistoryItem extends HiveObject {
   @HiveField(0)
   String animeName;
-  
+
   @HiveField(1)
   String animeUrl;
-  
+
   @HiveField(2)
   String episodeName;
-  
+
   @HiveField(3)
   String episodeUrl;
-  
+
   @HiveField(4)
   String sourcePlugin;
-  
+
   @HiveField(5)
   String? cover;
-  
+
   @HiveField(6)
   Duration position;
-  
+
   @HiveField(7)
   Duration duration;
-  
+
   @HiveField(8)
   DateTime watchedAt;
-  
+
+  @HiveField(9)
+  String? contentId;
+
+  @HiveField(10)
+  String? episodeId;
+
   HistoryItem({
     required this.animeName,
     required this.animeUrl,
@@ -41,5 +47,7 @@ class HistoryItem extends HiveObject {
     this.position = Duration.zero,
     this.duration = Duration.zero,
     DateTime? watchedAt,
+    this.contentId,
+    this.episodeId,
   }) : watchedAt = watchedAt ?? DateTime.now();
 }

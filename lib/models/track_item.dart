@@ -31,6 +31,9 @@ class TrackItem extends HiveObject {
   @HiveField(8)
   DateTime? lastUpdated;
 
+  @HiveField(9)
+  String? contentId;
+
   TrackItem({
     required this.animeName,
     required this.animeUrl,
@@ -41,5 +44,6 @@ class TrackItem extends HiveObject {
     this.watchedEpisodes = 0,
     DateTime? trackedAt,
     this.lastUpdated,
+    this.contentId,
   }) : trackedAt = trackedAt ?? DateTime.now();
 }

@@ -1,6 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../models/danmaku_item.dart';
+import '../services/danmaku/danmaku_diagnostics.dart';
+
+class DanmakuFrameDeltaTracker {
+  DanmakuFrameDeltaTracker(this._previous);
+
+  DateTime _previous;
+
+  double consume(DateTime now) {
+    final elapsed = now.difference(_previous).inMicroseconds / 1000000.0;
+    _previous = now;
+    return elapsed.clamp(0.001, 0.1);
+  }
+}
 
 /// 弹幕控制器 — 管理弹幕状态和渲染
 class DanmakuController extends ChangeNotifier {
@@ -9,6 +22,13 @@ class DanmakuController extends ChangeNotifier {
   final List<_RunningDanmaku> _running = [];
   final List<_StaticDanmaku> _topStatic = [];
   final List<_StaticDanmaku> _bottomStatic = [];
+  final Set<int> _renderedSourceIndices = <int>{};
+
+  int _queuedCount = 0;
+  int _emittedCount = 0;
+  String? _renderError;
+  bool _diagnosticNotificationScheduled = false;
+  bool _disposed = false;
 
   double _currentTime = 0;
   bool _visible = true;
@@ -26,29 +46,48 @@ class DanmakuController extends ChangeNotifier {
   List<DanmakuItem> get allDanmaku => _allDanmaku;
   int get runningCount =>
       _running.length + _topStatic.length + _bottomStatic.length;
+  DanmakuControllerDiagnostics get diagnostics => DanmakuControllerDiagnostics(
+        queuedCount: _queuedCount,
+        emittedCount: _emittedCount,
+        renderedCount: _renderedSourceIndices.length,
+        currentTime: _currentTime,
+        danmakuEnabled: _visible,
+        opacity: _opacity,
+        area: _area,
+        renderError: _renderError,
+      );
 
   /// 加载弹幕数据
   void loadDanmaku(List<DanmakuItem> items) {
-    _allDanmaku = items;
+    _allDanmaku = List<DanmakuItem>.of(items);
     _allDanmaku.sort((a, b) => a.time.compareTo(b.time));
-    _nextSpawnIndex = 0;
-    _running.clear();
-    _topStatic.clear();
-    _bottomStatic.clear();
-    _trackOccupiedUntil.clear();
+    _queuedCount = _allDanmaku.length;
+    _resetPlaybackPass();
     notifyListeners();
   }
 
   /// 更新当前播放时间
   void updatePosition(double seconds) {
     // 如果 seek 回退了，重置弹幕索引
-    if (seconds < _currentTime - 1) {
-      _nextSpawnIndex = 0;
-      _running.clear();
-      _topStatic.clear();
-      _bottomStatic.clear();
-    }
+    if (seconds + 0.001 < _currentTime) _resetPlaybackPass();
     _currentTime = seconds;
+  }
+
+  void resetPlaybackPass() {
+    _currentTime = 0;
+    _resetPlaybackPass();
+    notifyListeners();
+  }
+
+  void _resetPlaybackPass() {
+    _nextSpawnIndex = 0;
+    _emittedCount = 0;
+    _renderedSourceIndices.clear();
+    _renderError = null;
+    _running.clear();
+    _topStatic.clear();
+    _bottomStatic.clear();
+    _trackOccupiedUntil.clear();
   }
 
   /// 设置弹幕可见性
@@ -100,6 +139,7 @@ class DanmakuController extends ChangeNotifier {
     // 滚动弹幕
     for (final d in _running) {
       result.add(_DanmakuRenderInfo(
+        sourceIndex: d.sourceIndex,
         text: d.item.text,
         x: d.x,
         y: d.y,
@@ -112,6 +152,7 @@ class DanmakuController extends ChangeNotifier {
     // 顶部弹幕
     for (final d in _topStatic) {
       result.add(_DanmakuRenderInfo(
+        sourceIndex: d.sourceIndex,
         text: d.item.text,
         x: (canvasSize.width -
                 d.item.text.length * d.item.fontSize * _fontSize) /
@@ -126,6 +167,7 @@ class DanmakuController extends ChangeNotifier {
     // 底部弹幕
     for (final d in _bottomStatic) {
       result.add(_DanmakuRenderInfo(
+        sourceIndex: d.sourceIndex,
         text: d.item.text,
         x: (canvasSize.width -
                 d.item.text.length * d.item.fontSize * _fontSize) /
@@ -145,19 +187,26 @@ class DanmakuController extends ChangeNotifier {
     final maxHeight = canvasSize.height * _area;
 
     while (_nextSpawnIndex < _allDanmaku.length) {
-      final item = _allDanmaku[_nextSpawnIndex];
+      final sourceIndex = _nextSpawnIndex;
+      final item = _allDanmaku[sourceIndex];
       if (item.time > _currentTime + 0.1) break; // 还没到时间
 
       _nextSpawnIndex++;
+      _emittedCount++;
 
       switch (item.type) {
         case 1: // 顶部
           _topStatic.add(_StaticDanmaku(
-              item: item, y: _findTopSlot(maxHeight), spawnTime: _currentTime));
+            item: item,
+            sourceIndex: sourceIndex,
+            y: _findTopSlot(maxHeight),
+            spawnTime: _currentTime,
+          ));
           break;
         case 2: // 底部
           _bottomStatic.add(_StaticDanmaku(
               item: item,
+              sourceIndex: sourceIndex,
               y: _findBottomSlot(maxHeight),
               spawnTime: _currentTime));
           break;
@@ -166,6 +215,7 @@ class DanmakuController extends ChangeNotifier {
           final textWidth = item.text.length * item.fontSize * _fontSize;
           _running.add(_RunningDanmaku(
             item: item,
+            sourceIndex: sourceIndex,
             x: canvasSize.width,
             y: track * _trackHeight,
             track: track,
@@ -173,6 +223,34 @@ class DanmakuController extends ChangeNotifier {
           ));
       }
     }
+  }
+
+  void _markRendered(int sourceIndex) {
+    if (_renderedSourceIndices.add(sourceIndex)) {
+      _scheduleDiagnosticNotification();
+    }
+  }
+
+  void _recordRenderError(Object error) {
+    final safeType = error.runtimeType.toString();
+    if (_renderError == safeType) return;
+    _renderError = safeType;
+    _scheduleDiagnosticNotification();
+  }
+
+  void _scheduleDiagnosticNotification() {
+    if (_diagnosticNotificationScheduled || _disposed) return;
+    _diagnosticNotificationScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _diagnosticNotificationScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   /// 更新滚动弹幕位置
@@ -219,6 +297,7 @@ class DanmakuController extends ChangeNotifier {
 /// 运行中的滚动弹幕
 class _RunningDanmaku {
   final DanmakuItem item;
+  final int sourceIndex;
   double x;
   final double y;
   final int track;
@@ -226,6 +305,7 @@ class _RunningDanmaku {
 
   _RunningDanmaku({
     required this.item,
+    required this.sourceIndex,
     required this.x,
     required this.y,
     required this.track,
@@ -236,15 +316,21 @@ class _RunningDanmaku {
 /// 静态弹幕（顶部/底部）
 class _StaticDanmaku {
   final DanmakuItem item;
+  final int sourceIndex;
   final double y;
   final double spawnTime;
 
-  _StaticDanmaku(
-      {required this.item, required this.y, required this.spawnTime});
+  _StaticDanmaku({
+    required this.item,
+    required this.sourceIndex,
+    required this.y,
+    required this.spawnTime,
+  });
 }
 
 /// 弹幕渲染信息
 class _DanmakuRenderInfo {
+  final int sourceIndex;
   final String text;
   final double x;
   final double y;
@@ -253,6 +339,7 @@ class _DanmakuRenderInfo {
   final int type; // 0=滚动, 1=顶部, 2=底部
 
   _DanmakuRenderInfo({
+    required this.sourceIndex,
     required this.text,
     required this.x,
     required this.y,
@@ -275,11 +362,13 @@ class DanmakuOverlay extends StatefulWidget {
 class _DanmakuOverlayState extends State<DanmakuOverlay>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animController;
-  DateTime _lastFrameTime = DateTime.now();
+  late final DanmakuFrameDeltaTracker _frameDeltaTracker;
+  double _frameDeltaSeconds = 0.001;
 
   @override
   void initState() {
     super.initState();
+    _frameDeltaTracker = DanmakuFrameDeltaTracker(DateTime.now());
     _animController = AnimationController(
       vsync: this,
       duration: const Duration(hours: 1),
@@ -297,7 +386,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
   void _onTick() {
     final now = DateTime.now();
-    _lastFrameTime = now;
+    _frameDeltaSeconds = _frameDeltaTracker.consume(now);
     if (mounted) setState(() {});
   }
 
@@ -311,7 +400,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
       child: CustomPaint(
         painter: _DanmakuPainter(
           controller: widget.controller,
-          lastFrameTime: _lastFrameTime,
+          frameDeltaSeconds: _frameDeltaSeconds,
         ),
         size: Size.infinite,
       ),
@@ -321,35 +410,43 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 
 class _DanmakuPainter extends CustomPainter {
   final DanmakuController controller;
-  final DateTime lastFrameTime;
+  final double frameDeltaSeconds;
 
-  _DanmakuPainter({required this.controller, required this.lastFrameTime});
+  _DanmakuPainter({
+    required this.controller,
+    required this.frameDeltaSeconds,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final now = DateTime.now();
-    final dt = now.difference(lastFrameTime).inMilliseconds / 1000.0;
-    final clampedDt = dt.clamp(0.001, 0.1); // 防止极端值
-    final items = controller._getVisibleDanmaku(size, clampedDt);
+    final items = controller._getVisibleDanmaku(size, frameDeltaSeconds);
 
     for (final item in items) {
-      final painter = TextPainter(
-        text: TextSpan(
-          text: item.text,
-          style: TextStyle(
-            color: item.color,
-            fontSize: item.fontSize,
-            fontWeight: FontWeight.w500,
-            shadows: const [
-              Shadow(
-                  color: Colors.black54, blurRadius: 2, offset: Offset(1, 1)),
-            ],
+      try {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: item.text,
+            style: TextStyle(
+              color: item.color,
+              fontSize: item.fontSize,
+              fontWeight: FontWeight.w500,
+              shadows: const [
+                Shadow(
+                  color: Colors.black54,
+                  blurRadius: 2,
+                  offset: Offset(1, 1),
+                ),
+              ],
+            ),
           ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      painter.layout();
-      painter.paint(canvas, Offset(item.x, item.y));
+          textDirection: TextDirection.ltr,
+        );
+        painter.layout();
+        painter.paint(canvas, Offset(item.x, item.y));
+        controller._markRendered(item.sourceIndex);
+      } catch (error) {
+        controller._recordRenderError(error);
+      }
     }
   }
 

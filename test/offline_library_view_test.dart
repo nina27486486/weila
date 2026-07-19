@@ -58,4 +58,39 @@ void main() {
     expect(paused, episodes.first);
     expect(played, episodes.last);
   });
+
+  testWidgets('failed offline episode shows the failure reason',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 500));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: OfflineLibraryView(
+            episodes: const [
+              OfflineEpisode(
+                id: 'failed',
+                animeName: 'Vira Failure',
+                episodeName: 'Episode 7',
+                status: OfflineStatus.failed,
+                progress: 0.35,
+                segmentLabel: '12 / 30',
+                failureReason: 'segment 13 timed out after 3 retries',
+              ),
+            ],
+            onPause: (_) {},
+            onResume: (_) {},
+            onRetry: (_) {},
+            onPlay: (_) {},
+            onRemove: (_) {},
+            onRefresh: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('segment 13 timed out after 3 retries'), findsOneWidget);
+  });
 }

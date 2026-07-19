@@ -148,10 +148,19 @@ class _AnimeListPageState extends State<AnimeListPage> {
         description: widget.title == '剧场版'
             ? '一场完整放映的时间，把注意力留给银幕与故事。'
             : '按片源整理正在连载与已经完结的长篇动画。',
-        sourceOptions: sourceOptions,
-        selectedSourceId: _selectedSource,
-        onSourceSelected: _changeSource,
-        items: _items,
+        filterGroups: [
+          CatalogFilterGroup(
+            id: 'source',
+            label: '片源',
+            options: sourceOptions,
+            selectedIds: _selectedSource == null
+                ? const <String>{}
+                : <String>{_selectedSource!},
+            onSelected: _changeSource,
+          ),
+        ],
+        items:
+            _items.map(CatalogCardData.fromLegacyMap).toList(growable: false),
         isLoading: _loading,
         isLoadingMore: _loadingMore,
         errorMessage: _error,
@@ -183,9 +192,9 @@ class _AnimeListPageState extends State<AnimeListPage> {
     }
   }
 
-  void _openDetail(Map<String, dynamic> item) {
-    final url = item['url']?.toString() ?? '';
-    final name = item['name']?.toString() ?? '';
+  void _openDetail(CatalogCardData item) {
+    final url = item.legacyUrl ?? '';
+    final name = item.name;
     if (url.isEmpty) return;
     Modular.to.pushNamed(
       '/detail?url=${Uri.encodeComponent(url)}'

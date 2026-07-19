@@ -31,6 +31,12 @@ class _HomePageState extends State<HomePage> {
   }
 
   @override
+  void dispose() {
+    _trackStore.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ViraPageScaffold(
       activeDestination: ViraDestination.home,
@@ -51,6 +57,7 @@ class _HomePageState extends State<HomePage> {
                       : '看到第 ${item.watchedEpisodes} 集',
                   updatedLabel: _timeAgo(item.lastUpdated ?? item.trackedAt),
                   animeUrl: item.animeUrl,
+                  contentId: item.contentId,
                 ),
               )
               .toList(growable: false);
@@ -75,7 +82,8 @@ class _HomePageState extends State<HomePage> {
             onOpenAnime: _openDetail,
             onOpenContinue: (story) => Modular.to.pushNamed(
               '/detail?url=${Uri.encodeComponent(story.animeUrl)}'
-              '&name=${Uri.encodeComponent(story.title)}',
+              '&name=${Uri.encodeComponent(story.title)}'
+              '${story.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(story.contentId!)}' : ''}',
             ),
             onRetry: _loadPage,
             onOpenHistory: () => Modular.to.pushNamed('/history'),

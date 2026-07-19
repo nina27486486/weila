@@ -58,6 +58,16 @@ class DownloadItem extends HiveObject {
   @HiveField(14)
   String? referer;
 
+  /// Last readable failure reason shown in the offline task list.
+  @HiveField(15)
+  String? failureReason;
+
+  @HiveField(16)
+  String? contentId;
+
+  @HiveField(17)
+  String? episodeId;
+
   DownloadItem({
     required this.animeName,
     required this.animeUrl,
@@ -73,6 +83,9 @@ class DownloadItem extends HiveObject {
     this.downloadedSegments = 0,
     this.fileSize = 0,
     this.referer,
+    this.failureReason,
+    this.contentId,
+    this.episodeId,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 }
