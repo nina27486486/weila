@@ -1,68 +1,21 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_modular/flutter_modular.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:window_manager/window_manager.dart';
-
-import 'app_module.dart';
-import 'app_widget.dart';
+import 'bootstrap/app_bootstrap.dart';
 import 'platform/app_capabilities.dart';
+import 'platform/windows/window_manager_app_window_controller.dart';
 import 'platform/windows/window_manager_fullscreen_controller.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'services/danmaku/windows_danmaku_credential_store.dart';
-import 'services/storage/storage_service.dart';
-import 'services/plugin/plugin_service.dart';
 import 'services/download/download_service.dart';
-import 'stores/theme_store.dart';
 
-const capabilities = AppCapabilities.windows;
-const fullscreenController = WindowManagerFullscreenController();
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // 初始化 media_kit
-  MediaKit.ensureInitialized();
-
-  // 初始化窗口管理
-  await windowManager.ensureInitialized();
-  const windowOptions = WindowOptions(
-    size: Size(1280, 800),
-    minimumSize: Size(960, 640),
-    center: true,
-    title: '薇拉',
-  );
-  await windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await windowManager.show();
-    await windowManager.focus();
-  });
-
-  // 初始化 Hive 本地存储
-  await StorageService().init();
-
-  // 凭据迁移必须发生在 Hive 初始化之后，且播放器只读取安全存储。
-  final credentialManager = DanmakuCredentialManager.platform(
-    store: WindowsDanmakuCredentialStore(),
-  );
-  await credentialManager.initialize();
-
-  // 加载主题设置
-  ThemeStore().loadTheme();
-
-  // 初始化插件系统
-  await PluginService().init();
-
-  // 初始化下载服务
-  await DownloadService().init();
-
-  // 启动应用
-  runApp(
-    ModularApp(
-      module: AppModule(
-        credentialManager: credentialManager,
-        capabilities: capabilities,
-        fullscreenController: fullscreenController,
+Future<void> main() {
+  return launchWeila(
+    AppLaunchConfiguration(
+      capabilities: AppCapabilities.windows,
+      windowController: const WindowManagerAppWindowController(),
+      fullscreenController: const WindowManagerFullscreenController(),
+      credentialManager: DanmakuCredentialManager.platform(
+        store: WindowsDanmakuCredentialStore(),
       ),
-      child: const AppWidget(capabilities: capabilities),
+      initializeDownloads: DownloadService().init,
     ),
   );
 }
