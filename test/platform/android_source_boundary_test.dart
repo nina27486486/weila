@@ -26,4 +26,15 @@ void main() {
     expect(sources, isNot(contains('package:win32')));
     expect(sources, isNot(contains('windows_danmaku_credential_store')));
   });
+
+  test('Android capabilities gate routes and settings actions', () {
+    final module = File('lib/app_module.dart').readAsStringSync();
+    final settings =
+        File('lib/pages/settings/settings_page.dart').readAsStringSync();
+    expect(module, contains('if (capabilities.pluginEditing)'));
+    expect(module, contains('if (capabilities.downloads)'));
+    expect(settings, contains('widget.capabilities.pluginEditing'));
+    expect(settings, contains('widget.capabilities.downloads'));
+    expect(settings, contains('widget.capabilities.secureCredentialStorage'));
+  });
 }

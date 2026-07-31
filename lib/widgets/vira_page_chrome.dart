@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../platform/app_capabilities.dart';
 import '../theme/vira_colors.dart';
 import 'liquid_glass_surface.dart';
 import 'vira_mascot_badge.dart';
@@ -39,6 +40,13 @@ class ViraPageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final capabilities = AppCapabilitiesScope.of(context);
+    final destinations = [
+      for (final destination in ViraDestination.values)
+        if (destination != ViraDestination.downloads || capabilities.downloads)
+          destination,
+    ];
+
     return Scaffold(
       backgroundColor: context.colors.bgDark,
       body: SafeArea(
@@ -46,6 +54,7 @@ class ViraPageScaffold extends StatelessWidget {
           children: [
             _Masthead(
               activeDestination: activeDestination,
+              destinations: destinations,
               onDestinationSelected: onDestinationSelected,
               onSearch: onSearch,
               onThemeToggle: onThemeToggle,
@@ -83,6 +92,7 @@ class ViraPageScaffold extends StatelessWidget {
 
 class _Masthead extends StatefulWidget {
   final ViraDestination? activeDestination;
+  final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onDestinationSelected;
   final VoidCallback onSearch;
   final VoidCallback onThemeToggle;
@@ -90,6 +100,7 @@ class _Masthead extends StatefulWidget {
 
   const _Masthead({
     required this.activeDestination,
+    required this.destinations,
     required this.onDestinationSelected,
     required this.onSearch,
     required this.onThemeToggle,
@@ -196,6 +207,7 @@ class _MastheadState extends State<_Masthead>
                     animation: _glassMotion,
                     builder: (context, _) => _CompactNavigation(
                       activeDestination: widget.activeDestination,
+                      destinations: widget.destinations,
                       onSelected: widget.onDestinationSelected,
                       motionProgress: _glassMotion.value,
                     ),
@@ -205,6 +217,7 @@ class _MastheadState extends State<_Masthead>
                     animation: _glassMotion,
                     builder: (context, _) => _GlassNavigationRail(
                       activeDestination: widget.activeDestination,
+                      destinations: widget.destinations,
                       onSelected: widget.onDestinationSelected,
                       motionProgress: _glassMotion.value,
                       disableAnimations: disableAnimations,
@@ -261,12 +274,14 @@ class _MastheadState extends State<_Masthead>
 class _GlassNavigationRail extends StatelessWidget {
   const _GlassNavigationRail({
     required this.activeDestination,
+    required this.destinations,
     required this.onSelected,
     required this.motionProgress,
     required this.disableAnimations,
   });
 
   final ViraDestination? activeDestination;
+  final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onSelected;
   final double motionProgress;
   final bool disableAnimations;
@@ -275,7 +290,7 @@ class _GlassNavigationRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeIndex = activeDestination == null
         ? -1
-        : ViraDestination.values.indexOf(activeDestination!);
+        : destinations.indexOf(activeDestination!);
 
     return LiquidGlassSurface(
       key: const ValueKey('vira-navigation-glass'),
@@ -283,7 +298,7 @@ class _GlassNavigationRail extends StatelessWidget {
       borderRadius: BorderRadius.circular(26),
       padding: const EdgeInsets.all(5),
       child: SizedBox(
-        width: 340,
+        width: destinations.length * 68.0,
         height: 42,
         child: Stack(
           children: [
@@ -312,7 +327,7 @@ class _GlassNavigationRail extends StatelessWidget {
               ),
             Row(
               children: [
-                for (final destination in ViraDestination.values)
+                for (final destination in destinations)
                   _NavigationItem(
                     destination: destination,
                     selected: destination == activeDestination,
@@ -519,11 +534,13 @@ class _NavigationItemState extends State<_NavigationItem> {
 
 class _CompactNavigation extends StatelessWidget {
   final ViraDestination? activeDestination;
+  final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onSelected;
   final double motionProgress;
 
   const _CompactNavigation({
     required this.activeDestination,
+    required this.destinations,
     required this.onSelected,
     required this.motionProgress,
   });
@@ -534,7 +551,7 @@ class _CompactNavigation extends StatelessWidget {
       tooltip: '切换页面',
       onSelected: onSelected,
       itemBuilder: (context) => [
-        for (final destination in ViraDestination.values)
+        for (final destination in destinations)
           PopupMenuItem(
             value: destination,
             child: Text(destination.label),

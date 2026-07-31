@@ -90,6 +90,7 @@ class AppModule extends Module {
       '/settings',
       child: (context) => SettingsPage(
         credentialManager: credentialManager,
+        capabilities: capabilities,
       ),
     );
     if (danmakuDebugModeEnabled) {
@@ -98,20 +99,22 @@ class AppModule extends Module {
         child: (context) => const DanmakuDebugPage(),
       );
     }
-    r.child(
-      '/settings/plugins',
-      child: (context) => const PluginListPage(),
-    );
-    r.child(
-      '/settings/plugin-add',
-      child: (context) => const PluginAddPage(),
-    );
-    r.child(
-      '/settings/plugin-detail',
-      child: (context) => PluginDetailPage(
-        pluginApi: r.args.queryParams['api'] ?? '',
-      ),
-    );
+    if (capabilities.pluginEditing) {
+      r.child(
+        '/settings/plugins',
+        child: (context) => const PluginListPage(),
+      );
+      r.child(
+        '/settings/plugin-add',
+        child: (context) => const PluginAddPage(),
+      );
+      r.child(
+        '/settings/plugin-detail',
+        child: (context) => PluginDetailPage(
+          pluginApi: r.args.queryParams['api'] ?? '',
+        ),
+      );
+    }
     r.child(
       '/anime-list',
       child: (context) {
@@ -147,9 +150,11 @@ class AppModule extends Module {
       '/category',
       child: (context) => const CategoryBrowsePage(),
     );
-    r.child(
-      '/download',
-      child: (context) => const DownloadPage(),
-    );
+    if (capabilities.downloads) {
+      r.child(
+        '/download',
+        child: (context) => const DownloadPage(),
+      );
+    }
   }
 }
