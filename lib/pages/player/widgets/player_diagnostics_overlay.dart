@@ -162,6 +162,7 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
   final PlayerDiagnosticMetrics metrics;
   final VoidCallback onRetry;
   final VoidCallback? onSwitchSource;
+  final VoidCallback? onCopyReport;
   final VoidCallback onBack;
 
   const PlayerDiagnosticsOverlay({
@@ -173,6 +174,7 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
     this.metrics = const PlayerDiagnosticMetrics(),
     required this.onRetry,
     this.onSwitchSource,
+    this.onCopyReport,
     required this.onBack,
   });
 
@@ -399,6 +401,16 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
                                     size: 18,
                                   ),
                                   label: const Text('切换线路'),
+                                  style: _outlinedButtonStyle,
+                                ),
+                              if (onCopyReport != null)
+                                OutlinedButton.icon(
+                                  onPressed: onCopyReport,
+                                  icon: const Icon(
+                                    Icons.copy_all_outlined,
+                                    size: 18,
+                                  ),
+                                  label: const Text('复制验收报告'),
                                   style: _outlinedButtonStyle,
                                 ),
                               TextButton.icon(

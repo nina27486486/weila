@@ -20,6 +20,7 @@ Widget _buildControlBar({
   ValueChanged<double>? onVolumeChanged,
   ValueChanged<double>? onSpeedChanged,
   VoidCallback? onToggleFullscreen,
+  VoidCallback? onCopyAcceptanceReport,
   List<PlayerControlMenuOption> sourceOptions = const [],
   List<PlayerControlMenuOption> qualityOptions = const [],
   String? qualityUnavailableMessage,
@@ -50,6 +51,7 @@ Widget _buildControlBar({
             onVolumeChanged: onVolumeChanged ?? (_) {},
             onSpeedChanged: onSpeedChanged ?? (_) {},
             onToggleFullscreen: onToggleFullscreen ?? () {},
+            onCopyAcceptanceReport: onCopyAcceptanceReport ?? () {},
             sourceOptions: sourceOptions,
             qualityOptions: qualityOptions,
             qualityUnavailableMessage: qualityUnavailableMessage,
@@ -131,6 +133,25 @@ void main() {
     expect(seekPosition, const Duration(minutes: 12));
     expect(selectedVolume, 35);
     expect(selectedSpeed, 1.5);
+  });
+
+  testWidgets('正常播放控制栏常驻安全验收报告入口', (tester) async {
+    var copies = 0;
+
+    await tester.pumpWidget(
+      _buildControlBar(onCopyAcceptanceReport: () => copies++),
+    );
+
+    final action = find.byKey(
+      const ValueKey('player-copy-acceptance-report'),
+    );
+    expect(action, findsOneWidget);
+    expect(find.text('验收报告'), findsOneWidget);
+    expect(find.byTooltip('复制安全验收报告'), findsOneWidget);
+
+    await tester.tap(action);
+
+    expect(copies, 1);
   });
 
   testWidgets('控制条安全处理零时长和越界状态', (tester) async {

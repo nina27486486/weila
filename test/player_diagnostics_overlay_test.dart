@@ -7,6 +7,7 @@ void main() {
     var retried = false;
     var switched = false;
     var backed = false;
+    var copied = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -32,6 +33,7 @@ void main() {
             ),
             onRetry: () => retried = true,
             onSwitchSource: () => switched = true,
+            onCopyReport: () => copied = true,
             onBack: () => backed = true,
           ),
         ),
@@ -58,6 +60,9 @@ void main() {
 
     await tester.tap(find.text('返回详情'));
     expect(backed, isTrue);
+
+    await tester.tap(find.text('复制验收报告'));
+    expect(copied, isTrue);
   });
 
   testWidgets('没有备用线路时不显示切换线路按钮', (tester) async {

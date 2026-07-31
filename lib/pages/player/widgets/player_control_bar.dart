@@ -37,6 +37,7 @@ class PlayerControlBar extends StatelessWidget {
     required this.onVolumeChanged,
     required this.onSpeedChanged,
     required this.onToggleFullscreen,
+    required this.onCopyAcceptanceReport,
     this.sourceOptions = const [],
     this.qualityOptions = const [],
     this.qualityUnavailableMessage,
@@ -59,6 +60,7 @@ class PlayerControlBar extends StatelessWidget {
   final ValueChanged<double> onVolumeChanged;
   final ValueChanged<double> onSpeedChanged;
   final VoidCallback onToggleFullscreen;
+  final VoidCallback onCopyAcceptanceReport;
   final List<PlayerControlMenuOption> sourceOptions;
   final List<PlayerControlMenuOption> qualityOptions;
   final String? qualityUnavailableMessage;
@@ -112,36 +114,64 @@ class PlayerControlBar extends StatelessWidget {
                     onSeek(Duration(milliseconds: milliseconds));
                   },
                 ),
-                if (sourceOptions.isNotEmpty ||
-                    qualityOptions.isNotEmpty ||
-                    qualityUnavailableMessage != null) ...[
-                  SizedBox(height: compact ? 6 : 8),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: [
-                        if (sourceOptions.isNotEmpty)
-                          _PlaybackMenu(
-                            tooltip: '线路',
-                            icon: Icons.route_rounded,
-                            options: sourceOptions,
-                            onSelected: onSourceSelected,
+                SizedBox(height: compact ? 6 : 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (sourceOptions.isNotEmpty)
+                        _PlaybackMenu(
+                          tooltip: '线路',
+                          icon: Icons.route_rounded,
+                          options: sourceOptions,
+                          onSelected: onSourceSelected,
+                        ),
+                      if (qualityOptions.isNotEmpty ||
+                          qualityUnavailableMessage != null)
+                        _PlaybackMenu(
+                          tooltip: '清晰度',
+                          icon: Icons.high_quality_rounded,
+                          options: qualityOptions,
+                          unavailableMessage: qualityUnavailableMessage,
+                          onSelected: onQualitySelected,
+                        ),
+                      Tooltip(
+                        message: '复制安全验收报告',
+                        child: OutlinedButton.icon(
+                          key: const ValueKey(
+                            'player-copy-acceptance-report',
                           ),
-                        if (qualityOptions.isNotEmpty ||
-                            qualityUnavailableMessage != null)
-                          _PlaybackMenu(
-                            tooltip: '清晰度',
-                            icon: Icons.high_quality_rounded,
-                            options: qualityOptions,
-                            unavailableMessage: qualityUnavailableMessage,
-                            onSelected: onQualitySelected,
+                          onPressed: onCopyAcceptanceReport,
+                          icon: const Icon(
+                            Icons.assignment_turned_in_outlined,
+                            size: 16,
                           ),
-                      ],
-                    ),
+                          label: const Text('验收报告'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.07),
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.1),
+                            ),
+                            minimumSize: const Size(0, 34),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
                 SizedBox(height: compact ? 4 : 7),
                 _TransportRow(
                   playing: playing,

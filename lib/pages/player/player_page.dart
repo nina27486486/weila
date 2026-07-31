@@ -16,9 +16,12 @@ import '../../services/download/download_service.dart';
 import '../../services/danmaku/danmaku_load_result.dart';
 import '../../services/danmaku/danmaku_matcher.dart';
 import '../../services/danmaku/danmaku_service.dart';
+import '../../services/diagnostics/acceptance_report.dart';
+import '../../services/diagnostics/acceptance_report_service.dart';
 import '../../services/library/playback_entry_factory.dart';
 import '../../services/playback/hls_variant_resolver.dart';
 import '../../services/playback/playback_diagnostics.dart';
+import '../../services/playback/playback_error_sanitizer.dart';
 import '../../services/playback/playback_probe_service.dart';
 import '../../services/playback/playback_route_health.dart';
 import '../../services/playback/playback_route_health_repository.dart';
@@ -35,8 +38,12 @@ import 'widgets/player_next_episode_prompt.dart';
 import 'widgets/player_shortcut_panel.dart';
 import 'playback_session.dart';
 import 'playback_health_coordinator.dart';
+import 'player_danmaku_session.dart';
+import 'player_episode_selection.dart';
+import 'player_playback_lifecycle_coordinator.dart';
 
 part 'widgets/player_page_components.dart';
+part 'widgets/player_page_view.dart';
 
 class PlayerPage extends StatefulWidget {
   final String videoUrl;
@@ -70,11 +77,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   late PlaybackSession _playbackSession;
   late final HlsVariantResolver _hlsVariantResolver;
   late final PlaybackHealthCoordinator _playbackHealth;
+  final PlayerPlaybackLifecycleCoordinator _playbackLifecycle =
+      PlayerPlaybackLifecycleCoordinator();
   final PluginService _pluginService = PluginService();
   final HistoryCollectStore _historyStore = HistoryCollectStore();
   final DownloadService _downloadService = DownloadService();
-  final DanmakuService _danmakuService = DanmakuService();
-  final DanmakuController _danmakuController = DanmakuController();
+  late final PlayerDanmakuSession _danmakuSession;
+  final AcceptanceReportService _acceptanceReports = AcceptanceReportService();
 
   // 播放状态
   bool _isPlaying = false;
@@ -96,10 +105,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   double _danmakuArea = 1.0;
   double _danmakuSpeed = 1.0;
   double _danmakuFontScale = 1.0;
-  DanmakuLoadResult _danmakuLoadResult = DanmakuLoadResult(
-    status: DanmakuLoadStatus.notConfigured,
-  );
-  int _danmakuLoadGeneration = 0;
+  DanmakuController get _danmakuController => _danmakuSession.controller;
+  DanmakuLoadResult get _danmakuLoadResult => _danmakuSession.result;
   String? _currentVideoUrl;
   bool _isOpeningVideo = false;
   bool _isReconnecting = false;
@@ -108,7 +115,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _firstFrameRendered = false;
   _PlaybackIssue? _playbackIssue;
   PlaybackOpenRequest? _activeOpenRequest;
-  int _openGeneration = 0;
   int _playbackRequestGeneration = 0;
   int _episodeLoadGeneration = 0;
   int _automaticRetryCount = 0;
@@ -118,7 +124,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
   // 集数列表
   List<Episode> _episodes = [];
-  int _currentEpisodeIndex = 0;
+  late final PlayerEpisodeSelection _episodeSelection;
+  int get _currentEpisodeIndex => _episodeSelection.index;
   bool _loadingEpisodes = false;
 
   bool get _isEpisodeDrawerVisible =>
@@ -140,11 +147,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   // 快进快退提示
   String? _seekHint;
   Timer? _seekHintTimer;
-  Timer? _openTimeoutTimer;
-  Timer? _bufferingTimeoutTimer;
-  Timer? _noVideoTimer;
-  Timer? _reconnectTimer;
-  Duration _bufferingStartedPosition = Duration.zero;
 
   // Stream订阅管理（防止内存泄漏）
   final List<StreamSubscription> _subscriptions = [];
@@ -152,11 +154,21 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _episodeSelection = PlayerEpisodeSelection(
+      initialIndex: widget.episodeIndex,
+    );
     WidgetsBinding.instance.addObserver(this);
     _player = Player();
     _controller = VideoController(
       _player,
       configuration: const VideoControllerConfiguration(hwdec: 'auto-safe'),
+    );
+    _danmakuSession = PlayerDanmakuSession(
+      gateway: DanmakuServiceGateway(DanmakuService()),
+      controller: DanmakuController(),
+      onChanged: (_) {
+        if (mounted) setState(() {});
+      },
     );
     _playbackSession = PlaybackSession(_directPlaybackSources(widget.videoUrl));
     final http = HttpClient();
@@ -186,6 +198,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           _position = pos;
           _showNextEpisodePrompt = shouldShowNext;
         });
+        _playbackLifecycle.recordPlaybackPosition(
+          generation: _playbackLifecycle.currentGeneration,
+          position: pos,
+        );
+        if (_playbackLifecycle.firstFrameEvidenceReady) {
+          _markVideoSignalDetected();
+        }
       }
     }));
     _subscriptions.add(_player.stream.duration.listen((dur) {
@@ -212,7 +231,19 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     _subscriptions.add(_player.stream.videoParams.listen((params) {
       final width = params.w ?? params.dw ?? 0;
       final height = params.h ?? params.dh ?? 0;
-      if (width > 0 && height > 0) _markVideoSignalDetected();
+      if (width > 0 && height > 0) {
+        _playbackLifecycle.recordVideoMetadata(
+          generation: _playbackLifecycle.currentGeneration,
+          width: width,
+          height: height,
+        );
+        _playbackDiagnostics?.videoSignalDetected(
+          PlaybackVideoSignal.metadata,
+        );
+        if (_playbackLifecycle.firstFrameEvidenceReady) {
+          _markVideoSignalDetected();
+        }
+      }
     }));
     _subscriptions.add(_player.stream.error.listen(_handlePlayerError));
 
@@ -229,13 +260,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
     // 检查当前视频是否已下载
     _checkDownloadStatus();
-
-    final danmakuAppId = storage.getSetting<String>('dandanplay_app_id') ?? '';
-    final danmakuAppSecret =
-        storage.getSetting<String>('dandanplay_app_secret') ?? '';
-    if (danmakuAppId.isNotEmpty && danmakuAppSecret.isNotEmpty) {
-      _danmakuService.setCredentials(danmakuAppId, danmakuAppSecret);
-    }
 
     // 同步播放位置到弹幕控制器
     _subscriptions.add(_player.stream.position.listen((pos) {
@@ -293,8 +317,10 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       );
       return;
     }
-    final diagnosticsSession =
-        diagnostics ?? _playbackHealth.beginOpen(_openGeneration + 1);
+    final diagnosticsSession = diagnostics ??
+        _playbackHealth.beginOpen(
+          _playbackLifecycle.currentGeneration + 1,
+        );
     var effectiveRequest = request;
     if (resolveVariants) {
       diagnosticsSession.manifestStarted();
@@ -322,8 +348,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     final url = request.url;
     if (url.isEmpty || !mounted) return;
     _finishPlaybackDiagnostics();
-    final generation = ++_openGeneration;
-    _cancelPlaybackWatchdogs();
+    final generation = _playbackLifecycle.nextOpenGeneration();
     if (!automaticRetry) _automaticRetryCount = 0;
 
     setState(() {
@@ -359,18 +384,24 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       await _player
           .open(Media(url, httpHeaders: headers))
           .timeout(const Duration(seconds: 20));
-      if (!mounted || generation != _openGeneration) return;
+      if (!mounted || !_playbackLifecycle.isCurrent(generation)) return;
       _playbackDiagnostics?.openCompleted();
       final resumePosition = request.resumePosition;
       if (resumePosition > const Duration(seconds: 1)) {
-        await _player.seek(resumePosition);
+        await _seekPlayer(resumePosition);
       }
       if (!_firstFrameRendered) {
         unawaited(_waitForFirstFrame(generation));
       }
-    } on TimeoutException catch (e) {
+    } on TimeoutException {
       _playbackDiagnostics?.fail(PlaybackFailureKind.timeout);
-      Log.e('Player', '连接视频源超时: $url', e);
+      Log.e(
+        'Player',
+        safePlaybackLogMessage(
+          PlaybackLogOperation.openTimeout,
+          PlaybackFailureKind.timeout,
+        ),
+      );
       _recoverOrShow(
         const _PlaybackIssue(
           icon: Icons.timer_off_outlined,
@@ -380,31 +411,45 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         generation,
       );
     } catch (e) {
-      _playbackDiagnostics?.fail(_failureKindFromError(e.toString()));
-      Log.e('Player', '播放失败: $url', e);
+      final failureKind = classifyPlaybackFailure(e.toString());
+      _playbackDiagnostics?.fail(failureKind);
+      Log.e(
+        'Player',
+        safePlaybackLogMessage(
+          PlaybackLogOperation.openFailed,
+          failureKind,
+        ),
+      );
       _recoverOrShow(_issueFromError(e.toString()), generation);
     }
   }
 
   void _startPlaybackWatchdogs(int generation) {
-    _openTimeoutTimer = Timer(const Duration(seconds: 20), () {
-      if (!mounted || generation != _openGeneration) return;
-      if (_position > const Duration(seconds: 1) || _hasVideoSignal) return;
-      _playbackDiagnostics?.fail(PlaybackFailureKind.timeout);
-      _recoverOrShow(
-        const _PlaybackIssue(
-          icon: Icons.wifi_tethering_error_rounded,
-          title: '视频加载时间过长',
-          message: '当前线路暂时不可用，可以重新加载或切换其他线路。',
-        ),
-        generation,
-      );
-    });
+    _playbackLifecycle.watchOpen(
+      generation: generation,
+      hasProgressOrVideo: () =>
+          _position > const Duration(seconds: 1) || _hasVideoSignal,
+      onTimeout: () {
+        if (!mounted) return;
+        _playbackDiagnostics?.fail(PlaybackFailureKind.timeout);
+        _recoverOrShow(
+          const _PlaybackIssue(
+            icon: Icons.wifi_tethering_error_rounded,
+            title: '视频加载时间过长',
+            message: '当前线路暂时不可用，可以重新加载或切换其他线路。',
+          ),
+          generation,
+        );
+      },
+    );
 
-    _noVideoTimer = Timer(const Duration(seconds: 12), () {
-      if (!mounted || generation != _openGeneration || _hasVideoSignal) return;
-      final mediaIsAdvancing = _position > const Duration(seconds: 2);
-      if (_hasAudioSignal || mediaIsAdvancing) {
+    _playbackLifecycle.watchNoVideo(
+      generation: generation,
+      shouldReport: () =>
+          !_hasVideoSignal &&
+          (_hasAudioSignal || _position > const Duration(seconds: 2)),
+      onTimeout: () {
+        if (!mounted) return;
         _playbackDiagnostics?.fail(PlaybackFailureKind.noVideo);
         _recoverOrShow(
           const _PlaybackIssue(
@@ -414,19 +459,24 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
           ),
           generation,
         );
-      }
-    });
+      },
+    );
   }
 
   Future<void> _waitForFirstFrame(int generation) async {
     try {
-      await _controller.waitUntilFirstFrameRendered
-          .timeout(const Duration(seconds: 15));
-      if (!mounted || generation != _openGeneration) return;
-      _recordFirstFrame();
+      await Future.wait([
+        _controller.waitUntilFirstFrameRendered,
+        _playbackLifecycle.waitForFirstFrameEvidence(generation),
+      ]).timeout(const Duration(seconds: 15));
+      if (!mounted || !_playbackLifecycle.isCurrent(generation)) return;
       _markVideoSignalDetected();
     } on TimeoutException {
-      if (!mounted || generation != _openGeneration || _hasVideoSignal) return;
+      if (!mounted ||
+          !_playbackLifecycle.isCurrent(generation) ||
+          _hasVideoSignal) {
+        return;
+      }
       if (_hasAudioSignal || _position > const Duration(seconds: 2)) {
         _playbackDiagnostics?.fail(PlaybackFailureKind.noVideo);
         _recoverOrShow(
@@ -445,8 +495,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     if (!mounted) return;
     _recordFirstFrame();
     if (_hasVideoSignal && !_isOpeningVideo && !_isReconnecting) return;
-    _openTimeoutTimer?.cancel();
-    _noVideoTimer?.cancel();
+    _playbackLifecycle.markVideoSignalDetected();
     setState(() {
       _hasVideoSignal = true;
       _isOpeningVideo = false;
@@ -461,7 +510,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       _playbackDiagnostics?.bufferingChanged(buffering);
     }
     setState(() => _isBuffering = buffering);
-    _bufferingTimeoutTimer?.cancel();
+    _playbackLifecycle.cancelBufferingWatchdog();
     if (!buffering) {
       if (_hasVideoSignal && _isOpeningVideo) {
         setState(() => _isOpeningVideo = false);
@@ -469,29 +518,42 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       return;
     }
 
-    final generation = _openGeneration;
-    _bufferingStartedPosition = _position;
-    _bufferingTimeoutTimer = Timer(const Duration(seconds: 25), () {
-      if (!mounted || generation != _openGeneration || !_isBuffering) return;
-      final advanced = _position - _bufferingStartedPosition;
-      if (advanced > const Duration(seconds: 1)) return;
-      _playbackDiagnostics?.fail(PlaybackFailureKind.network);
-      _recoverOrShow(
-        const _PlaybackIssue(
-          icon: Icons.signal_wifi_connected_no_internet_4_rounded,
-          title: '视频缓冲超时',
-          message: '网络或视频服务器没有继续传输数据，可以重新加载当前进度。',
-        ),
-        generation,
-      );
-    });
+    final generation = _playbackLifecycle.currentGeneration;
+    _playbackLifecycle.watchBuffering(
+      generation: generation,
+      startedAt: _position,
+      currentPosition: () => _position,
+      isBuffering: () => _isBuffering,
+      onTimeout: () {
+        if (!mounted) return;
+        _playbackDiagnostics?.fail(PlaybackFailureKind.network);
+        _recoverOrShow(
+          const _PlaybackIssue(
+            icon: Icons.signal_wifi_connected_no_internet_4_rounded,
+            title: '视频缓冲超时',
+            message: '网络或视频服务器没有继续传输数据，可以重新加载当前进度。',
+          ),
+          generation,
+        );
+      },
+    );
   }
 
   void _handlePlayerError(String message) {
     if (!mounted || message.trim().isEmpty) return;
-    _playbackDiagnostics?.fail(_failureKindFromError(message));
-    Log.e('Player', 'media_kit: $message');
-    _recoverOrShow(_issueFromError(message), _openGeneration);
+    final failureKind = classifyPlaybackFailure(message);
+    _playbackDiagnostics?.fail(failureKind);
+    Log.e(
+      'Player',
+      safePlaybackLogMessage(
+        PlaybackLogOperation.playerError,
+        failureKind,
+      ),
+    );
+    _recoverOrShow(
+      _issueFromError(message),
+      _playbackLifecycle.currentGeneration,
+    );
   }
 
   _PlaybackIssue _issueFromError(String error) {
@@ -533,35 +595,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     );
   }
 
-  PlaybackFailureKind _failureKindFromError(String error) {
-    final message = error.toLowerCase();
-    if (message.contains('403') || message.contains('forbidden')) {
-      return PlaybackFailureKind.forbidden;
-    }
-    if (message.contains('404') || message.contains('not found')) {
-      return PlaybackFailureKind.notFound;
-    }
-    if (message.contains('decode') ||
-        message.contains('codec') ||
-        message.contains('hwdec')) {
-      return PlaybackFailureKind.decode;
-    }
-    if (message.contains('timeout') || message.contains('timed out')) {
-      return PlaybackFailureKind.timeout;
-    }
-    if (message.contains('500') ||
-        message.contains('502') ||
-        message.contains('503')) {
-      return PlaybackFailureKind.server;
-    }
-    return PlaybackFailureKind.unknown;
-  }
-
   void _recoverOrShow(_PlaybackIssue issue, int generation) {
-    if (!mounted || generation != _openGeneration || _playbackIssue != null) {
+    if (!mounted ||
+        !_playbackLifecycle.isCurrent(generation) ||
+        _playbackIssue != null) {
       return;
     }
-    if (_reconnectTimer?.isActive ?? false) return;
+    if (_playbackLifecycle.reconnectScheduled) return;
     final activeRequest = _activeOpenRequest;
     final sourceCount = _playbackSession.sources.length;
     final maximumRecoveries = sourceCount > 1 ? sourceCount - 1 : 1;
@@ -588,17 +628,20 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         _isReconnecting = true;
         _isBuffering = true;
       });
-      _reconnectTimer = Timer(const Duration(milliseconds: 900), () {
-        if (!mounted || generation != _openGeneration) return;
-        unawaited(
-          _openPlaybackRequest(
-            recoveryRequest,
-            automaticRetry: true,
-            resolveVariants:
-                recoveryRequest.source.id != activeRequest.source.id,
-          ),
-        );
-      });
+      _playbackLifecycle.scheduleReconnect(
+        generation: generation,
+        action: () {
+          if (!mounted) return;
+          unawaited(
+            _openPlaybackRequest(
+              recoveryRequest,
+              automaticRetry: true,
+              resolveVariants:
+                  recoveryRequest.source.id != activeRequest.source.id,
+            ),
+          );
+        },
+      );
       return;
     }
     _showPlaybackIssue(issue);
@@ -684,12 +727,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     );
   }
 
-  void _cancelPlaybackWatchdogs() {
-    _openTimeoutTimer?.cancel();
-    _bufferingTimeoutTimer?.cancel();
-    _noVideoTimer?.cancel();
-    _reconnectTimer?.cancel();
-  }
+  void _cancelPlaybackWatchdogs() => _playbackLifecycle.cancelWatchdogs();
 
   Future<void> _loadEpisodes() async {
     if (widget.animeUrl.isEmpty) return;
@@ -740,7 +778,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         PlaybackSession? sessionToHydrate;
         setState(() {
           _episodes = eps;
-          _currentEpisodeIndex = widget.episodeIndex;
+          _episodeSelection.select(widget.episodeIndex);
           _loadingEpisodes = false;
           if (playbackEpisodes.isNotEmpty &&
               widget.episodeIndex >= 0 &&
@@ -761,7 +799,14 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      Log.d('Player', '加载集数失败: $e');
+      final failureKind = classifyPlaybackFailure(e.toString());
+      Log.d(
+        'Player',
+        safePlaybackLogMessage(
+          PlaybackLogOperation.episodeListFailed,
+          failureKind,
+        ),
+      );
       if (mounted) setState(() => _loadingEpisodes = false);
     }
   }
@@ -769,10 +814,11 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   void _playEpisode(int index) async {
     if (index < 0 || index >= _episodes.length) return;
     final loadGeneration = ++_episodeLoadGeneration;
-    final diagnostics = _playbackHealth.beginOpen(_openGeneration + 1)
-      ..sourceResolveStarted();
+    final diagnostics = _playbackHealth.beginOpen(
+      _playbackLifecycle.currentGeneration + 1,
+    )..sourceResolveStarted();
     setState(() {
-      _currentEpisodeIndex = index;
+      _episodeSelection.select(index);
       _isOpeningVideo = true;
       _playbackIssue = null;
       _showControls = true;
@@ -805,7 +851,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       }
     } catch (e) {
       diagnostics.fail(PlaybackFailureKind.network);
-      Log.d('Player', '获取视频源失败: $e');
+      Log.d(
+        'Player',
+        safePlaybackLogMessage(
+          PlaybackLogOperation.sourceResolveFailed,
+          classifyPlaybackFailure(e.toString()),
+        ),
+      );
     }
 
     if (mounted) {
@@ -826,230 +878,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
             widget.sourcePlugin.isNotEmpty ? widget.sourcePlugin : 'bangumi',
       );
 
-  Future<void> _selectAutomaticSource() async {
-    final session = _playbackSession;
-    final ordered = session.sources.length > 1
-        ? await _playbackHealth.prepareAutoSources(
-            providerId: _playbackProviderId,
-            sources: session.sources,
-          )
-        : session.sources;
-    if (!mounted || !identical(_playbackSession, session)) return;
-    session.replaceSources(ordered);
-    final request = session.selectAuto(_position);
-    if (request == null) return;
-    setState(() {});
-    await _openPlaybackRequest(request);
-  }
-
-  void _startHideTimer() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(Duration(seconds: 3), () {
-      if (mounted &&
-          _isPlaying &&
-          !_isHoveringControls &&
-          _playbackIssue == null) {
-        setState(() => _showControls = false);
-      }
-    });
-  }
-
-  void _onMouseMove() {
-    if (!_showControls) {
-      setState(() => _showControls = true);
-    }
-    _startHideTimer();
-  }
-
-  void _seekBy(Duration offset) {
-    final newPos = _position + offset;
-    if (newPos < Duration.zero) {
-      _player.seek(Duration.zero);
-    } else if (newPos > _duration) {
-      _player.seek(_duration);
-    } else {
-      _player.seek(newPos);
-    }
-    _showSeekHint(offset);
-  }
-
-  void _showSeekHint(Duration offset) {
-    final seconds = offset.inSeconds;
-    final text = seconds > 0 ? '+${seconds}s' : '${seconds}s';
-    setState(() => _seekHint = text);
-    _seekHintTimer?.cancel();
-    _seekHintTimer = Timer(Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _seekHint = null);
-    });
-  }
-
-  void _togglePlay() {
-    if (_playbackIssue != null || _isOpeningVideo) return;
-    _player.playOrPause();
-    _startHideTimer();
-  }
-
-  bool _shouldShowNextEpisodePrompt(Duration position, Duration duration) {
-    if (_episodes.isEmpty) return false;
-    if (_currentEpisodeIndex >= _episodes.length - 1) return false;
-    if (duration.inSeconds <= 60) return false;
-    final remain = duration - position;
-    return remain.inSeconds <= 30 && remain.inSeconds >= 0;
-  }
-
-  void _toggleDanmakuPanel() {
-    setState(() {
-      _showDanmakuPanel = !_showDanmakuPanel;
-      if (_showDanmakuPanel) _showShortcutPanel = false;
-    });
-    _startHideTimer();
-  }
-
-  void _toggleShortcutPanel() {
-    setState(() {
-      _showShortcutPanel = !_showShortcutPanel;
-      if (_showShortcutPanel) _showDanmakuPanel = false;
-    });
-    _startHideTimer();
-  }
-
-  void _playNextEpisode() {
-    if (_currentEpisodeIndex + 1 >= _episodes.length) return;
-    setState(() => _showNextEpisodePrompt = false);
-    _playEpisode(_currentEpisodeIndex + 1);
-  }
-
-  void _applyDanmakuOpacity(double value) {
-    setState(() => _danmakuOpacity = value);
-    _danmakuController.setOpacity(value);
-  }
-
-  void _applyDanmakuArea(double value) {
-    setState(() => _danmakuArea = value);
-    _danmakuController.setArea(value);
-  }
-
-  void _applyDanmakuSpeed(double value) {
-    setState(() => _danmakuSpeed = value);
-    _danmakuController.setSpeed(value);
-  }
-
-  void _applyDanmakuFontScale(double value) {
-    setState(() => _danmakuFontScale = value);
-    _danmakuController.setFontSizeScale(value);
-  }
-
-  void _toggleFullscreen() async {
-    final goingFullscreen = !_isFullscreen;
-    setState(() => _isFullscreen = goingFullscreen);
-    if (goingFullscreen) {
-      await windowManager.setFullScreen(true);
-    } else {
-      await windowManager.setFullScreen(false);
-    }
-  }
-
-  void _checkDownloadStatus() async {
-    final url = _currentVideoUrl ?? widget.videoUrl;
-    final downloaded = await _downloadService.isDownloaded(url);
-    final allDownloads = _downloadService.getAllDownloads();
-    if (mounted) {
-      setState(() {
-        _isDownloaded = downloaded;
-        _isDownloading =
-            allDownloads.any((d) => d.episodeUrl == url && d.status == 1);
-      });
-    }
-  }
-
-  Future<void> _loadDanmaku({bool refresh = false}) async {
-    final generation = ++_danmakuLoadGeneration;
-    final episode = _currentEpisodeIndex + 1;
-    if (mounted) {
-      setState(() {
-        _danmakuLoadResult = DanmakuLoadResult(
-          status: _danmakuService.hasCredentials
-              ? DanmakuLoadStatus.searching
-              : DanmakuLoadStatus.notConfigured,
-        );
-      });
-    }
-    _danmakuController.loadDanmaku(const []);
-
-    final result = await _danmakuService.load(
-      anime: _animeName,
-      episode: episode,
-      refresh: refresh,
-    );
-    if (!mounted || generation != _danmakuLoadGeneration) return;
-    _danmakuController.loadDanmaku(result.items);
-    setState(() => _danmakuLoadResult = result);
-    Log.d(
-      'Player',
-      '弹幕状态: ${result.status.name}, 数量: ${result.items.length}',
-    );
-  }
-
-  Future<void> _chooseDanmakuCandidate(
-    DanmakuMatchCandidate candidate,
-  ) async {
-    final generation = ++_danmakuLoadGeneration;
-    setState(() {
-      _danmakuLoadResult = DanmakuLoadResult(
-        status: DanmakuLoadStatus.loading,
-        selected: candidate,
-      );
-    });
-    final result = await _danmakuService.choose(
-      anime: _animeName,
-      episode: _currentEpisodeIndex + 1,
-      candidate: candidate,
-    );
-    if (!mounted || generation != _danmakuLoadGeneration) return;
-    _danmakuController.loadDanmaku(result.items);
-    setState(() => _danmakuLoadResult = result);
-  }
-
-  void _startDownload() {
-    final url = _currentVideoUrl ?? widget.videoUrl;
-    if (url.isEmpty) return;
-
-    final epName =
-        _episodes.isNotEmpty && _currentEpisodeIndex < _episodes.length
-            ? _episodes[_currentEpisodeIndex].name
-            : widget.title;
-
-    final item = PlaybackEntryFactory.download(
-      animeName: _animeName,
-      animeUrl: widget.animeUrl,
-      coverUrl: widget.coverUrl,
-      episodeName: epName,
-      episodeUrl: url,
-      sourcePlugin: widget.sourcePlugin,
-      contentId: widget.contentId,
-      episodeId: 'episode:${_currentEpisodeIndex + 1}',
-    );
-
-    // 自动设置 Referer（m3u8 CDN 需要）
-    try {
-      final uri = Uri.parse(url);
-      item.referer = '${uri.scheme}://${uri.host}/';
-    } catch (_) {}
-
-    // DEBUG: 确认 Referer 已设置
-    _downloadService.addDownload(item);
-    setState(() => _isDownloading = true);
-
-    ErrorHandler.showInfo(context, '已添加缓存: $epName');
-  }
-
   @override
   void dispose() {
-    _openGeneration++;
     WidgetsBinding.instance.removeObserver(this);
     _playbackDiagnostics?.suspendBuffering();
     _finishPlaybackDiagnostics();
     _cancelPlaybackWatchdogs();
+    _playbackLifecycle.dispose();
     // 取消所有Stream订阅，防止内存泄漏
     for (final s in _subscriptions) {
       s.cancel();
@@ -1065,7 +900,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     }
 
     // 释放弹幕控制器
-    _danmakuController.dispose();
+    _danmakuSession.dispose();
 
     // 记录观看历史（用实际播放的URL，不是初始URL）
     final epName =
@@ -1090,534 +925,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // 键盘快捷键
-  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
-
-    switch (event.logicalKey) {
-      case LogicalKeyboardKey.space:
-        _togglePlay();
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.arrowLeft:
-        _seekBy(Duration(seconds: -5));
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.arrowRight:
-        _seekBy(Duration(seconds: 5));
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.arrowUp:
-        _player.setVolume((_volume + 5).clamp(0, 100));
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.arrowDown:
-        _player.setVolume((_volume - 5).clamp(0, 100));
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.keyF:
-        _toggleFullscreen();
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.keyD:
-        setState(() => _showDanmaku = !_showDanmaku);
-        _danmakuController.setVisible(_showDanmaku);
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.slash:
-        _toggleShortcutPanel();
-        return KeyEventResult.handled;
-      case LogicalKeyboardKey.escape:
-        if (_showShortcutPanel || _showDanmakuPanel) {
-          setState(() {
-            _showShortcutPanel = false;
-            _showDanmakuPanel = false;
-          });
-          return KeyEventResult.handled;
-        } else if (_isEpisodeDrawerVisible) {
-          setState(() => _showEpisodeDrawer = false);
-          return KeyEventResult.handled;
-        } else if (_isFullscreen) {
-          _toggleFullscreen();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      default:
-        return KeyEventResult.ignored;
-    }
-  }
+  void _updateState(VoidCallback update) => setState(update);
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Focus(
-        autofocus: true,
-        onKeyEvent: _handleKeyEvent,
-        child: GestureDetector(
-          onTap: _togglePlay,
-          onDoubleTap: _toggleFullscreen,
-          child: MouseRegion(
-            onHover: (_) => _onMouseMove(),
-            child: Stack(
-              children: [
-                // 视频渲染层
-                Row(
-                  children: [
-                    Expanded(
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Video(
-                            controller: _controller,
-                            controls: NoVideoControls,
-                          ),
-                          if (_showDanmaku && _playbackIssue == null)
-                            DanmakuOverlay(controller: _danmakuController),
-                          if (_playbackIssue != null)
-                            Positioned.fill(
-                              child: _buildPlaybackIssuePanel(_playbackIssue!),
-                            )
-                          else if (_isOpeningVideo || _isBuffering)
-                            _buildBufferingIndicator(),
-                          if (_seekHint != null) _buildSeekHint(),
-                        ],
-                      ),
-                    ),
-                    EpisodeDrawerMotion(
-                      open: _isEpisodeDrawerVisible,
-                      child: _buildEpisodeSidebar(),
-                    ),
-                  ],
-                ),
-
-                if (_showNextEpisodePrompt && _showControls)
-                  Positioned(
-                    right: _isEpisodeDrawerVisible ? 244 : 24,
-                    bottom: 128,
-                    child: _buildNextEpisodePrompt(),
-                  ),
-
-                if (_showShortcutPanel) Center(child: _buildShortcutPanel()),
-
-                if (_showDanmakuPanel)
-                  Positioned(
-                    right: _isEpisodeDrawerVisible ? 244 : 24,
-                    top: 86,
-                    child: _buildDanmakuPanel(),
-                  ),
-
-                if (_showControls)
-                  Positioned(
-                    left: 0,
-                    right: _isEpisodeDrawerVisible ? 220 : 0,
-                    bottom: 0,
-                    child: MouseRegion(
-                      onEnter: (_) => _isHoveringControls = true,
-                      onExit: (_) => _isHoveringControls = false,
-                      child: _buildControls(),
-                    ),
-                  ),
-
-                if (_showControls)
-                  Positioned(
-                    left: 0,
-                    right: _isEpisodeDrawerVisible ? 220 : 0,
-                    top: 0,
-                    child: _buildTopBar(),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 顶部标题栏
-  Widget _buildTopBar() {
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: SafeArea(
-        bottom: false,
-        child: ClipRRect(
-          borderRadius: BorderRadius.zero,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.34),
-                border: Border(
-                  bottom: BorderSide(
-                    color: Colors.white.withValues(alpha: 0.09),
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  _PlayerIconButton(
-                    icon: Icons.arrow_back_rounded,
-                    tooltip: '返回',
-                    onTap: () => Modular.to.pop(),
-                  ),
-                  const SizedBox(width: 10),
-                  Container(
-                    width: 2,
-                    height: 30,
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryBlue,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (_episodes.isNotEmpty &&
-                            _currentEpisodeIndex < _episodes.length)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 3),
-                            child: Text(
-                              _episodes[_currentEpisodeIndex].name,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.58),
-                                fontSize: 12,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    key: const ValueKey('player-expandable-toolbar'),
-                    width: 360,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: ExpandableToolTabs(
-                        items: [
-                          if (_episodes.isNotEmpty || _loadingEpisodes)
-                            ExpandableToolTab(
-                              id: 'episodes',
-                              icon: Icons.playlist_play_rounded,
-                              label: '选集',
-                              tooltip:
-                                  _isEpisodeDrawerVisible ? '关闭选集' : '打开选集',
-                            ),
-                          ExpandableToolTab(
-                            id: 'danmaku',
-                            icon: _showDanmaku
-                                ? Icons.subtitles_rounded
-                                : Icons.subtitles_off_rounded,
-                            label: _showDanmaku ? '弹幕开' : '弹幕关',
-                            tooltip: _showDanmaku ? '关闭弹幕' : '打开弹幕',
-                          ),
-                          const ExpandableToolTab(
-                            id: 'danmaku-settings',
-                            icon: Icons.tune_rounded,
-                            label: '弹幕设置',
-                            tooltip: '弹幕设置',
-                          ),
-                          ExpandableToolTab(
-                            id: 'download',
-                            icon: _isDownloading
-                                ? Icons.downloading_rounded
-                                : Icons.download_rounded,
-                            label: _isDownloaded ? '已缓存' : '缓存',
-                            tooltip: _isDownloaded ? '已缓存' : '缓存本集',
-                          ),
-                          const ExpandableToolTab(
-                            id: 'shortcuts',
-                            icon: Icons.keyboard_command_key_rounded,
-                            label: '快捷键',
-                            tooltip: '快捷键',
-                          ),
-                        ],
-                        selectedId: _isEpisodeDrawerVisible
-                            ? 'episodes'
-                            : _showDanmakuPanel
-                                ? 'danmaku-settings'
-                                : _showShortcutPanel
-                                    ? 'shortcuts'
-                                    : _isDownloaded || _isDownloading
-                                        ? 'download'
-                                        : _showDanmaku
-                                            ? 'danmaku'
-                                            : null,
-                        foregroundColor: Colors.white.withValues(alpha: 0.72),
-                        selectedColor: AppTheme.accentBlue,
-                        onSelected: (id) {
-                          switch (id) {
-                            case 'episodes':
-                              setState(
-                                () => _showEpisodeDrawer = !_showEpisodeDrawer,
-                              );
-                            case 'danmaku':
-                              setState(() => _showDanmaku = !_showDanmaku);
-                              _danmakuController.setVisible(_showDanmaku);
-                            case 'danmaku-settings':
-                              _toggleDanmakuPanel();
-                            case 'download':
-                              if (!_isDownloaded && !_isDownloading) {
-                                _startDownload();
-                              }
-                            case 'shortcuts':
-                              _toggleShortcutPanel();
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 底部控制栏
-  Widget _buildControls() {
-    final resolved = _resolvedPlayback;
-    final sourceOptions = <PlayerControlMenuOption>[
-      PlayerControlMenuOption(
-        id: 'auto',
-        label: '自动',
-        selected: _playbackSession.selection.sourceId == null,
-        detail: resolved == null ? null : '实际使用 ${resolved.source.label}',
-      ),
-      for (final source in _playbackSession.sources)
-        PlayerControlMenuOption(
-          id: source.id,
-          label: source.label,
-          selected: _playbackSession.selection.sourceId == source.id,
-          detail: _healthDetail(source),
-        ),
-    ];
-    final qualityOptions = resolved == null ||
-            resolved.source.variants.length <= 1
-        ? const <PlayerControlMenuOption>[]
-        : <PlayerControlMenuOption>[
-            PlayerControlMenuOption(
-              id: 'auto',
-              label: '自动',
-              selected: _playbackSession.selection.variantId == null,
-            ),
-            for (final variant in resolved.source.variants)
-              PlayerControlMenuOption(
-                id: variant.id,
-                label: variant.label,
-                selected: _playbackSession.selection.variantId == variant.id,
-              ),
-          ];
-    return PlayerControlBar(
-      position: _position,
-      duration: _duration,
-      playing: _isPlaying,
-      volume: _volume,
-      playbackSpeed: _playbackSpeed,
-      fullscreen: _isFullscreen,
-      canPlayNext:
-          _episodes.isNotEmpty && _currentEpisodeIndex < _episodes.length - 1,
-      onSeek: _player.seek,
-      onRewind: () => _seekBy(const Duration(seconds: -5)),
-      onTogglePlay: _togglePlay,
-      onForward: () => _seekBy(const Duration(seconds: 5)),
-      onPlayNext: _playNextEpisode,
-      onVolumeChanged: (value) {
-        setState(() => _volume = value);
-        _player.setVolume(value);
-      },
-      onSpeedChanged: (speed) {
-        setState(() => _playbackSpeed = speed);
-        _player.setRate(speed);
-      },
-      onToggleFullscreen: _toggleFullscreen,
-      sourceOptions:
-          _playbackSession.sources.isEmpty ? const [] : sourceOptions,
-      qualityOptions: qualityOptions,
-      qualityUnavailableMessage:
-          resolved != null && resolved.source.variants.length <= 1
-              ? '当前线路未提供可切换清晰度'
-              : null,
-      onSourceSelected: (sourceId) {
-        if (sourceId == 'auto') {
-          unawaited(_selectAutomaticSource());
-          return;
-        }
-        final request = _playbackSession.selectSource(sourceId, _position);
-        if (request == null) return;
-        setState(() {});
-        unawaited(_openPlaybackRequest(request));
-      },
-      onQualitySelected: (variantId) {
-        final request = variantId == 'auto'
-            ? _playbackSession.selectAutoVariant(_position)
-            : _playbackSession.selectVariant(variantId, _position);
-        if (request == null) return;
-        setState(() {});
-        unawaited(
-          _openPlaybackRequest(request, resolveVariants: false),
-        );
-      },
-    );
-  }
-
-  Widget _buildBufferingIndicator() {
-    final stage = _playbackDiagnostics?.snapshot.stage;
-    final title = _isReconnecting
-        ? '正在重新连接'
-        : _isOpeningVideo
-            ? '正在连接视频源'
-            : '正在缓冲视频';
-    final subtitle = _isReconnecting
-        ? '自动切换 $_automaticRetryCount/'
-            '${_currentSourceCount > 1 ? _currentSourceCount - 1 : 1}'
-        : switch (stage) {
-            PlaybackDiagnosticStage.resolvingSource => '解析播放源',
-            PlaybackDiagnosticStage.resolvingManifest => '读取清晰度',
-            PlaybackDiagnosticStage.opening => '连接视频源',
-            PlaybackDiagnosticStage.waitingForFirstFrame => '等待首帧',
-            _ => _isOpeningVideo ? '等待首帧' : '正在等待视频数据',
-          };
-    return PlayerLoadingOverlay(title: title, subtitle: subtitle);
-  }
-
-  Widget _buildPlaybackIssuePanel(_PlaybackIssue issue) {
-    final resolved = _resolvedPlayback;
-    return PlayerDiagnosticsOverlay(
-      issue: PlayerDiagnosticIssue(
-        icon: issue.icon,
-        title: issue.title,
-        message: issue.message,
-        sourceLabel: resolved?.source.label,
-        variantLabel: _playbackSession.selection.variantId == null
-            ? '自动'
-            : resolved?.variant.label,
-      ),
-      currentSourceIndex: _currentSourceIndex,
-      sourceCount: _currentSourceCount,
-      position: _position,
-      metrics: _diagnosticMetrics,
-      onRetry: _retryCurrentVideo,
-      onSwitchSource: _hasNextVideoSource ? _switchToNextVideoSource : null,
-      onBack: () => Modular.to.pop(),
-    );
-  }
-
-  PlaybackRouteHealth? _routeHealth(PlaybackSource source) {
-    final url = source.variants.isEmpty ? '' : source.variants.first.url;
-    final host = Uri.tryParse(url)?.host ?? '';
-    final key = PlaybackRouteKey(
-      providerId: _playbackProviderId,
-      sourceKind: source.kind.name,
-      sourceId: source.id,
-      host: host,
-    );
-    return _playbackHealth.health[key.storageKey];
-  }
-
-  String _healthDetail(PlaybackSource source) {
-    final health = _routeHealth(source);
-    if (health == null || !health.hasEnoughSamples) return '未知';
-    final firstFrame = health.firstFrameMs < 1000
-        ? '${health.firstFrameMs.round()}ms'
-        : '${(health.firstFrameMs / 1000).toStringAsFixed(1)}s';
-    return '${health.label} · 首帧 $firstFrame';
-  }
-
-  PlayerDiagnosticMetrics get _diagnosticMetrics {
-    final snapshot = _lastPlaybackDiagnostics ?? _playbackDiagnostics?.snapshot;
-    if (snapshot == null) return const PlayerDiagnosticMetrics();
-    return PlayerDiagnosticMetrics(
-      sourceResolveDuration: snapshot.sourceResolveDuration,
-      manifestDuration: snapshot.manifestDuration,
-      firstFrameDuration: snapshot.firstFrameDuration,
-      rebufferCount: snapshot.rebufferCount,
-      totalRebufferDuration: snapshot.totalRebufferDuration,
-      autoSwitchCount: 0,
-    );
-  }
-
-  Widget _buildSeekHint() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.48),
-            borderRadius: BorderRadius.circular(8),
-            border:
-                Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.22)),
-          ),
-          child: Text(
-            _seekHint!,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNextEpisodePrompt() {
-    final nextIndex = _currentEpisodeIndex + 1;
-    final next = _episodes[nextIndex];
-    return PlayerNextEpisodePrompt(
-      episodeName: next.name,
-      onPlay: _playNextEpisode,
-      onDismiss: () => setState(() => _showNextEpisodePrompt = false),
-    );
-  }
-
-  Widget _buildDanmakuPanel() {
-    return PlayerDanmakuSettingsPanel(
-      visible: _showDanmaku,
-      opacity: _danmakuOpacity,
-      area: _danmakuArea,
-      speed: _danmakuSpeed,
-      fontScale: _danmakuFontScale,
-      loadResult: _danmakuLoadResult,
-      onToggleVisible: () {
-        setState(() => _showDanmaku = !_showDanmaku);
-        _danmakuController.setVisible(_showDanmaku);
-      },
-      onOpacityChanged: _applyDanmakuOpacity,
-      onAreaChanged: _applyDanmakuArea,
-      onSpeedChanged: _applyDanmakuSpeed,
-      onFontScaleChanged: _applyDanmakuFontScale,
-      onRefresh: () => _loadDanmaku(refresh: true),
-      onCandidateSelected: _chooseDanmakuCandidate,
-    );
-  }
-
-  Widget _buildShortcutPanel() {
-    return PlayerShortcutPanel(onClose: _toggleShortcutPanel);
-  }
-
-  Widget _buildEpisodeSidebar() {
-    return EpisodeSidebar(
-      episodes: _episodes,
-      currentIndex: _currentEpisodeIndex,
-      loading: _loadingEpisodes,
-      onClose: () => setState(() => _showEpisodeDrawer = false),
-      onEpisodeTap: (index) {
-        setState(() => _showEpisodeDrawer = false);
-        _playEpisode(index);
-      },
-    );
-  }
+  Widget build(BuildContext context) => _buildPlayerView();
 }
