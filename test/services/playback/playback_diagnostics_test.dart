@@ -30,6 +30,20 @@ void main() {
     expect(snapshot.firstFrameRendered, isTrue);
   });
 
+  test('video metadata alone is not accepted as a rendered first frame', () {
+    final session = PlaybackDiagnosticsSession(openGeneration: 8)
+      ..openRequested()
+      ..openCompleted()
+      ..videoSignalDetected(PlaybackVideoSignal.metadata);
+
+    expect(session.snapshot.firstFrameRendered, isFalse);
+
+    session.videoSignalDetected(PlaybackVideoSignal.renderedFrame);
+
+    expect(session.snapshot.firstFrameRendered, isTrue);
+    expect(session.snapshot.stage, PlaybackDiagnosticStage.playing);
+  });
+
   test('ignores startup buffering and post-frame stalls below 300 ms', () {
     var now = DateTime.utc(2026, 7, 11, 12);
     final session = PlaybackDiagnosticsSession(
@@ -121,7 +135,7 @@ void main() {
     session.fail(PlaybackFailureKind.network);
     expect(session.snapshot.stage, PlaybackDiagnosticStage.failed);
     session.end();
-    expect(session.snapshot.stage, PlaybackDiagnosticStage.ended);
+    expect(session.snapshot.stage, PlaybackDiagnosticStage.failed);
   });
 
   test('suspending buffering discards an active lifecycle stall', () {

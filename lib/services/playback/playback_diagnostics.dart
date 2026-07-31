@@ -20,6 +20,11 @@ enum PlaybackDiagnosticStage {
   ended,
 }
 
+enum PlaybackVideoSignal {
+  metadata,
+  renderedFrame,
+}
+
 typedef PlaybackClock = DateTime Function();
 
 class PlaybackDiagnosticsSnapshot {
@@ -121,6 +126,11 @@ class PlaybackDiagnosticsSession {
   }
 
   void firstFrameRendered() {
+    videoSignalDetected(PlaybackVideoSignal.renderedFrame);
+  }
+
+  void videoSignalDetected(PlaybackVideoSignal signal) {
+    if (signal != PlaybackVideoSignal.renderedFrame) return;
     final requestedAt = _openRequestedAt;
     if (_ended || _firstFrameRendered) return;
     final renderedAt = _now();
@@ -154,7 +164,9 @@ class PlaybackDiagnosticsSession {
     if (!_ended) {
       _finishRebuffer(_now());
       _ended = true;
-      _stage = PlaybackDiagnosticStage.ended;
+      if (_failureKind == null) {
+        _stage = PlaybackDiagnosticStage.ended;
+      }
     }
     return snapshot;
   }
