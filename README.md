@@ -5,8 +5,8 @@
 [![Flutter](https://img.shields.io/badge/Flutter-Windows-54C5F8.svg)](https://flutter.dev/)
 
 薇拉是一款面向 Windows 10/11 的 Flutter 桌面动漫播放器，提供番剧发现、聚合搜索、
-详情浏览、追番管理、多线路播放、弹幕与离线缓存。项目当前处于 **v0.4 开源准备版**，
-仍在持续完善稳定性与数据源兼容性。
+详情浏览、追番管理、多线路播放、弹幕与离线缓存。项目当前处于 **1.0 发布准备阶段**；
+正式 `v1.0.0` 只会在自动化门槛和中国大陆网络播放验收都通过后发布。
 
 ## 功能
 
@@ -45,16 +45,23 @@ flutter run -d windows
 ### 验证
 
 ```powershell
-dart analyze
-flutter test --no-pub
-powershell -NoProfile -ExecutionPolicy Bypass -File tool/build_windows_release.ps1
+flutter analyze
+flutter test --coverage --no-pub
+dart run tool/check_coverage.dart
+powershell -NoProfile -ExecutionPolicy Bypass -File tool/package_windows_release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tool/test_windows_package.ps1
 ```
 
-Release 目录位于 `build/windows/x64/runner/Release/`，可分发压缩包位于
-`build/windows/x64/runner/weila-<version>-windows-x64.zip`。Windows 应用依赖同
-目录中的 DLL 与 `data/`，不能只复制 `weila.exe`。构建脚本使用临时英文路径规避
-Flutter/MSBuild 在中文目录下的路径解析问题，校验 media_kit 原生依赖，并将许可与
-版本说明一同打包。
+Release 目录位于 `build/windows/x64/runner/Release/`；便携 ZIP、每用户安装器与
+`SHA256SUMS.txt` 统一输出到 `build/release/`。Windows 应用依赖同目录中的 DLL 与
+`data/`，不能只复制 `weila.exe`。构建脚本使用临时英文路径规避 Flutter/MSBuild
+在中文目录下的路径解析问题，校验 media_kit 原生依赖，并将许可与版本说明一同打包。
+安装器编译器固定使用官方 Inno Setup 7.0.2 x64 及其 SHA-256，不使用浮动的“最新版”
+下载地址。
+
+安装器按当前用户安装到 `%LOCALAPPDATA%\Programs\Weila`，不要求管理员权限。更新与
+卸载默认保留 Hive 数据、离线下载和 Windows Credential Manager 中的弹幕凭据。设置
+页只提供 GitHub Releases 手动更新入口，不执行后台检查、下载或自替换。
 
 ## 播放器快捷键
 
@@ -93,11 +100,13 @@ lib/
 
 ## 数据与隐私
 
-薇拉不提供账号系统。观看历史、收藏、追番、设置和弹幕凭据保存在本机 Hive 数据库中。
-应用会按功能需要访问 Jikan、Bangumi、弹弹 play 以及用户启用的插件服务；这些服务
-拥有各自的隐私政策和可用性边界。
+薇拉不提供账号系统。观看历史、收藏、追番和设置保存在本机 Hive 数据库中。弹弹play
+AppId/AppSecret 保存在 Windows 凭据管理器的 `Weila/Dandanplay` 通用凭据中，不写入
+生产 Hive。应用会按功能需要访问 AniList、Jikan、Bangumi、弹弹play 以及用户启用的
+插件服务；这些服务拥有各自的隐私政策和可用性边界。
 
 请勿在 Issue、日志或截图中提交 API 密钥、个人目录、Cookie 或其他敏感信息。
+完整说明与删除方式见 [隐私说明](PRIVACY.md)。
 
 ## 项目边界
 

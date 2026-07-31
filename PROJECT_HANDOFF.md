@@ -1,9 +1,56 @@
 # 薇拉项目交接文件
 
-更新日期：2026-07-19
+更新日期：2026-07-31
 项目位置：仓库根目录
 
-## 0. 2026-07-16 双目录分类浏览升级
+## 0. 2026-07-24 1.0 发布准备
+
+- 新增版本化 `AcceptanceReportV1`，播放器诊断和 FakePlayer 调试页均可复制脱敏 JSON。
+- 报告只保留不透明内容/线路标识、媒体主机名与数值指标，禁止完整 URL、请求头、凭据、
+  文件路径和弹幕正文。
+- 弹弹play AppId/AppSecret 改存 Windows Credential Manager 的
+  `Weila/Dandanplay`，启动时回读校验成功后才清理旧 Hive 明文。
+- 设置页保存、清除、迁移重试及播放器初始化统一经过 `DanmakuCredentialManager`；
+  生产环境不再回退读取 Hive 明文。
+- 真实弹弹play API 测试只读 Windows 安全凭据或显式环境变量，不再复制
+  `settings_box.hive`。
+- CI 改为 `flutter test --coverage`，`tool/check_coverage.dart` 强制全仓 ≥70%、
+  验收报告/凭据模块 ≥85%。7 月 30 日审查前基线分别为 72.93% 和 87.06%。
+- 新增 `PRIVACY.md`、`docs/MAINLAND_ACCEPTANCE_MATRIX.md` 与
+  `docs/RELEASE_CHECKLIST_1.0.md`。
+- `player_page.dart` 与 `detail_page.dart` 的主体均降到约 900 行；媒体生命周期、
+  弹幕会话和详情加载/片源确认已提取为可测试控制器。7 月 30 日审查前基线为
+  369 项通过、1 项真实 API 测试按设计跳过。
+- Windows 包装流水线生成便携 ZIP、每用户 Inno Setup 安装器与 `SHA256SUMS.txt`，
+  并提供 ZIP 内容、静默安装、启动、卸载和用户数据/凭据保留的烟雾脚本；当前机器
+  已完成覆盖安装与可视启动，干净账户的静默安装/卸载仍待最终验收。
+- 播放器底部控制栏常驻“验收报告”入口，正常播放也可随时复制安全 JSON；报告优先使用
+  当前线路的实时诊断快照，避免换线后误用上一线路数据。
+- 7 月 31 日主人完成大陆标准矩阵并回传 12 份独立有效的安全报告：樱花 6/6、
+  非凡 6/6，播放失败 0；全体首帧中位数 5.032 秒、单次最大 6.581 秒，最长单次
+  重缓冲 14.785 秒。
+- 12 个会话的弹幕获取、解析、排队和渲染均大于 0，`errorStage = "none"`；
+  主人同时确认 seek 后无弹幕洪峰。
+- 报告暴露并修复了“直接打开非首集仍加载首集弹幕”，以及 `media_kit` 一次性首帧
+  Future 被换集/换线重复使用导致的 0 秒失败误报；新候选包仍需复验非凡失败样本。
+- 主人复验发现拖动进度条会补发整个跨越区间的弹幕；控制器现已在显式 seek、回退和
+  明显前跳时二分重定位队列并清除旧画面。`幼女战记2` 与
+  `banGDream! YUME-MITA` 的标题差异也已加入季度和装饰符号归一；主人已在大陆候选包
+  中分别确认两部作品能加载并渲染真实弹幕。
+- 7 月 30 日开始对当前 67 项状态改动做 1.0 收口审查。已确认所有改动位于
+  `codex/weila-1.0-readiness` 隔离工作树；最终风险、测试、构建和建议提交分组见
+  `docs/RELEASE_READINESS_REPORT_1.0.md`。
+- 7 月 31 日重新验证静态检查、377 项默认测试、72.98% 全仓覆盖率、87.75% 关键模块
+  覆盖率均通过；Windows ZIP/安装器构建此前已通过。Credential Manager 启动异常、
+  安全报告严格允许列表、弹幕异步晚到洪峰 3 项发布阻断均已用失败回归测试复现并关闭。
+- 播放器、`media_kit`、集数/片源解析和详情页错误现统一输出受控操作名与
+  `failureKind`，不再记录完整媒体 URL 或展示底层异常；Windows EXE 元数据已统一为
+  `Weila`，并补充源码泄漏、资源元数据和版本一致性回归测试。
+- 主人已确认当前账户覆盖安装通过，收藏、历史、追番数据和弹幕服务凭据均保留。
+  当前仍不得改为 `1.0.0+5`、打 `v1.0.0` 或发布；还需完成 Git 历史整理、目标提交
+  CI，以及干净 Windows 环境的安装/卸载、下载保留和 SmartScreen 验收。
+
+## 0.1 2026-07-16 双目录分类浏览升级
 
 本轮已在脏工作区内完成分类基础设施与页面联动，尚未提交：
 
@@ -60,7 +107,8 @@ flutter test
 如果要做 Release，再运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tool/build_windows_release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tool/package_windows_release.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tool/test_windows_package.ps1
 ```
 
 ## 3. 已完成或接近完成的方向
