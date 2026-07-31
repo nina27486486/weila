@@ -1,4 +1,5 @@
 import 'bootstrap/app_bootstrap.dart';
+import 'bootstrap/app_launcher.dart';
 import 'platform/app_capabilities.dart';
 import 'platform/windows/window_manager_app_window_controller.dart';
 import 'platform/windows/window_manager_fullscreen_controller.dart';

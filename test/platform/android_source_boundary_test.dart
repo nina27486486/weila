@@ -27,6 +27,21 @@ void main() {
     expect(sources, isNot(contains('windows_danmaku_credential_store')));
   });
 
+  test('bootstrap coordinator has no application composition dependencies', () {
+    final source =
+        File('lib/bootstrap/app_bootstrap.dart').readAsStringSync();
+    for (final forbidden in [
+      'app_module.dart',
+      'app_widget.dart',
+      'AppModule(',
+      'AppWidget(',
+      'ModularApp(',
+      'runApp(',
+    ]) {
+      expect(source, isNot(contains(forbidden)), reason: forbidden);
+    }
+  });
+
   test('Android capabilities gate routes and settings actions', () {
     final module = File('lib/app_module.dart').readAsStringSync();
     final settings =
