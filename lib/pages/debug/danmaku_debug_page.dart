@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../debug/danmaku_debug_session.dart';
 import '../../debug/fake_player.dart';
 import '../../services/danmaku/danmaku_service.dart';
+import '../../services/diagnostics/acceptance_report_service.dart';
 import '../../widgets/danmaku_overlay.dart';
 import 'widgets/danmaku_debug_components.dart';
 
@@ -14,10 +15,12 @@ class DanmakuDebugPage extends StatefulWidget {
     super.key,
     this.session,
     this.autoLoad = true,
+    this.reportService,
   });
 
   final DanmakuDebugSession? session;
   final bool autoLoad;
+  final AcceptanceReportService? reportService;
 
   @override
   State<DanmakuDebugPage> createState() => _DanmakuDebugPageState();
@@ -27,11 +30,13 @@ class _DanmakuDebugPageState extends State<DanmakuDebugPage> {
   final _formKey = GlobalKey<FormState>();
   final _animeController = TextEditingController(text: '弱弱老师');
   final _episodeController = TextEditingController(text: '1');
+  late final AcceptanceReportService _reportService;
   late final DanmakuDebugSession _session;
 
   @override
   void initState() {
     super.initState();
+    _reportService = widget.reportService ?? AcceptanceReportService();
     _session = widget.session ??
         DanmakuDebugSession(
           source: DanmakuServiceDebugSource(DanmakuService()),
@@ -69,11 +74,13 @@ class _DanmakuDebugPageState extends State<DanmakuDebugPage> {
   }
 
   Future<void> _copyDiagnostics() async {
-    await Clipboard.setData(
-        ClipboardData(text: _session.snapshot.toSafeText()));
+    final report = await _reportService.create(danmaku: _session.snapshot);
+    await Clipboard.setData(ClipboardData(text: report.toSafeJson()));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('安全诊断已复制，不含凭证与弹幕正文')),
+      const SnackBar(
+        content: Text('安全验收报告已复制，不含凭证、弹幕正文与媒体 URL'),
+      ),
     );
   }
 
@@ -205,6 +212,7 @@ class _DanmakuDebugPageState extends State<DanmakuDebugPage> {
   Widget _buildStage() => DanmakuDebugStage(
         controller: _session.controller,
         player: _session.player,
+        onSeek: _session.seek,
       );
 
   Widget _buildDiagnostics() => DanmakuDiagnosticsPanel(

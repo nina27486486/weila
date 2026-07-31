@@ -73,12 +73,45 @@ class DanmakuRepository {
         }
       }
 
-      Map<String, dynamic>? response;
+      Map<String, dynamic>? cachedResponse;
+      var responseChanged = false;
       if (!effectiveRefresh) {
-        response = _readMap(_searchCacheKey, cacheKey);
+        cachedResponse = _readMap(_searchCacheKey, cacheKey);
       }
-      response ??= await _client.searchEpisodes(anime, episode);
-      if (_readMap(_searchCacheKey, cacheKey) == null || effectiveRefresh) {
+      late Map<String, dynamic> response;
+      if (cachedResponse == null) {
+        response = await _client.searchEpisodes(anime, episode);
+        responseChanged = true;
+      } else {
+        response = cachedResponse;
+      }
+      var decision = _matcher.match(
+        requestedAnime: anime,
+        requestedEpisode: episode,
+        response: response,
+      );
+      final aliasSearchCompleted =
+          response[_aliasSearchPlanVersionKey] == _aliasSearchPlanVersion;
+      if (decision.candidates.isEmpty && !aliasSearchCompleted) {
+        final fallbackQueries = _fallbackSearchQueries(anime);
+        if (fallbackQueries.isNotEmpty) {
+          for (final query in fallbackQueries) {
+            final fallbackResponse =
+                await _client.searchEpisodes(query, episode);
+            response = Map<String, dynamic>.from(fallbackResponse);
+            decision = _matcher.match(
+              requestedAnime: anime,
+              requestedEpisode: episode,
+              response: response,
+            );
+            if (decision.candidates.isNotEmpty) break;
+          }
+          response[_aliasSearchPlanVersionKey] = _aliasSearchPlanVersion;
+          response.remove(_legacyAliasSearchCompletedKey);
+          responseChanged = true;
+        }
+      }
+      if (responseChanged) {
         await _writeEntry(
           _searchCacheKey,
           cacheKey,
@@ -87,11 +120,6 @@ class DanmakuRepository {
           maximumEntries: 200,
         );
       }
-      final decision = _matcher.match(
-        requestedAnime: anime,
-        requestedEpisode: episode,
-        response: response,
-      );
       if (decision.candidates.isEmpty) {
         return DanmakuLoadResult(
           status: DanmakuLoadStatus.noMatch,
@@ -266,6 +294,49 @@ class DanmakuRepository {
 
   String _requestKey(String anime, int episode) {
     return '${anime.trim().toLowerCase()}|$episode';
+  }
+
+  static const _aliasSearchPlanVersion = 2;
+  static const _aliasSearchPlanVersionKey = '_weilaAliasSearchPlanVersion';
+  static const _legacyAliasSearchCompletedKey =
+      '_weilaAliasSearchCompleted';
+
+  List<String> _fallbackSearchQueries(String anime) {
+    final title = anime.trim();
+    final queries = <String>[];
+    final seasonMatch = RegExp(r'^(.*?)([2-4])$').firstMatch(title);
+    if (seasonMatch != null) {
+      const seasonNumbers = <String, String>{
+        '2': '二',
+        '3': '三',
+        '4': '四',
+      };
+      final baseTitle = seasonMatch.group(1)?.trim() ?? '';
+      final seasonNumber = seasonNumbers[seasonMatch.group(2)];
+      if (baseTitle.isNotEmpty && seasonNumber != null) {
+        queries.add('$baseTitle 第$seasonNumber季');
+      }
+    }
+
+    var canonicalDreamTitle = title.replaceFirst(
+      RegExp(r'bang\s*dream', caseSensitive: false),
+      'BanG Dream',
+    );
+    canonicalDreamTitle = canonicalDreamTitle.replaceFirst(
+      RegExp(r'yume[\s_-]*mita', caseSensitive: false),
+      'YUME∞MITA',
+    );
+    if (canonicalDreamTitle != title) {
+      queries.add(canonicalDreamTitle);
+      if (canonicalDreamTitle.contains('BanG Dream') &&
+          canonicalDreamTitle.contains('YUME∞MITA')) {
+        queries.add(
+          canonicalDreamTitle.replaceFirst('YUME∞MITA', 'ゆめ∞みた'),
+        );
+      }
+    }
+
+    return queries.toSet().toList(growable: false);
   }
 
   Map<String, dynamic>? _readMap(String rootKey, String entryKey) {

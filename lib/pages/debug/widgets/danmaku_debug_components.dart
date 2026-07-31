@@ -10,10 +10,12 @@ class DanmakuDebugStage extends StatelessWidget {
     super.key,
     required this.controller,
     required this.player,
+    required this.onSeek,
   });
 
   final DanmakuController controller;
   final FakePlayer player;
+  final ValueChanged<Duration> onSeek;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +55,7 @@ class DanmakuDebugStage extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        _TimelineControls(player: player),
+        _TimelineControls(player: player, onSeek: onSeek),
         const SizedBox(height: 14),
         _RenderControls(controller: controller),
       ],
@@ -97,9 +99,13 @@ class _StageBadge extends StatelessWidget {
 }
 
 class _TimelineControls extends StatelessWidget {
-  const _TimelineControls({required this.player});
+  const _TimelineControls({
+    required this.player,
+    required this.onSeek,
+  });
 
   final FakePlayer player;
+  final ValueChanged<Duration> onSeek;
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +142,7 @@ class _TimelineControls extends StatelessWidget {
                   min: 0,
                   max: player.duration.inMilliseconds / 1000.0,
                   value: seconds.clamp(0, 60),
-                  onChanged: (value) => player.seek(
+                  onChanged: (value) => onSeek(
                     Duration(milliseconds: (value * 1000).round()),
                   ),
                 ),

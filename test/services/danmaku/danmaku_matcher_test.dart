@@ -64,6 +64,41 @@ void main() {
     expect(decision.selected?.score, 100);
   });
 
+  test('matches a trailing numeric sequel to the equivalent Chinese season',
+      () {
+    final decision = matcher.match(
+      requestedAnime: '幼女战记2',
+      requestedEpisode: 1,
+      response: _response([
+        _anime(
+          animeId: 210,
+          title: '幼女战记 第二季',
+          episodes: [_episode(21001, '第1话')],
+        ),
+      ]),
+    );
+
+    expect(decision.selected?.episodeId, 21001);
+    expect(decision.selected?.score, 100);
+  });
+
+  test('ignores the decorative infinity mark in YUME MITA titles', () {
+    final decision = matcher.match(
+      requestedAnime: 'banGDream! YUME-MITA',
+      requestedEpisode: 1,
+      response: _response([
+        _anime(
+          animeId: 220,
+          title: 'BanG Dream! YUME∞MITA',
+          episodes: [_episode(22001, 'Episode 1')],
+        ),
+      ]),
+    );
+
+    expect(decision.selected?.episodeId, 22001);
+    expect(decision.selected?.score, 100);
+  });
+
   test('episode one never matches episode ten or eleven', () {
     final decision = matcher.match(
       requestedAnime: '测试动画',

@@ -17,6 +17,8 @@ class DanmakuFrameDeltaTracker {
 
 /// 弹幕控制器 — 管理弹幕状态和渲染
 class DanmakuController extends ChangeNotifier {
+  static const double _positionDiscontinuitySeconds = 2.0;
+
   List<DanmakuItem> _allDanmaku = [];
   int _nextSpawnIndex = 0; // 下一个待发射的弹幕索引
   final List<_RunningDanmaku> _running = [];
@@ -63,20 +65,50 @@ class DanmakuController extends ChangeNotifier {
     _allDanmaku.sort((a, b) => a.time.compareTo(b.time));
     _queuedCount = _allDanmaku.length;
     _resetPlaybackPass();
+    _nextSpawnIndex = _firstIndexAtOrAfter(max(0.0, _currentTime - 0.1));
     notifyListeners();
   }
 
   /// 更新当前播放时间
   void updatePosition(double seconds) {
-    // 如果 seek 回退了，重置弹幕索引
-    if (seconds + 0.001 < _currentTime) _resetPlaybackPass();
+    final delta = seconds - _currentTime;
+    // 回退或明显前跳都属于 seek；不能补发跳转跨过的整个区间。
+    if (!seconds.isFinite ||
+        delta < -0.001 ||
+        delta > _positionDiscontinuitySeconds) {
+      seekTo(seconds);
+      return;
+    }
     _currentTime = seconds;
+  }
+
+  /// 将弹幕时间轴直接对齐到 seek 目标，不补发拖动经过的弹幕。
+  void seekTo(double seconds) {
+    final target = seconds.isFinite ? max(0.0, seconds) : 0.0;
+    _currentTime = target;
+    _resetPlaybackPass();
+    _nextSpawnIndex = _firstIndexAtOrAfter(max(0.0, target - 0.1));
+    notifyListeners();
   }
 
   void resetPlaybackPass() {
     _currentTime = 0;
     _resetPlaybackPass();
     notifyListeners();
+  }
+
+  int _firstIndexAtOrAfter(double target) {
+    var low = 0;
+    var high = _allDanmaku.length;
+    while (low < high) {
+      final middle = low + ((high - low) >> 1);
+      if (_allDanmaku[middle].time < target) {
+        low = middle + 1;
+      } else {
+        high = middle;
+      }
+    }
+    return low;
   }
 
   void _resetPlaybackPass() {

@@ -77,6 +77,11 @@ class DanmakuDebugSession extends ChangeNotifier {
   String? get safeMessage => _safeMessage;
   bool get loading => _loading;
 
+  void seek(Duration target) {
+    controller.seekTo(target.inMilliseconds / 1000.0);
+    player.seek(target);
+  }
+
   DanmakuDebugSnapshot get snapshot {
     final render = controller.diagnostics;
     var errorStage = _loadDiagnostics.errorStage;

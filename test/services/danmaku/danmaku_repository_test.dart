@@ -81,6 +81,145 @@ void main() {
     expect(result.diagnostics.errorStage, DanmakuErrorStage.none);
   });
 
+  test('retries a trailing numeric sequel with a Chinese season title',
+      () async {
+    final api = _FakeDandanplayApi(
+      searchResponses: {
+        '幼女战记2': const {'success': true, 'animes': <Object>[]},
+        '幼女战记 第二季': _searchResponse(
+          title: '幼女战记 第二季',
+          animeId: 210,
+          episodeId: 21001,
+        ),
+      },
+      commentsResponse: _commentsResponse(),
+    );
+    final repository = DanmakuRepository(
+      client: api,
+      matcher: const DanmakuMatcher(),
+      cache: _MemoryDanmakuCache(),
+    );
+
+    final result = await repository.load(anime: '幼女战记2', episode: 1);
+
+    expect(result.status, DanmakuLoadStatus.loaded);
+    expect(result.selected?.episodeId, 21001);
+    expect(api.searchedAnimes, ['幼女战记2', '幼女战记 第二季']);
+  });
+
+  test('retries a CMS YUME-MITA alias with the searchable Japanese title',
+      () async {
+    final api = _FakeDandanplayApi(
+      searchResponses: {
+        'banGDream! YUME-MITA': const {
+          'success': true,
+          'animes': <Object>[],
+        },
+        'BanG Dream! YUME∞MITA': const {
+          'success': true,
+          'animes': <Object>[],
+        },
+        'BanG Dream! ゆめ∞みた': _searchResponse(
+          title: 'BanG Dream! YUME∞MITA',
+          animeId: 220,
+          episodeId: 22001,
+        ),
+      },
+      commentsResponse: _commentsResponse(),
+    );
+    final repository = DanmakuRepository(
+      client: api,
+      matcher: const DanmakuMatcher(),
+      cache: _MemoryDanmakuCache(),
+    );
+
+    final result =
+        await repository.load(anime: 'banGDream! YUME-MITA', episode: 1);
+
+    expect(result.status, DanmakuLoadStatus.loaded);
+    expect(result.selected?.episodeId, 22001);
+    expect(
+      api.searchedAnimes,
+      [
+        'banGDream! YUME-MITA',
+        'BanG Dream! YUME∞MITA',
+        'BanG Dream! ゆめ∞みた',
+      ],
+    );
+  });
+
+  test('retries an old unsuccessful alias cache after the planner changes',
+      () async {
+    final now = DateTime.utc(2026, 7, 30, 12);
+    final cache = _MemoryDanmakuCache();
+    cache.values['danmaku_search_cache_v1'] = {
+      'version': 1,
+      'entries': {
+        'bangdream! yume-mita|1': {
+          'value': {
+            'success': true,
+            'animes': <Object>[],
+            '_weilaAliasSearchCompleted': true,
+          },
+          'expiresAt': now.add(const Duration(hours: 1)).toIso8601String(),
+          'lastAccessAt': now.toIso8601String(),
+        },
+      },
+    };
+    final api = _FakeDandanplayApi(
+      searchResponses: {
+        'BanG Dream! YUME∞MITA': const {
+          'success': true,
+          'animes': <Object>[],
+        },
+        'BanG Dream! ゆめ∞みた': _searchResponse(
+          title: 'BanG Dream! YUME∞MITA',
+          animeId: 220,
+          episodeId: 22001,
+        ),
+      },
+      commentsResponse: _commentsResponse(),
+    );
+    final repository = DanmakuRepository(
+      client: api,
+      matcher: const DanmakuMatcher(),
+      cache: cache,
+      now: () => now,
+    );
+
+    final result =
+        await repository.load(anime: 'banGDream! YUME-MITA', episode: 1);
+
+    expect(result.status, DanmakuLoadStatus.loaded);
+    expect(result.selected?.episodeId, 22001);
+    expect(
+      api.searchedAnimes,
+      ['BanG Dream! YUME∞MITA', 'BanG Dream! ゆめ∞みた'],
+    );
+  });
+
+  test('caches an unsuccessful alias search to avoid repeated API calls',
+      () async {
+    final api = _FakeDandanplayApi(
+      searchResponses: const {
+        '幼女战记2': {'success': true, 'animes': <Object>[]},
+        '幼女战记 第二季': {'success': true, 'animes': <Object>[]},
+      },
+    );
+    final repository = DanmakuRepository(
+      client: api,
+      matcher: const DanmakuMatcher(),
+      cache: _MemoryDanmakuCache(),
+    );
+
+    final first = await repository.load(anime: '幼女战记2', episode: 1);
+    final cached = await repository.load(anime: '幼女战记2', episode: 1);
+
+    expect(first.status, DanmakuLoadStatus.noMatch);
+    expect(cached.status, DanmakuLoadStatus.noMatch);
+    expect(api.searchedAnimes, ['幼女战记2', '幼女战记 第二季']);
+  });
+
   test('reports search, match, comments, and parse failure stages', () async {
     Future<DanmakuLoadResult> loadWith(_FakeDandanplayApi api) {
       return DanmakuRepository(
@@ -240,6 +379,7 @@ void main() {
 class _FakeDandanplayApi implements DandanplayApi {
   _FakeDandanplayApi({
     this.searchResponse,
+    this.searchResponses,
     this.commentsResponse,
     this.errorKind,
     this.searchErrorKind,
@@ -247,12 +387,14 @@ class _FakeDandanplayApi implements DandanplayApi {
   });
 
   final Map<String, dynamic>? searchResponse;
+  final Map<String, Map<String, dynamic>>? searchResponses;
   final Map<String, dynamic>? commentsResponse;
   final DandanplayApiErrorKind? errorKind;
   final DandanplayApiErrorKind? searchErrorKind;
   final DandanplayApiErrorKind? commentsErrorKind;
   int searchCalls = 0;
   int commentCalls = 0;
+  final List<String> searchedAnimes = [];
 
   @override
   Future<Map<String, dynamic>> getComments(int episodeId) async {
@@ -264,8 +406,9 @@ class _FakeDandanplayApi implements DandanplayApi {
   @override
   Future<Map<String, dynamic>> searchEpisodes(String anime, int episode) async {
     searchCalls += 1;
+    searchedAnimes.add(anime);
     _throwIfNeeded(searchErrorKind ?? errorKind);
-    return searchResponse ?? _searchResponse();
+    return searchResponses?[anime] ?? searchResponse ?? _searchResponse();
   }
 
   void _throwIfNeeded(DandanplayApiErrorKind? kind) {

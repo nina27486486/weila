@@ -135,10 +135,34 @@ class DanmakuMatcher {
 
   String _normalize(String value) {
     final halfWidth = _toHalfWidth(value).toLowerCase();
-    return halfWidth.replaceAll(
-      RegExp(r'[\s·・:：,，.。!！?？\-—_()（）\[\]【】《》<>×]'),
+    var normalized = halfWidth.replaceAll(
+      RegExp(r'[\s·・:：,，.。!！?？\-—_()（）\[\]【】《》<>×∞]'),
       '',
     );
+    const seasonAliases = <String, String>{
+      '第二季': 'season2',
+      '第2季': 'season2',
+      '2ndseason': 'season2',
+      '第三季': 'season3',
+      '第3季': 'season3',
+      '3rdseason': 'season3',
+      '第四季': 'season4',
+      '第4季': 'season4',
+      '4thseason': 'season4',
+    };
+    for (final alias in seasonAliases.entries) {
+      normalized = normalized.replaceAll(alias.key, alias.value);
+    }
+    for (var season = 2; season <= 4; season++) {
+      final suffix = '$season';
+      if (normalized.endsWith(suffix) &&
+          !normalized.endsWith('season$suffix') &&
+          !normalized.endsWith('part$suffix')) {
+        normalized =
+            '${normalized.substring(0, normalized.length - 1)}season$suffix';
+      }
+    }
+    return normalized;
   }
 
   String _toHalfWidth(String value) {

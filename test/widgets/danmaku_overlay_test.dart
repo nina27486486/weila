@@ -72,6 +72,77 @@ void main() {
     expect(controller.diagnostics.area, 0.5);
   });
 
+  testWidgets(
+      'seeking realigns the queue without accumulating crossed comments',
+      (tester) async {
+    final controller = DanmakuController()
+      ..loadDanmaku([
+        DanmakuItem(text: 'ten', time: 10),
+        DanmakuItem(text: 'twenty', time: 20),
+        DanmakuItem(text: 'thirty', time: 30),
+        DanmakuItem(text: 'forty', time: 40),
+      ]);
+
+    await _pumpOverlay(tester, controller);
+
+    controller.seekTo(10);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(controller.diagnostics.emittedCount, 1);
+    expect(controller.runningCount, 1);
+
+    controller.seekTo(30);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(controller.diagnostics.currentTime, 30);
+    expect(controller.diagnostics.emittedCount, 1);
+    expect(controller.diagnostics.renderedCount, 1);
+    expect(controller.runningCount, 1);
+
+    controller.seekTo(20);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(controller.diagnostics.currentTime, 20);
+    expect(controller.diagnostics.emittedCount, 1);
+    expect(controller.runningCount, 1);
+  });
+
+  testWidgets('a discontinuous player position update skips the crossed range',
+      (tester) async {
+    final controller = DanmakuController()
+      ..loadDanmaku([
+        DanmakuItem(text: 'ten', time: 10),
+        DanmakuItem(text: 'twenty', time: 20),
+        DanmakuItem(text: 'thirty', time: 30),
+      ]);
+
+    await _pumpOverlay(tester, controller);
+    controller.updatePosition(30);
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(controller.diagnostics.currentTime, 30);
+    expect(controller.diagnostics.emittedCount, 1);
+    expect(controller.runningCount, 1);
+  });
+
+  testWidgets('late-loaded danmaku starts from the current playback position',
+      (tester) async {
+    final controller = DanmakuController();
+
+    await _pumpOverlay(tester, controller);
+    controller.updatePosition(30);
+    controller.loadDanmaku([
+      DanmakuItem(text: 'ten', time: 10),
+      DanmakuItem(text: 'twenty', time: 20),
+      DanmakuItem(text: 'thirty', time: 30),
+      DanmakuItem(text: 'forty', time: 40),
+    ]);
+    await tester.pump(const Duration(milliseconds: 16));
+
+    expect(controller.diagnostics.currentTime, 30);
+    expect(controller.diagnostics.queuedCount, 4);
+    expect(controller.diagnostics.emittedCount, 1);
+    expect(controller.diagnostics.renderedCount, 1);
+    expect(controller.runningCount, 1);
+  });
+
   testWidgets('publishes paint telemetry after the frame completes',
       (tester) async {
     final controller = DanmakuController()

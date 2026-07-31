@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/debug/danmaku_debug_session.dart';
 import 'package:weila/debug/fake_player.dart';
@@ -7,11 +8,24 @@ import 'package:weila/pages/debug/danmaku_debug_page.dart';
 import 'package:weila/services/danmaku/danmaku_diagnostics.dart';
 import 'package:weila/services/danmaku/danmaku_load_result.dart';
 import 'package:weila/services/danmaku/danmaku_matcher.dart';
+import 'package:weila/services/diagnostics/acceptance_report_service.dart';
 import 'package:weila/widgets/danmaku_overlay.dart';
 
 void main() {
   testWidgets('loads real data into a video-free stage and shows every metric',
       (tester) async {
+    String? copiedText;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') {
+        copiedText = (call.arguments as Map<Object?, Object?>)['text'] as String;
+      }
+      return null;
+    });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    });
     final ticker = _ManualTicker();
     final session = DanmakuDebugSession(
       source: _LoadedSource(),
@@ -22,7 +36,15 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
-        home: DanmakuDebugPage(session: session, autoLoad: false),
+        home: DanmakuDebugPage(
+          session: session,
+          autoLoad: false,
+          reportService: AcceptanceReportService(
+            loadAppVersion: () async => '1.0.0+5',
+            now: () => DateTime.utc(2026, 7, 23),
+            platform: 'windows',
+          ),
+        ),
       ),
     );
 
@@ -55,6 +77,18 @@ void main() {
     ticker.elapse(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 16));
     expect(find.text('0.1'), findsOneWidget);
+
+    final copyButton =
+        find.byKey(const ValueKey('danmaku-debug-copy'));
+    await tester.ensureVisible(copyButton);
+    await tester.tap(copyButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(copiedText, contains('"schemaVersion": 1'));
+    expect(copiedText, contains('"episodeId": 24680'));
+    expect(copiedText, isNot(contains('first')));
+    expect(copiedText, isNot(contains('second')));
   });
 }
 
