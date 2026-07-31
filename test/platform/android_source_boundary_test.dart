@@ -28,31 +28,86 @@ void main() {
   });
 
   test('bootstrap coordinator has no application composition dependencies', () {
+    final source = File('lib/bootstrap/app_bootstrap.dart').readAsStringSync();
     final closure = _collectDartDependencyClosure(
       root: Directory.current,
       startPath: 'lib/bootstrap/app_bootstrap.dart',
     );
 
-    expect(closure.localPaths, isNot(contains('lib/app_module.dart')));
-    expect(closure.localPaths, isNot(contains('lib/app_widget.dart')));
-    expect(closure.localPaths, isNot(contains('lib/stores/theme_store.dart')));
+    expect(_directCompositionSymbols(source), isEmpty);
     expect(
-      closure.localPaths.where((path) => path.startsWith('lib/pages/')),
+      closure.localPaths.where(_isForbiddenLocalDependencyPath),
       isEmpty,
     );
     expect(
-      closure.localPaths
-          .where((path) => path.startsWith('lib/services/plugin/')),
+      closure.externalPackageUris.where(_isForbiddenExternalPackageUri),
       isEmpty,
     );
+  });
+
+  test('external package guard rejects every forbidden package path', () {
     expect(
-      closure.externalPackageUris,
-      isNot(contains('package:flutter_modular/flutter_modular.dart')),
+      _isForbiddenExternalPackageUri(
+        'package:flutter_modular/src/presenter/modular_app.dart',
+      ),
+      isTrue,
     );
     expect(
-      closure.externalPackageUris,
-      isNot(contains('package:media_kit/media_kit.dart')),
+      _isForbiddenExternalPackageUri(
+          'package:media_kit/src/player/player.dart'),
+      isTrue,
     );
+    expect(
+      _isForbiddenExternalPackageUri('package:flutter/widgets.dart'),
+      isFalse,
+    );
+  });
+
+  test('local dependency guard canonicalizes case and path separators', () {
+    for (final forbidden in [
+      r'LIB\APP_MODULE.dart',
+      'Lib/App_Widget.dart',
+      'LIB/Stores/Theme_Store.dart',
+      r'lib\PAGES\home_page.dart',
+      'LIB/services/PLUGIN/example_plugin.dart',
+    ]) {
+      expect(
+        _isForbiddenLocalDependencyPath(forbidden),
+        isTrue,
+        reason: forbidden,
+      );
+    }
+    expect(
+      _isForbiddenLocalDependencyPath('lib/services/danmaku/service.dart'),
+      isFalse,
+    );
+  });
+
+  test('direct composition guard catches code but ignores text tokens', () {
+    final codeSymbols = _directCompositionSymbols('''
+void compose() {
+  runApp(app);
+  ModularApp(module: module, child: child);
+  AppModule ();
+  AppWidget();
+}
+''');
+    final textSymbols = _directCompositionSymbols(r'''
+// runApp(app);
+/* ModularApp(module: module, child: child); */
+const normal = 'AppModule(';
+const raw = r'AppWidget(';
+const multiline = """
+runApp(
+ModularApp(
+""";
+''');
+
+    expect(
+      codeSymbols,
+      equals({'runApp(', 'ModularApp(', 'AppModule(', 'AppWidget('}),
+    );
+    expect(textSymbols, isEmpty);
   });
 
   test(
@@ -127,6 +182,38 @@ class _DartDependencyClosure {
 
   final Set<String> localPaths;
   final Set<String> externalPackageUris;
+}
+
+bool _isForbiddenExternalPackageUri(String uri) {
+  return uri.startsWith('package:flutter_modular/') ||
+      uri.startsWith('package:media_kit/');
+}
+
+bool _isForbiddenLocalDependencyPath(String path) {
+  final canonicalPath = _normalizeRelativePath(path).toLowerCase();
+  return const {
+        'lib/app_module.dart',
+        'lib/app_widget.dart',
+        'lib/stores/theme_store.dart',
+      }.contains(canonicalPath) ||
+      canonicalPath.startsWith('lib/pages/') ||
+      canonicalPath.startsWith('lib/services/plugin/');
+}
+
+Set<String> _directCompositionSymbols(String source) {
+  final code = _maskDartSource(source, maskStrings: true);
+  final found = <String>{};
+  for (final symbol in const [
+    'runApp(',
+    'ModularApp(',
+    'AppModule(',
+    'AppWidget(',
+  ]) {
+    final name = symbol.substring(0, symbol.length - 1);
+    final callPattern = RegExp('\\b${RegExp.escape(name)}\\s*\\(');
+    if (callPattern.hasMatch(code)) found.add(symbol);
+  }
+  return found;
 }
 
 _DartDependencyClosure _collectDartDependencyClosure({
