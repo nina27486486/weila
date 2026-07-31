@@ -95,7 +95,8 @@ function Ensure-VerifiedArchive {
 function New-ReleasePackage {
     param(
         [Parameter(Mandatory = $true)][string]$Workspace,
-        [Parameter(Mandatory = $true)][string]$ReleaseDirectory
+        [Parameter(Mandatory = $true)][string]$ReleaseDirectory,
+        [Parameter(Mandatory = $true)][string]$ArtifactDirectory
     )
 
     foreach ($document in @('LICENSE', 'README.md', 'CHANGELOG.md')) {
@@ -113,9 +114,8 @@ function New-ReleasePackage {
     }
 
     $version = $versionLine.Matches[0].Groups[1].Value
-    $packagePath = Join-Path `
-        (Split-Path -Parent $ReleaseDirectory) `
-        "weila-$version-windows-x64.zip"
+    New-Item -ItemType Directory -Force -Path $ArtifactDirectory | Out-Null
+    $packagePath = Join-Path $ArtifactDirectory "weila-$version-windows-x64.zip"
     if (Test-Path -LiteralPath $packagePath) {
         Remove-Item -LiteralPath $packagePath -Force
     }
@@ -196,9 +196,11 @@ try {
     Invoke-Flutter @('build', 'windows', '--release', '--no-pub')
 
     $releaseDirectory = Join-Path $workspace 'build\windows\x64\runner\Release'
+    $artifactDirectory = Join-Path $workspace 'build\release'
     $packagePath = New-ReleasePackage `
         -Workspace $workspace `
-        -ReleaseDirectory $releaseDirectory
+        -ReleaseDirectory $releaseDirectory `
+        -ArtifactDirectory $artifactDirectory
     Write-Host "Windows release build completed: $releaseDirectory"
     Write-Host "Windows release package created: $packagePath"
 } finally {

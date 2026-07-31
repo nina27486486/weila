@@ -40,15 +40,31 @@ jobs:
       - name: Analyze
         run: dart analyze
 
-      - name: Test
-        run: flutter test --no-pub
+      - name: Test with coverage
+        run: flutter test --coverage --no-pub
 
-      - name: Build Windows release
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File tool/build_windows_release.ps1
+      - name: Enforce coverage gates
+        run: dart run tool/check_coverage.dart
 
-      - name: Upload Windows package
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: weila-coverage
+          path: coverage/lcov.info
+          if-no-files-found: error
+
+      - name: Build Windows release artifacts
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tool/package_windows_release.ps1
+
+      - name: Smoke test Windows package
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tool/test_windows_package.ps1
+
+      - name: Upload Windows release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: weila-windows-x64
-          path: build/windows/x64/runner/weila-*-windows-x64.zip
+          path: |
+            build/release/weila-*-windows-x64.zip
+            build/release/weila-*-windows-x64-setup.exe
+            build/release/SHA256SUMS.txt
           if-no-files-found: error

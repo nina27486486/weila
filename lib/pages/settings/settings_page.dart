@@ -5,6 +5,7 @@ import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../debug/danmaku_debug_config.dart';
 import '../../services/danmaku/dandanplay_credential_manager.dart';
@@ -94,6 +95,16 @@ class _SettingsPageState extends State<SettingsPage> {
       final info = await PackageInfo.fromPlatform();
       if (mounted) setState(() => _version = info.version);
     } catch (_) {}
+  }
+
+  Future<void> _openReleasePage() async {
+    final opened = await launchUrl(
+      Uri.parse(AppConstants.releaseUpdatesUrl),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      ErrorHandler.showError(context, '无法打开发布页面，请稍后重试');
+    }
   }
 
   Future<void> _loadCacheSize() async {
@@ -673,6 +684,13 @@ class _SettingsPageState extends State<SettingsPage> {
                             title: '项目架构',
                             subtitle: '基于 Kazumi 架构持续演进',
                             trailingText: '开源组件',
+                          ),
+                          SettingsActionRow(
+                            icon: Icons.system_update_alt_rounded,
+                            title: '获取新版本',
+                            subtitle: '前往 GitHub Releases 手动下载与校验',
+                            trailingText: '手动更新',
+                            onTap: _openReleasePage,
                           ),
                         ],
                       ),

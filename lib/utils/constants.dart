@@ -1,6 +1,8 @@
 class AppConstants {
   static const String appName = '薇拉';
   static const String appVersion = '0.4.0';
+  static const String releaseUpdatesUrl =
+      'https://github.com/nina27486486/weila/releases/latest';
 
   // 存储路径
   static const String pluginsDir = 'plugins/v2';

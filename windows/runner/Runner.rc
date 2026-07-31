@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "weila" "\0"
+            VALUE "CompanyName", "Weila" "\0"
+            VALUE "FileDescription", "Weila" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "weila" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Weila. All rights reserved." "\0"
             VALUE "OriginalFilename", "weila.exe" "\0"
-            VALUE "ProductName", "weila" "\0"
+            VALUE "ProductName", "Weila" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
