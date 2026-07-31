@@ -25,7 +25,12 @@ import '../../widgets/vira_page_chrome.dart';
 import 'widgets/settings_components.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({
+    super.key,
+    required this.credentialManager,
+  });
+
+  final DanmakuCredentialManager credentialManager;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -174,7 +179,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _showDanmakuSettings() async {
-    final credentialManager = DanmakuCredentialManager();
+    final credentialManager = widget.credentialManager;
     final storedCredentials = credentialManager.credentials;
     final draft = DanmakuCredentialDraft(
       storedAppId: storedCredentials?.appId ?? '',
@@ -346,7 +351,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _retryDanmakuCredentialMigration() async {
-    final result = await DanmakuCredentialManager().retryMigration();
+    final result = await widget.credentialManager.retryMigration();
     if (!mounted) return;
     setState(() {});
     if (result.failed) {
@@ -525,24 +530,24 @@ class _SettingsPageState extends State<SettingsPage> {
                           SettingsActionRow(
                             icon: Icons.subtitles_outlined,
                             title: '弹幕服务',
-                            subtitle: DanmakuCredentialManager().hasCredentials
+                            subtitle: widget.credentialManager.hasCredentials
                                 ? '弹弹play凭据已保存在 Windows 凭据管理器'
                                 : '配置弹弹play开放平台凭证',
                             statusLabel:
-                                DanmakuCredentialManager().hasCredentials
+                                widget.credentialManager.hasCredentials
                                     ? '已连接'
                                     : '未配置',
                             statusTone:
-                                DanmakuCredentialManager().hasCredentials
+                                widget.credentialManager.hasCredentials
                                     ? SettingsStatusTone.success
                                     : SettingsStatusTone.neutral,
                             onTap: _showDanmakuSettings,
                           ),
-                          if (DanmakuCredentialManager().migrationFailed)
+                          if (widget.credentialManager.migrationFailed)
                             SettingsActionRow(
                               icon: Icons.warning_amber_rounded,
                               title: '安全迁移失败',
-                              subtitle: DanmakuCredentialManager()
+                              subtitle: widget.credentialManager
                                       .migrationResult
                                       ?.safeMessage ??
                                   '旧凭据仍被保留，请重试或重新填写。',

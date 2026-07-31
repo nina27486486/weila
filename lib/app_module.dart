@@ -18,9 +18,14 @@ import 'pages/discover/category_browse_page.dart';
 import 'pages/download/download_page.dart';
 import 'pages/debug/danmaku_debug_page.dart';
 import 'services/plugin/plugin_service.dart';
+import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'stores/theme_store.dart';
 
 class AppModule extends Module {
+  AppModule({required this.credentialManager});
+
+  final DanmakuCredentialManager credentialManager;
+
   @override
   void binds(i) {
     i.addLazySingleton<ThemeStore>(() => ThemeStore());
@@ -73,7 +78,9 @@ class AppModule extends Module {
     );
     r.child(
       '/settings',
-      child: (context) => const SettingsPage(),
+      child: (context) => SettingsPage(
+        credentialManager: credentialManager,
+      ),
     );
     if (danmakuDebugModeEnabled) {
       r.child(

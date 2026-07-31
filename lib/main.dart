@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import 'app_module.dart';
 import 'app_widget.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
+import 'services/danmaku/windows_danmaku_credential_store.dart';
 import 'services/storage/storage_service.dart';
 import 'services/plugin/plugin_service.dart';
 import 'services/download/download_service.dart';
@@ -34,7 +35,10 @@ void main() async {
   await StorageService().init();
 
   // 凭据迁移必须发生在 Hive 初始化之后，且播放器只读取安全存储。
-  await DanmakuCredentialManager().initialize();
+  final credentialManager = DanmakuCredentialManager.platform(
+    store: WindowsDanmakuCredentialStore(),
+  );
+  await credentialManager.initialize();
 
   // 加载主题设置
   ThemeStore().loadTheme();
@@ -46,5 +50,10 @@ void main() async {
   await DownloadService().init();
 
   // 启动应用
-  runApp(ModularApp(module: AppModule(), child: const AppWidget()));
+  runApp(
+    ModularApp(
+      module: AppModule(credentialManager: credentialManager),
+      child: const AppWidget(),
+    ),
+  );
 }
