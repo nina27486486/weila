@@ -26,7 +26,8 @@
 
 - [x] FakePlayer 获取、解析、排队、同步、渲染诊断自动测试通过
 - [x] 主人确认 `幼女战记2` 与 `banGDream! YUME-MITA` 可加载并渲染真实弹幕
-- [ ] 美国网络弹弹play真实 API 显式测试通过
+- [x] 美国网络弹弹play真实 API 显式测试通过
+  - 2026-07-31：安全凭据签名搜索和真实弹幕获取成功。
 - [x] 主人按 `MAINLAND_ACCEPTANCE_MATRIX.md` 完成每片源 6 会话
   - 樱花 6/6、非凡 6/6；12 份报告均为 `playing`，播放失败 0。
 - [x] 每片源成功率、首帧、重缓冲和弹幕指标全部达标
@@ -36,11 +37,14 @@
 
 ## 包装
 
-- [ ] 版本改为 `1.0.0+5`
-- [ ] 生成 `weila-1.0.0-windows-x64.zip`
-- [ ] 生成 `weila-1.0.0-windows-x64-setup.exe`
+- [x] 版本改为 `1.0.0+5`
+- [x] 生成 `weila-1.0.0-windows-x64.zip`
+  - SHA-256：`d668de50da0fb6fd5ba1d6147da95278867d41f37d686850c50ef9fa720fc7ff`
+- [x] 生成 `weila-1.0.0-windows-x64-setup.exe`
+  - SHA-256：`1a68a7828545c5502a85c7b2860a3677e6c9cd7a252687c688c462554e7d0a36`
 - [ ] ZIP 内容、静默安装、启动、卸载、用户数据保留烟雾测试通过
-- [x] 0.4.0 审查候选的 ZIP、安装器与 `SHA256SUMS.txt` 已生成并重新验证
+- [x] 1.0.0 ZIP 内容与 `SHA256SUMS.txt` 已重新验证
+  - ZIP 共 42 项，关键文件均恰好出现一次；两个产物的重新计算哈希均与清单一致。
 - [x] `tool/package_windows_release.ps1` 成功
 - [ ] `tool/test_windows_package.ps1` 成功
   - 当前账户已有每用户薇拉安装，脚本按设计拒绝修改；须在干净账户或虚拟机执行。
@@ -51,15 +55,18 @@
 - [ ] 从上一安装版原地升级且旧文件、Hive、下载和凭据均保持正确
   - 当前账户已验证业务数据与凭据；旧文件清理和下载保留尚无证据。
 - [ ] 卸载默认保留 Hive、下载和 `Weila/Dandanplay` 安全凭据
+  - 主人于 2026-07-31 明确接受上述未执行项目的风险并同意继续发布；保持未勾选，
+    不将风险豁免记作测试通过。
 
 ## 发布页
 
-- [ ] CHANGELOG 关闭 Unreleased 并写明日期
+- [x] CHANGELOG 关闭 Unreleased 并写明日期
 - [ ] 附 ZIP、安装器和 `SHA256SUMS.txt`
-- [ ] 明确说明产物未签名及可能出现 SmartScreen 提示
-- [ ] 给出 SHA-256 验证命令
-- [ ] 给出手动更新和回滚步骤
-- [ ] 主人确认后才提交、推送、创建标签与正式 Release
+- [x] 发布说明明确产物未签名及可能出现 SmartScreen 提示
+- [x] 发布说明给出 SHA-256 验证命令
+- [x] 发布说明给出手动更新和回滚步骤
+- [x] 本地发布准备改动已通过提交前复核
+- [ ] 主人确认后才推送、创建标签与正式 Release
 
 ## 当前发布阻断
 
@@ -70,10 +77,11 @@
   编码 URL 和任意查询参数测试。
 - [x] 弹幕在播放已前进或 seek 期间晚到时，按最新位置二分定位，不从索引 0 补发历史。
 - [x] Windows `Runner.rc` 已移除 `com.example`，正式产品元数据统一为 `Weila`。
-- [ ] 发布升版时同步 `pubspec.yaml`、`AppConstants.appVersion`、CHANGELOG 和产物名；
-  当前已有语义版本一致性回归测试。
+- [x] 发布升版已同步 `pubspec.yaml`、`AppConstants.appVersion` 和 CHANGELOG；
+  产物名由构建脚本读取 `pubspec.yaml` 生成，并有语义版本一致性回归测试。
 - [x] 桌面 `安全json (2).txt` 已不存在。
 - [ ] 如果其中的分段文本曾是真实有效令牌，确认对应服务凭据已经轮换。
+  - 主人于 2026-07-31 明确接受未确认轮换的风险并同意继续发布。
 
 ## 回滚
 

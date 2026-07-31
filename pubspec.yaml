@@ -1,7 +1,7 @@
 name: weila
 description: "薇拉 - 面向 Windows 桌面端的开源动漫追番与播放应用"
 publish_to: "none"
-version: 0.4.0+4
+version: 1.0.0+5
 
 environment:
   sdk: ">=3.3.4 <4.0.0"

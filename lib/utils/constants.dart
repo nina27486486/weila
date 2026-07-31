@@ -1,6 +1,6 @@
 class AppConstants {
   static const String appName = '薇拉';
-  static const String appVersion = '0.4.0';
+  static const String appVersion = '1.0.0';
   static const String releaseUpdatesUrl =
       'https://github.com/nina27486486/weila/releases/latest';
 
