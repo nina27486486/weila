@@ -37,6 +37,7 @@ dependencies:
 
   # === 窗口管理 ===
   window_manager: ^0.5.1
+  win32: ^6.3.0
 
   # === 工具 ===
   path_provider: ^2.1.5

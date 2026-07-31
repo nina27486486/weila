@@ -7,6 +7,8 @@ import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../debug/danmaku_debug_config.dart';
+import '../../services/danmaku/dandanplay_credential_manager.dart';
+import '../../services/danmaku/dandanplay_credentials.dart';
 import '../../services/danmaku/danmaku_service.dart';
 import '../../services/danmaku/danmaku_credential_draft.dart';
 import '../../services/catalog/catalog_settings.dart';
@@ -29,9 +31,6 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const _danmakuAppIdKey = 'dandanplay_app_id';
-  static const _danmakuAppSecretKey = 'dandanplay_app_secret';
-
   final _scrollController = ScrollController();
   final _sectionKeys = List.generate(5, (_) => GlobalKey());
 
@@ -76,7 +75,6 @@ class _SettingsPageState extends State<SettingsPage> {
     super.initState();
     unawaited(_loadCacheSize());
     unawaited(_loadPackageInfo());
-    _restoreDanmakuCredentials();
     _downloadSettings = StorageService().getDownloadSettings();
     _includeAdultCatalog = StorageService().getSetting<bool>(
           CatalogSettings.includeAdultKey,
@@ -89,15 +87,6 @@ class _SettingsPageState extends State<SettingsPage> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
-  }
-
-  void _restoreDanmakuCredentials() {
-    final storage = StorageService();
-    final appId = storage.getSetting<String>(_danmakuAppIdKey) ?? '';
-    final appSecret = storage.getSetting<String>(_danmakuAppSecretKey) ?? '';
-    if (appId.isNotEmpty && appSecret.isNotEmpty) {
-      DanmakuService().setCredentials(appId, appSecret);
-    }
   }
 
   Future<void> _loadPackageInfo() async {
@@ -174,10 +163,11 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _showDanmakuSettings() async {
-    final storage = StorageService();
+    final credentialManager = DanmakuCredentialManager();
+    final storedCredentials = credentialManager.credentials;
     final draft = DanmakuCredentialDraft(
-      storedAppId: storage.getSetting<String>(_danmakuAppIdKey) ?? '',
-      storedAppSecret: storage.getSetting<String>(_danmakuAppSecretKey) ?? '',
+      storedAppId: storedCredentials?.appId ?? '',
+      storedAppSecret: storedCredentials?.appSecret ?? '',
     );
     final appIdController = TextEditingController(
       text: draft.initialAppId,
@@ -247,15 +237,23 @@ class _SettingsPageState extends State<SettingsPage> {
             if (draft.storedAppSecret.isNotEmpty)
               TextButton(
                 onPressed: () async {
-                  await Future.wait([
-                    storage.removeSetting(_danmakuAppIdKey),
-                    storage.removeSetting(_danmakuAppSecretKey),
-                  ]);
-                  DanmakuService().clearCredentials();
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  if (mounted) {
-                    setState(() {});
-                    ErrorHandler.showSuccess(this.context, '弹幕服务凭证已清除');
+                  try {
+                    await credentialManager.clear();
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                    if (mounted) {
+                      setState(() {});
+                      ErrorHandler.showSuccess(
+                        this.context,
+                        '弹幕服务凭据已从 Windows 凭据管理器清除',
+                      );
+                    }
+                  } catch (_) {
+                    if (mounted) {
+                      ErrorHandler.showError(
+                        this.context,
+                        '安全凭据清除失败，请稍后重试',
+                      );
+                    }
                   }
                 },
                 child: const Text('清除凭证'),
@@ -301,15 +299,28 @@ class _SettingsPageState extends State<SettingsPage> {
                   ErrorHandler.showError(context, '请完整填写应用 ID 与密钥');
                   return;
                 }
-                await Future.wait([
-                  storage.setSetting(_danmakuAppIdKey, appId),
-                  storage.setSetting(_danmakuAppSecretKey, appSecret),
-                ]);
-                DanmakuService().setCredentials(appId, appSecret);
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (mounted) {
-                  setState(() {});
-                  ErrorHandler.showSuccess(this.context, '弹幕服务凭证已保存');
+                try {
+                  await credentialManager.save(
+                    DandanplayCredentials(
+                      appId: appId,
+                      appSecret: appSecret,
+                    ),
+                  );
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  if (mounted) {
+                    setState(() {});
+                    ErrorHandler.showSuccess(
+                      this.context,
+                      '弹幕服务凭据已安全保存',
+                    );
+                  }
+                } catch (_) {
+                  if (mounted) {
+                    ErrorHandler.showError(
+                      this.context,
+                      '安全凭据保存失败，请稍后重试',
+                    );
+                  }
                 }
               },
               child: const Text('保存凭证'),
@@ -321,6 +332,17 @@ class _SettingsPageState extends State<SettingsPage> {
 
     appIdController.dispose();
     appSecretController.dispose();
+  }
+
+  Future<void> _retryDanmakuCredentialMigration() async {
+    final result = await DanmakuCredentialManager().retryMigration();
+    if (!mounted) return;
+    setState(() {});
+    if (result.failed) {
+      ErrorHandler.showError(context, result.safeMessage);
+    } else {
+      ErrorHandler.showSuccess(context, result.safeMessage);
+    }
   }
 
   Future<void> _showDownloadNetworkSettings() async {
@@ -492,16 +514,31 @@ class _SettingsPageState extends State<SettingsPage> {
                           SettingsActionRow(
                             icon: Icons.subtitles_outlined,
                             title: '弹幕服务',
-                            subtitle: DanmakuService().hasCredentials
-                                ? '弹弹play凭证已配置'
+                            subtitle: DanmakuCredentialManager().hasCredentials
+                                ? '弹弹play凭据已保存在 Windows 凭据管理器'
                                 : '配置弹弹play开放平台凭证',
                             statusLabel:
-                                DanmakuService().hasCredentials ? '已连接' : '未配置',
-                            statusTone: DanmakuService().hasCredentials
-                                ? SettingsStatusTone.success
-                                : SettingsStatusTone.neutral,
+                                DanmakuCredentialManager().hasCredentials
+                                    ? '已连接'
+                                    : '未配置',
+                            statusTone:
+                                DanmakuCredentialManager().hasCredentials
+                                    ? SettingsStatusTone.success
+                                    : SettingsStatusTone.neutral,
                             onTap: _showDanmakuSettings,
                           ),
+                          if (DanmakuCredentialManager().migrationFailed)
+                            SettingsActionRow(
+                              icon: Icons.warning_amber_rounded,
+                              title: '安全迁移失败',
+                              subtitle: DanmakuCredentialManager()
+                                      .migrationResult
+                                      ?.safeMessage ??
+                                  '旧凭据仍被保留，请重试或重新填写。',
+                              statusLabel: '需要处理',
+                              statusTone: SettingsStatusTone.warning,
+                              onTap: _retryDanmakuCredentialMigration,
+                            ),
                           if (danmakuDebugModeEnabled)
                             SettingsActionRow(
                               icon: Icons.science_outlined,
