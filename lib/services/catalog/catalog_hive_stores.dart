@@ -1,4 +1,37 @@
+import 'dart:io';
+
 import 'package:hive_ce/hive.dart';
+
+typedef CatalogCacheBoxOpener = Future<Box<Object?>> Function(String name);
+typedef CatalogCacheBoxDeleter = Future<void> Function(String name);
+
+Future<Box<Object?>> openRecoverableCatalogCacheBox({
+  required String name,
+  required CatalogCacheBoxOpener openBox,
+  required CatalogCacheBoxDeleter deleteBoxFromDisk,
+}) async {
+  try {
+    return await openBox(name);
+  } on HiveError catch (error) {
+    final unknownTypeId = RegExp(
+      r'unknown typeId:\s*\d+',
+      caseSensitive: false,
+    ).hasMatch(error.message);
+    if (!unknownTypeId) rethrow;
+    const maximumDeleteAttempts = 20;
+    for (var attempt = 1; attempt <= maximumDeleteAttempts; attempt++) {
+      try {
+        await deleteBoxFromDisk(name);
+        break;
+      } on FileSystemException catch (deleteError) {
+        final sharingViolation = deleteError.osError?.errorCode == 32;
+        if (!sharingViolation || attempt == maximumDeleteAttempts) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    return openBox(name);
+  }
+}
 
 /// Owns the versioned catalog maps and serializes their Hive commits.
 ///

@@ -52,7 +52,11 @@ class StorageService
     _catalogStores = CatalogHiveStores(
       entriesBox: await Hive.openBox<Object?>(catalogEntriesStoreName),
       referencesBox: await Hive.openBox<Object?>(catalogReferencesStoreName),
-      queryCacheBox: await Hive.openBox<Object?>(catalogQueryCacheStoreName),
+      queryCacheBox: await openRecoverableCatalogCacheBox(
+        name: catalogQueryCacheStoreName,
+        openBox: Hive.openBox<Object?>,
+        deleteBoxFromDisk: Hive.deleteBoxFromDisk,
+      ),
     );
     _initialized = true;
 
