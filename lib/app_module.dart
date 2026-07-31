@@ -20,11 +20,19 @@ import 'pages/debug/danmaku_debug_page.dart';
 import 'services/plugin/plugin_service.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'stores/theme_store.dart';
+import 'platform/app_capabilities.dart';
+import 'platform/fullscreen_controller.dart';
 
 class AppModule extends Module {
-  AppModule({required this.credentialManager});
+  AppModule({
+    required this.credentialManager,
+    required this.capabilities,
+    required this.fullscreenController,
+  });
 
   final DanmakuCredentialManager credentialManager;
+  final AppCapabilities capabilities;
+  final FullscreenController fullscreenController;
 
   @override
   void binds(i) {
@@ -62,6 +70,8 @@ class AppModule extends Module {
         episodeIndex: int.tryParse(r.args.queryParams['ep'] ?? '0') ?? 0,
         sourcePlugin: r.args.queryParams['source'] ?? '',
         contentId: r.args.queryParams['contentId'],
+        capabilities: capabilities,
+        fullscreenController: fullscreenController,
       ),
     );
     r.child(

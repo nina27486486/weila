@@ -6,10 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:window_manager/window_manager.dart';
 import '../../theme/app_theme.dart';
 import '../../models/anime.dart';
 import '../../models/playback/playback_source.dart';
+import '../../platform/app_capabilities.dart';
+import '../../platform/fullscreen_controller.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/http/http_client.dart';
 import '../../services/download/download_service.dart';
@@ -54,6 +55,9 @@ class PlayerPage extends StatefulWidget {
   final int episodeIndex;
   final String sourcePlugin;
   final String? contentId;
+  final AppCapabilities capabilities;
+  final FullscreenController fullscreenController;
+  final DownloadService? downloadService;
 
   const PlayerPage({
     super.key,
@@ -65,6 +69,9 @@ class PlayerPage extends StatefulWidget {
     this.episodeIndex = 0,
     this.sourcePlugin = '',
     this.contentId,
+    required this.capabilities,
+    required this.fullscreenController,
+    this.downloadService,
   });
 
   @override
@@ -81,7 +88,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       PlayerPlaybackLifecycleCoordinator();
   final PluginService _pluginService = PluginService();
   final HistoryCollectStore _historyStore = HistoryCollectStore();
-  final DownloadService _downloadService = DownloadService();
+  late final DownloadService? _downloadService;
   late final PlayerDanmakuSession _danmakuSession;
   final AcceptanceReportService _acceptanceReports = AcceptanceReportService();
 
@@ -154,6 +161,9 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _downloadService = widget.capabilities.downloads
+        ? (widget.downloadService ?? DownloadService())
+        : null;
     _episodeSelection = PlayerEpisodeSelection(
       initialIndex: widget.episodeIndex,
     );
@@ -259,7 +269,9 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     _startHideTimer();
 
     // 检查当前视频是否已下载
-    _checkDownloadStatus();
+    if (widget.capabilities.downloads) {
+      _checkDownloadStatus();
+    }
 
     // 同步播放位置到弹幕控制器
     _subscriptions.add(_player.stream.position.listen((pos) {
@@ -895,7 +907,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     // 退出时恢复窗口状态（用 postFrameCallback 避免 dispose 中异步问题）
     if (_isFullscreen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        windowManager.setFullScreen(false);
+        unawaited(widget.fullscreenController.setFullscreen(false));
       });
     }
 

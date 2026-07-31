@@ -119,20 +119,18 @@ extension _PlayerPageView on _PlayerPageState {
     _danmakuController.setFontSizeScale(value);
   }
 
-  void _toggleFullscreen() async {
+  Future<void> _toggleFullscreen() async {
     final goingFullscreen = !_isFullscreen;
     _updateState(() => _isFullscreen = goingFullscreen);
-    if (goingFullscreen) {
-      await windowManager.setFullScreen(true);
-    } else {
-      await windowManager.setFullScreen(false);
-    }
+    await widget.fullscreenController.setFullscreen(goingFullscreen);
   }
 
   void _checkDownloadStatus() async {
+    final downloadService = _downloadService;
+    if (downloadService == null) return;
     final url = _currentVideoUrl ?? widget.videoUrl;
-    final downloaded = await _downloadService.isDownloaded(url);
-    final allDownloads = _downloadService.getAllDownloads();
+    final downloaded = await downloadService.isDownloaded(url);
+    final allDownloads = downloadService.getAllDownloads();
     if (mounted) {
       _updateState(() {
         _isDownloaded = downloaded;
@@ -167,6 +165,8 @@ extension _PlayerPageView on _PlayerPageState {
   }
 
   void _startDownload() {
+    final downloadService = _downloadService;
+    if (downloadService == null) return;
     final url = _currentVideoUrl ?? widget.videoUrl;
     if (url.isEmpty) return;
 
@@ -193,7 +193,7 @@ extension _PlayerPageView on _PlayerPageState {
     } catch (_) {}
 
     // DEBUG: 确认 Referer 已设置
-    _downloadService.addDownload(item);
+    downloadService.addDownload(item);
     _updateState(() => _isDownloading = true);
 
     ErrorHandler.showInfo(context, '已添加缓存: $epName');
@@ -433,14 +433,15 @@ extension _PlayerPageView on _PlayerPageState {
                             label: '弹幕设置',
                             tooltip: '弹幕设置',
                           ),
-                          ExpandableToolTab(
-                            id: 'download',
-                            icon: _isDownloading
-                                ? Icons.downloading_rounded
-                                : Icons.download_rounded,
-                            label: _isDownloaded ? '已缓存' : '缓存',
-                            tooltip: _isDownloaded ? '已缓存' : '缓存本集',
-                          ),
+                          if (widget.capabilities.downloads)
+                            ExpandableToolTab(
+                              id: 'download',
+                              icon: _isDownloading
+                                  ? Icons.downloading_rounded
+                                  : Icons.download_rounded,
+                              label: _isDownloaded ? '已缓存' : '缓存',
+                              tooltip: _isDownloaded ? '已缓存' : '缓存本集',
+                            ),
                           const ExpandableToolTab(
                             id: 'shortcuts',
                             icon: Icons.keyboard_command_key_rounded,

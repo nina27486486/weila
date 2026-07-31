@@ -5,12 +5,17 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app_module.dart';
 import 'app_widget.dart';
+import 'platform/app_capabilities.dart';
+import 'platform/windows/window_manager_fullscreen_controller.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'services/danmaku/windows_danmaku_credential_store.dart';
 import 'services/storage/storage_service.dart';
 import 'services/plugin/plugin_service.dart';
 import 'services/download/download_service.dart';
 import 'stores/theme_store.dart';
+
+const capabilities = AppCapabilities.windows;
+const fullscreenController = WindowManagerFullscreenController();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,8 +57,12 @@ void main() async {
   // 启动应用
   runApp(
     ModularApp(
-      module: AppModule(credentialManager: credentialManager),
-      child: const AppWidget(),
+      module: AppModule(
+        credentialManager: credentialManager,
+        capabilities: capabilities,
+        fullscreenController: fullscreenController,
+      ),
+      child: const AppWidget(capabilities: capabilities),
     ),
   );
 }
