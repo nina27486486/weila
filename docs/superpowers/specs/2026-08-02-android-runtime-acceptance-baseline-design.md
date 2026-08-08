@@ -9,7 +9,7 @@
 
 薇拉 Android MVP 已建立可编译基线：Android Runner、移动端入口、平台能力隔离与依赖闭包测试已经进入分支，并已通过静态分析、全量测试、Android Debug APK 构建和 Windows Release 回归。现阶段只证明代码能够面向 Android 编译，尚未建立真实 Android 运行、交互和目录网络链路的验收证据。
 
-本机移动端工具链父目录已从 `D:\移动端开发` 更名为 `D:\Vera Mobile Application Development`。Android Studio、Android SDK 与 JDK 17 的实体文件仍在新目录中，但 Flutter 配置和 Android 本地 SDK 配置仍引用旧目录。Android Emulator、API 36 Google APIs x86_64 系统镜像和 AVD 尚未安装或创建，当前也没有已连接的 Android 设备。
+本设计启动时（Task 1 执行前），本机移动端工具链父目录已从 `D:\移动端开发` 更名为 `D:\Vera Mobile Application Development`。Android Studio、Android SDK 与 JDK 17 的实体文件仍在新目录中，但当时 Flutter 配置和 Android 本地 SDK 配置仍引用旧目录。Android Emulator、API 36 Google APIs x86_64 系统镜像和 AVD 尚未安装或创建，当前也没有已连接的 Android 设备。
 
 本设计在编译基线之上建立可重复的运行验收环境，并把“能编译”推进到“能在固定 API 36 模拟器上冷启动、导航并完成目录网络链路”。
 
@@ -52,13 +52,13 @@
 
 ## 环境与路径设计
 
-统一工具链根目录为：
+实体工具链根目录保持为：
 
 ```text
 D:\Vera Mobile Application Development
 ```
 
-固定路径如下：
+实体数据路径保持如下：
 
 ```text
 Android Studio: D:\Vera Mobile Application Development\Android Studio
@@ -67,9 +67,29 @@ JDK 17:         D:\Vera Mobile Application Development\JDK17
 AVD 数据:       D:\Vera Mobile Application Development\Android\Avd
 ```
 
-Flutter 的 `android-studio-dir`、`android-sdk` 和 `jdk-dir` 更新到上述实体路径；项目忽略文件 `android/local.properties` 的 `sdk.dir` 同步到新 SDK 路径。系统级 `JAVA_HOME` 不在本阶段修改，以避免影响其他项目。
+2026-08-08 主人批准以下永久 ASCII 路径偏差，覆盖原设计中“无需目录联接”的旧结论：
 
-在用户级环境变量中设置 `ANDROID_AVD_HOME` 指向固定的 D 盘 AVD 数据目录，使 Android Studio、Flutter、`avdmanager` 和 `emulator` 读取同一份 AVD。无需建立临时盘符映射或目录联接；新根目录全为 ASCII 字符，可直接用于 Gradle、Flutter 和 Android 命令行工具。
+- 永久根别名 `D:\VeraMobile` 指向实体工具链根 `D:\Vera Mobile Application Development`。
+- 永久工作区别名 `D:\VeraMobile\Workspace\android-mvp` 指向 linked worktree `C:\Users\nina\Desktop\自己vibe coding玩玩\薇拉\.worktrees\android-mvp`；该 junction 的实体位置是 `D:\Vera Mobile Application Development\Workspace\android-mvp`。
+- Flutter、Android CLI、Gradle 和 ADB 命令统一通过这些 ASCII 别名访问工具链和工作区。
+- 不使用盘符替换、临时 junction 或 `android.overridePathCheck=true` 路径检查绕过。
+- 在任何破坏性或替换操作前，必须先验证 junction 的 `LinkType`、reparse 属性和规范化目标完全匹配批准路径。
+- 工具链、AVD、Gradle 缓存和验收证据的实体位置保持不变；源工作树也仍位于既有 linked-worktree 位置。
+
+运行时固定访问路径如下：
+
+```text
+ASCII 工作区:    D:\VeraMobile\Workspace\android-mvp
+Android Studio: D:\VeraMobile\Android Studio
+Android SDK:    D:\VeraMobile\Android\Sdk
+JDK 17:         D:\VeraMobile\JDK17
+AVD 数据:       D:\VeraMobile\Android\Avd
+Gradle 缓存:    D:\VeraMobile\Android\GradleHome
+```
+
+Flutter 的 `android-studio-dir`、`android-sdk` 和 `jdk-dir` 更新到上述别名路径；项目忽略文件 `android/local.properties` 的 `sdk.dir` 同步到别名 SDK 路径。系统级 `JAVA_HOME` 不在本阶段修改，以避免影响其他项目；Android 构建只在当前命令进程中设置 `GRADLE_USER_HOME=D:\VeraMobile\Android\GradleHome`。
+
+在用户级环境变量中设置 `ANDROID_AVD_HOME=D:\VeraMobile\Android\Avd`，它通过永久根 junction 解析到批准的实体目录 `D:\Vera Mobile Application Development\Android\Avd`，使 Android Studio、Flutter、`avdmanager` 和 `emulator` 读取同一份 AVD。
 
 上述路径配置属于本机环境，不进入 Git。仓库中既存的三个 Windows Flutter 生成文件换行差异继续保留且不暂存。
 

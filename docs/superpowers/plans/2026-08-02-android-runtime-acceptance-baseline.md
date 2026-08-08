@@ -15,7 +15,7 @@
 - AVD 固定命名为 `Weila_API_36_Google_APIs`，系统镜像固定为 `system-images;android-36;google_apis;x86_64`，硬件档案固定为 `pixel_7`。
 - 应用 ID 固定为 `io.github.nina27486486.weila`，Android 构建入口固定为 `lib/main_android.dart`。
 - 只设置 Flutter 自身 JDK 路径和当前命令进程的 `JAVA_HOME`；不得修改系统级或用户级 `JAVA_HOME`。
-- 用户级 `ANDROID_AVD_HOME` 固定为 `D:\Vera Mobile Application Development\Android\Avd`，Android Studio、Flutter、`avdmanager` 与 `emulator` 必须读取同一 AVD。
+- 用户级 `ANDROID_AVD_HOME` 固定为 `D:\VeraMobile\Android\Avd`，该别名解析到批准的实体 AVD 目录；Android Studio、Flutter、`avdmanager` 与 `emulator` 必须读取同一 AVD。
 - 正式验收使用可见模拟器窗口、硬件加速和 `-no-snapshot-load` 冷启动；不得以旧快照替代首次运行证据。
 - 本阶段不验收视频播放、全屏、弹幕、真实凭据、下载、插件编辑、签名或发布。
 - 不得启用全局明文流量、关闭 TLS 验证、硬编码代理凭据或提交 Cookie、Header、AppId、AppSecret、签名材料及完整媒体 URL。
@@ -24,6 +24,25 @@
 - 不得暂存以下三个既存换行差异：`windows/flutter/generated_plugin_registrant.cc`、`windows/flutter/generated_plugin_registrant.h`、`windows/flutter/generated_plugins.cmake`。
 - 不推送、不合并、不升版、不打标签、不创建 Release。
 - 手写仓库文件修改使用 `apply_patch`；每次暂存前后均检查精确文件范围。
+
+## Approved ASCII Path Amendment — 2026-08-08
+
+主人于 2026-08-08 批准使用永久 ASCII 路径别名，覆盖原设计中“无需目录联接”的旧结论。该裁决对应两个独立且已证实的根因：Android Gradle Plugin 拒绝当前工作树的非 ASCII 路径并使 `flutter build apk` 退出 1；`flutter doctor -v` 明确不支持包含空格的 Android SDK 路径，并提示这可能影响 NDK 工具。
+
+批准的精确路径架构如下：
+
+- Physical toolchain root: `D:\Vera Mobile Application Development`
+- Persistent root junction: `D:\VeraMobile` → `D:\Vera Mobile Application Development`
+- Physical workspace-junction location: `D:\Vera Mobile Application Development\Workspace\android-mvp`
+- ASCII build/workspace path: `D:\VeraMobile\Workspace\android-mvp`
+- Workspace-junction target: `C:\Users\nina\Desktop\自己vibe coding玩玩\薇拉\.worktrees\android-mvp`
+- Flutter Android Studio: `D:\VeraMobile\Android Studio`
+- Flutter Android SDK: `D:\VeraMobile\Android\Sdk`
+- Flutter JDK: `D:\VeraMobile\JDK17`
+- User `ANDROID_AVD_HOME`: `D:\VeraMobile\Android\Avd`
+- Process-only `GRADLE_USER_HOME` for Android builds: `D:\VeraMobile\Android\GradleHome`
+
+所有工具链、AVD、Gradle 缓存和验收证据在实体上仍位于批准的长名称 D 盘目录。源工作树仍位于既有 linked-worktree 位置，只通过已验证的 ASCII junction 访问。Flutter、Android CLI、Gradle 和 ADB 命令使用别名；不使用盘符替换、临时 junction、复制工作树、移动实体工具链或 `android.overridePathCheck=true`。任何破坏性或替换操作前，必须先验证 junction 的 `LinkType`、reparse 属性和规范化目标完全匹配批准路径。Task 1 保留为 2026-08-02 已执行事实的历史证据，不回写为别名执行记录。
 
 ---
 
@@ -190,6 +209,31 @@ Expected: index 为空；仍只有三个既存 Windows 生成文件差异。本�
 
 ---
 
+### Task 1A: Establish persistent ASCII aliases
+
+**Files and state:**
+- Modify: `docs/superpowers/specs/2026-08-02-android-runtime-acceptance-baseline-design.md`
+- Modify: `docs/superpowers/plans/2026-08-02-android-runtime-acceptance-baseline.md`
+- Modify, ignored: `android/local.properties`
+- Create, machine state: `D:\VeraMobile` and `D:\Vera Mobile Application Development\Workspace\android-mvp` junctions
+- Create, local evidence: `ascii-alias-validation.txt`, `ascii-alias-flutter-doctor.txt`, `ascii-alias-build.txt` in the current acceptance run directory
+- Create, ignored report: `.superpowers/sdd/2026-08-02-android-runtime-acceptance-baseline/task-1a-report.md`
+
+**Execution:**
+
+1. From the original linked worktree, verify branch `codex/android-mvp`, HEAD `230647b`, empty index, the three known Windows generated-file line-ending differences, the normal physical toolchain directory, and absence or exact targets of both junctions.
+2. Create `D:\VeraMobile` → `D:\Vera Mobile Application Development`, then create `D:\Vera Mobile Application Development\Workspace\android-mvp` → `C:\Users\nina\Desktop\自己vibe coding玩玩\薇拉\.worktrees\android-mvp`. Before any reuse, destructive action, or replacement, verify `LinkType=Junction`, the reparse attribute, and the normalized target.
+3. Configure Flutter with `D:\VeraMobile\Android Studio`, `D:\VeraMobile\Android\Sdk`, and `D:\VeraMobile\JDK17`; set user `ANDROID_AVD_HOME=D:\VeraMobile\Android\Avd`; update only `sdk.dir=D:\\VeraMobile\\Android\\Sdk` in ignored `android/local.properties`. Do not change user/system `JAVA_HOME` or persist `GRADLE_USER_HOME`.
+4. From `D:\VeraMobile\Workspace\android-mvp`, set process-only `JAVA_HOME=D:\VeraMobile\JDK17`, `ANDROID_AVD_HOME=D:\VeraMobile\Android\Avd`, and `GRADLE_USER_HOME=D:\VeraMobile\Android\GradleHome`; capture `flutter config --list` and `flutter doctor -v` in `ascii-alias-flutter-doctor.txt`.
+5. From the same ASCII workspace and process environment, run `flutter build apk --debug --target lib/main_android.dart --no-pub`; record the command, exit code, APK bytes, and SHA-256 in `ascii-alias-build.txt`. Record junction verification, Flutter config, user AVD value, original/alias Git identity, and PASS/FAIL assertions in `ascii-alias-validation.txt`.
+6. Write `task-1a-report.md`, stage exactly the design and plan documents, verify the staged scope, and commit with subject `docs(android): adopt persistent ASCII path aliases`. Junctions, evidence, build output, ignored local properties, and the three known Windows generated differences must remain unstaged.
+
+Expected: doctor selects SDK 36 and JDK 17 through `D:\VeraMobile` with no Android SDK whitespace warning; `Emulator version unknown` remains allowed until Task 2. The debug APK exists and the build output contains neither the non-ASCII project-path failure nor the SDK-whitespace failure. The commit contains exactly the two documents.
+
+Task 2–Task 5 的所有命令均从 `D:\VeraMobile\Workspace\android-mvp` 执行；Android 构建命令必须在当前进程设置 `GRADLE_USER_HOME=D:\VeraMobile\Android\GradleHome`。
+
+---
+
 ### Task 2: 安装 Emulator 与创建固定 Pixel 7 AVD
 
 **Files:**
@@ -207,7 +251,7 @@ Expected: index 为空；仍只有三个既存 Windows 生成文件差异。本�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $env:JAVA_HOME = "$toolRoot\JDK17"
 $env:ANDROID_AVD_HOME = "$toolRoot\Android\Avd"
 $sdkmanager = "$toolRoot\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat"
@@ -223,7 +267,7 @@ Expected: 许可证命令退出码为 0；输出不包含凭据或代理认证�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $env:JAVA_HOME = "$toolRoot\JDK17"
 $sdkmanager = "$toolRoot\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat"
 & $sdkmanager 'emulator' 'system-images;android-36;google_apis;x86_64'
@@ -237,7 +281,7 @@ Expected: `emulator.exe` 和 API 36 Google APIs x86_64 镜像存在；不安装 
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $env:JAVA_HOME = "$toolRoot\JDK17"
 $sdkmanager = "$toolRoot\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat"
@@ -253,7 +297,7 @@ Expected: 组件清单包含 `emulator` 和 `system-images;android-36;google_api
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $avdName = 'Weila_API_36_Google_APIs'
 $env:JAVA_HOME = "$toolRoot\JDK17"
 $env:ANDROID_AVD_HOME = "$toolRoot\Android\Avd"
@@ -278,7 +322,14 @@ Expected: 当前基线没有同名 AVD；若将来重复执行且配置完全匹
 Run only after Step 4 reports the named mismatch:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
+$physicalRoot = 'D:\Vera Mobile Application Development'
+$rootLink = Get-Item -LiteralPath $toolRoot -Force
+$rootTarget = [IO.Path]::GetFullPath([string]$rootLink.Target).TrimEnd('\')
+$physicalRootResolved = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $physicalRoot).Path).TrimEnd('\')
+if ($rootLink.LinkType -ne 'Junction' -or -not ($rootLink.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $rootTarget -ne $physicalRootResolved) {
+  throw 'Persistent root junction verification failed; refusing AVD deletion.'
+}
 $avdName = 'Weila_API_36_Google_APIs'
 $avdRoot = [IO.Path]::GetFullPath("$toolRoot\Android\Avd").TrimEnd('\')
 $target = [IO.Path]::GetFullPath("$avdRoot\$avdName.avd")
@@ -300,7 +351,14 @@ Expected: 只删除 `Weila_API_36_Google_APIs`；其他 AVD 不受影响。当�
 Run when no matching AVD exists:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
+$physicalRoot = 'D:\Vera Mobile Application Development'
+$rootLink = Get-Item -LiteralPath $toolRoot -Force
+$rootTarget = [IO.Path]::GetFullPath([string]$rootLink.Target).TrimEnd('\')
+$physicalRootResolved = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $physicalRoot).Path).TrimEnd('\')
+if ($rootLink.LinkType -ne 'Junction' -or -not ($rootLink.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $rootTarget -ne $physicalRootResolved) {
+  throw 'Persistent root junction verification failed; refusing AVD creation.'
+}
 $avdName = 'Weila_API_36_Google_APIs'
 $env:JAVA_HOME = "$toolRoot\JDK17"
 $env:ANDROID_AVD_HOME = "$toolRoot\Android\Avd"
@@ -316,7 +374,7 @@ Expected: AVD 创建成功，镜像与设备档案完全匹配固定值。
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $avdName = 'Weila_API_36_Google_APIs'
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $env:ANDROID_AVD_HOME = "$toolRoot\Android\Avd"
@@ -359,7 +417,7 @@ Expected: index 为空；仍只有三个既存 Windows 生成文件差异。本�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $env:ANDROID_AVD_HOME = "$toolRoot\Android\Avd"
 $emulator = "$toolRoot\Android\Sdk\emulator\emulator.exe"
 $running = Get-Process -Name emulator -ErrorAction SilentlyContinue
@@ -375,7 +433,7 @@ Expected: 模拟器以可见窗口启动；没有 `-no-window`、`-wipe-data` �
 Run this block at most three times, reporting progress between rounds:
 
 ```powershell
-$adb = 'D:\Vera Mobile Application Development\Android\Sdk\platform-tools\adb.exe'
+$adb = 'D:\VeraMobile\Android\Sdk\platform-tools\adb.exe'
 $deadline = (Get-Date).AddSeconds(55)
 do {
   $serials = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
@@ -395,7 +453,7 @@ Expected: 三轮内得到唯一 `emulator-*` serial 且 `sys.boot_completed=1`�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $serials = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] })
@@ -423,10 +481,11 @@ Expected: AVD 名称正确、SDK 为 36、ABI 为 x86_64，设备已解锁可交
 Run:
 
 ```powershell
+$env:GRADLE_USER_HOME = 'D:\VeraMobile\Android\GradleHome'
 flutter pub get
 flutter build apk --debug --target lib/main_android.dart --no-pub
 $apk = Resolve-Path 'build\app\outputs\flutter-apk\app-debug.apk'
-$runDir = Get-Content -LiteralPath 'D:\Vera Mobile Application Development\Acceptance\current-run.txt' -Encoding UTF8
+$runDir = Get-Content -LiteralPath 'D:\VeraMobile\Acceptance\current-run.txt' -Encoding UTF8
 $item = Get-Item -LiteralPath $apk
 $hash = Get-FileHash -LiteralPath $apk -Algorithm SHA256
 @(
@@ -444,7 +503,7 @@ Expected: Debug APK 从 `lib/main_android.dart` 构建成功，摘要包含非�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $package = 'io.github.nina27486486.weila'
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -467,7 +526,7 @@ Expected: 只在已验证的专用 AVD 上清理目标包；安装输出 `Succes
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $package = 'io.github.nina27486486.weila'
@@ -489,7 +548,7 @@ Expected: `am start -W` 状态为成功，进程仍存在；应用日志不包�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -509,7 +568,7 @@ Expected: 首页真实可见，无永久白屏、启动画面或不可消失的�
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $package = 'io.github.nina27486486.weila'
@@ -537,7 +596,7 @@ Expected: 第二次启动进程稳定、首页可见，无本轮 crash、ANR 或
 Run:
 
 ```powershell
-$runDir = Get-Content -LiteralPath 'D:\Vera Mobile Application Development\Acceptance\current-run.txt' -Encoding UTF8
+$runDir = Get-Content -LiteralPath 'D:\VeraMobile\Acceptance\current-run.txt' -Encoding UTF8
 $patterns = 'FATAL EXCEPTION|ANR in io\.github\.nina27486486\.weila|Unhandled Exception|FlutterError|Lost connection to device'
 $hits = Get-ChildItem -LiteralPath $runDir -File | Where-Object { $_.Name -match 'launch.*\.(log|txt)$|exit-info\.txt$' } | Select-String -Pattern $patterns
 if ($hits) { $hits; throw 'Blocking startup signal found; enter the application blocker branch.' }
@@ -564,7 +623,7 @@ Before controlling the visible emulator, load `computer-use:computer-use` and re
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $package = 'io.github.nina27486486.weila'
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -590,7 +649,7 @@ Pass conditions:
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -626,7 +685,7 @@ Pass conditions:
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -655,7 +714,7 @@ Pass conditions:
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -683,7 +742,7 @@ Tap `弹幕服务` once and confirm no credential dialog, AppId field, AppSecret
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $serial = @(& $adb devices | Select-Object -Skip 1 | Where-Object { $_ -match '^emulator-\d+\s+device$' } | ForEach-Object { ($_ -split '\s+')[0] }) | Select-Object -First 1
@@ -703,7 +762,7 @@ Expected: 三项能力门控全部成立，禁用项不可触发凭据操作。
 Run:
 
 ```powershell
-$runDir = Get-Content -LiteralPath 'D:\Vera Mobile Application Development\Acceptance\current-run.txt' -Encoding UTF8
+$runDir = Get-Content -LiteralPath 'D:\VeraMobile\Acceptance\current-run.txt' -Encoding UTF8
 $settingsXml = Get-Content -LiteralPath (Join-Path $runDir '05-settings.xml') -Raw -Encoding UTF8
 $checks = [ordered]@{
   SettingsCenterPresent = $settingsXml.Contains('设置中心')
@@ -727,7 +786,7 @@ Expected: 八项断言全部为 `True`。
 Run:
 
 ```powershell
-$toolRoot = 'D:\Vera Mobile Application Development'
+$toolRoot = 'D:\VeraMobile'
 $adb = "$toolRoot\Android\Sdk\platform-tools\adb.exe"
 $runDir = Get-Content -LiteralPath "$toolRoot\Acceptance\current-run.txt" -Encoding UTF8
 $package = 'io.github.nina27486486.weila'
@@ -779,9 +838,10 @@ Run in this order:
 flutter analyze
 flutter test --coverage -r compact
 & 'C:\flutter\bin\cache\dart-sdk\bin\dart.exe' tool/check_coverage.dart
-$junction = 'D:\Vera Mobile Application Development\Temp\weila_windows_build_src'
+$junction = 'D:\VeraMobile\Temp\weila_windows_build_src'
 if (Test-Path -LiteralPath $junction) { throw "Windows build junction already exists: $junction" }
 powershell -NoProfile -ExecutionPolicy Bypass -File tool/build_windows_release.ps1 -JunctionPath $junction -SkipClean
+$env:GRADLE_USER_HOME = 'D:\VeraMobile\Android\GradleHome'
 flutter build apk --debug --target lib/main_android.dart --no-pub
 ```
 
@@ -812,7 +872,7 @@ Expected:
 Run:
 
 ```powershell
-$runDir = Get-Content -LiteralPath 'D:\Vera Mobile Application Development\Acceptance\current-run.txt' -Encoding UTF8
+$runDir = Get-Content -LiteralPath 'D:\VeraMobile\Acceptance\current-run.txt' -Encoding UTF8
 Get-ChildItem -LiteralPath $runDir -File | Sort-Object Name | ForEach-Object {
   $hash = Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256
   [pscustomobject]@{ Name = $_.Name; Bytes = $_.Length; Sha256 = $hash.Hash }
@@ -849,7 +909,7 @@ Create `docs/ANDROID_RUNTIME_ACCEPTANCE_REPORT_API36.md` with these exact sectio
 6. `## 页面与网络链路矩阵` — 对首页、发现/分类、搜索“葬送的芙莉莲”、详情、设置逐项写 `通过`、`失败` 或 `外部阻塞`，并列出证据文件 basename。
 7. `## Android 能力门控` — 写入下载隐藏、插件编辑隐藏、凭据暂不可用且不可点击的八项断言结果。
 8. `## 故障与修复` — 没有故障时写明“本轮未修改业务代码”；有故障时只列根因、修复提交与回归证据。
-9. `## 安全与脱敏` — 明确原始证据只在 D 盘，报告不含 URL、Header、Cookie、凭据、签名材料或本机路径。
+9. `## 安全与脱敏` — 明确原始证据只在 D 盘，并使用“Cookie 与凭据已脱敏；报告不包含 Header、AppId、AppSecret、ProxyAuthorization 或完整媒体 URL。”这一安全声明；报告也不得包含签名材料或本机路径。
 10. `## 已验证、未验证与风险` — 将本阶段实际通过项、非目标和外部依赖风险分开列出。
 11. `## Git 边界` — 明确未 push、merge、升版、打标签或发布，三个 Windows 生成文件未暂存。
 
@@ -861,7 +921,32 @@ Run:
 
 ```powershell
 $report = 'docs\ANDROID_RUNTIME_ACCEPTANCE_REPORT_API36.md'
-$sensitive = rg -n -i 'https?://|authorization|proxy-authorization|cookie|app.?id\s*[:=]|app.?secret|D:\\|C:\\Users\\|-----BEGIN|\.jks|\.keystore' -- $report
+$sensitivePattern = '(?i)(?:set-cookie|cookie|app.?id|app.?secret|headers?|authorization|proxy[-_\s]?authorization|credentials?)\s*[\x22\x27]?\s*[:=]\s*[\x22\x27]?\s*\S+|https?://[^\s<>]+|[A-Z]:\\|-----BEGIN|(?:^|[\\/])[^\\/\s]+\.(?:jks|keystore)(?:\s|$)'
+$safeRedactionDeclaration = 'Cookie 与凭据已脱敏；报告不包含 Header、AppId、AppSecret、ProxyAuthorization 或完整媒体 URL。'
+$safeHit = $safeRedactionDeclaration | rg -n --pcre2 $sensitivePattern -
+if ($LASTEXITCODE -eq 0) { $safeHit; throw 'Sensitive scan pattern falsely matched the required redaction declaration' }
+if ($LASTEXITCODE -ne 1) { throw "Safe declaration scan failed: $LASTEXITCODE" }
+$fakeSensitiveSamples = [ordered]@{
+  ScalarCookie = 'cookie=fake-review-value'
+  JsonCookie = '{"cookie":"fake-review-value"}'
+  JsonAppId = '{"appId":"fake-review-value"}'
+  JsonAppSecret = '{"appSecret":"fake-review-value"}'
+  JsonAuthorization = '{"Authorization":"fake-review-value"}'
+  JsonProxyAuthorization = '{"ProxyAuthorization":"fake-review-value"}'
+  JsonCredential = '{"credential":"fake-review-value"}'
+  BearerAuthorization = 'Authorization: Bearer fake-review-value'
+  KeystoreFile = 'release.keystore'
+  JksFile = 'release.jks'
+}
+$matrixResults = foreach ($case in $fakeSensitiveSamples.GetEnumerator()) {
+  $hit = $case.Value | rg -n --pcre2 $sensitivePattern -
+  $exitCode = $LASTEXITCODE
+  $result = [pscustomobject]@{ Case = $case.Name; ExitCode = $exitCode; Hit = [bool]$hit }
+  if ($exitCode -ne 0) { $result; throw "Sensitive scan missed synthetic case: $($case.Name)" }
+  $result
+}
+$matrixResults | Format-Table -AutoSize
+$sensitive = rg -n --pcre2 $sensitivePattern -- $report
 if ($LASTEXITCODE -eq 0) { $sensitive; throw 'Sensitive or local-only material found in report' }
 if ($LASTEXITCODE -ne 1) { throw "Sensitive scan failed: $LASTEXITCODE" }
 $ambiguous = rg -n '稍后补充|以后验证|未确定|占位' -- $report
@@ -869,7 +954,7 @@ if ($LASTEXITCODE -eq 0) { $ambiguous; throw 'Ambiguous report language found' }
 if ($LASTEXITCODE -ne 1) { throw "Ambiguity scan failed: $LASTEXITCODE" }
 ```
 
-Expected: 两项扫描均无命中。应用 ID 不需要写入报告，避免与敏感 AppId 术语混淆。
+Expected: 安全的脱敏声明不命中；标量 Cookie、六个 JSON 敏感键、普通 Bearer Authorization、`release.keystore` 和 `release.jks` 的完整合成矩阵逐项退出 0；报告敏感扫描和模糊结论扫描均无命中。应用 ID 不需要写入报告，避免与敏感 AppId 术语混淆。
 
 - [ ] **Step 5: 检查全仓差异且只暂存报告**
 
