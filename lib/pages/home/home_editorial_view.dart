@@ -320,6 +320,7 @@ class _EditorialHeroState extends State<_EditorialHero>
             itemCount: itemCount,
             onSelect: _selectItem,
             onOpen: item == null ? null : _openSelected,
+            compact: !horizontal,
           );
           final content = horizontal
               ? Row(
@@ -332,8 +333,8 @@ class _EditorialHeroState extends State<_EditorialHero>
                 )
               : Column(
                   children: [
-                    Expanded(child: image),
-                    Expanded(child: copy),
+                    Expanded(flex: 5, child: image),
+                    Expanded(flex: 7, child: copy),
                   ],
                 );
 
@@ -500,24 +501,35 @@ class _HeroCopy extends StatelessWidget {
   final int itemCount;
   final ValueChanged<int> onSelect;
   final VoidCallback? onOpen;
+  final bool compact;
 
   const _HeroCopy({
     required this.item,
     required this.selectedIndex,
     required this.itemCount,
     required this.onSelect,
+    required this.compact,
     this.onOpen,
   });
 
   @override
   Widget build(BuildContext context) {
+    final contentPadding = compact
+        ? const EdgeInsets.fromLTRB(20, 20, 20, 16)
+        : const EdgeInsets.fromLTRB(30, 30, 30, 24);
+    final labelGap = compact ? 14.0 : 22.0;
+    final titleGap = compact ? 10.0 : 12.0;
+    final genreGap = compact ? 8.0 : 12.0;
+    final actionGap = compact ? 12.0 : 16.0;
+    final titleSize = compact ? 30.0 : 34.0;
+    final titleHeight = compact ? 1.16 : 1.2;
     final colors = context.colors;
     final title = _nameOf(item);
     final status = _statusOf(item);
     final genres = _genresOf(item);
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(30, 30, 30, 24),
+      padding: contentPadding,
       decoration: BoxDecoration(
         color: colors.paper,
         border: Border.all(color: colors.divider),
@@ -533,17 +545,17 @@ class _HeroCopy extends StatelessWidget {
                   letterSpacing: 1.2,
                 ),
           ),
-          const SizedBox(height: 22),
+          SizedBox(height: labelGap),
           Text(
             item == null ? '今天，挑一段喜欢的故事。' : '今天，继续\n$title。',
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                  fontSize: 34,
-                  height: 1.2,
+                  fontSize: titleSize,
+                  height: titleHeight,
                 ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: titleGap),
           Text(
             status.isEmpty ? '让画面替忙碌的一天留下一点余白。' : status,
             maxLines: 2,
@@ -551,7 +563,7 @@ class _HeroCopy extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           if (genres.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            SizedBox(height: genreGap),
             Text(
               genres.take(3).join(' · '),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -574,7 +586,7 @@ class _HeroCopy extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: actionGap),
           Row(
             children: [
               for (var index = 0; index < itemCount; index++) ...[
