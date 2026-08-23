@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/models/catalog/catalog_enums.dart';
 import 'package:weila/models/catalog/catalog_values.dart';
 import 'package:weila/services/catalog/providers/jikan_catalog_provider.dart';
+import 'package:weila/services/jikan/jikan_rate_limiter.dart';
 
 void main() {
   test('Jikan translates supported filters and parses all metadata genres',

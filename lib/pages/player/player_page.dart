@@ -100,6 +100,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _showNextEpisodePrompt = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  DateTime? _lastPositionUiUpdate;
   double _volume = 100;
   double _playbackSpeed = 1.0;
   double _danmakuOpacity = 1.0;
@@ -193,22 +194,29 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       if (mounted) setState(() => _isPlaying = playing);
     }));
     _subscriptions.add(_player.stream.position.listen((pos) {
-      if (mounted) {
-        final shouldShowNext = _shouldShowNextEpisodePrompt(pos, _duration);
-        setState(() {
-          _position = pos;
-          _showNextEpisodePrompt = shouldShowNext;
-        });
-        _playbackLifecycle.recordPlaybackPosition(
-          generation: _playbackLifecycle.currentGeneration,
-          position: pos,
-        );
-        if (_playbackLifecycle.firstFrameEvidenceReady) {
-          _markVideoSignalDetected();
-        }
-        // 同一条进度流顺带驱动弹幕时间轴，避免重复订阅。
-        _danmakuController.updatePosition(pos.inMilliseconds / 1000.0);
+      if (!mounted) return;
+      // 弹幕时间轴与播放诊断保持流原始精度（约 100ms）。
+      _danmakuController.updatePosition(pos.inMilliseconds / 1000.0);
+      _playbackLifecycle.recordPlaybackPosition(
+        generation: _playbackLifecycle.currentGeneration,
+        position: pos,
+      );
+      if (_playbackLifecycle.firstFrameEvidenceReady) {
+        _markVideoSignalDetected();
       }
+      // 整页重建节流到约 4Hz：进度条对显示粒度不敏感，
+      // 观看历史取值在 dispose 时最多滞后一个节流窗口，无感。
+      final now = DateTime.now();
+      final lastUpdate = _lastPositionUiUpdate;
+      if (lastUpdate != null &&
+          now.difference(lastUpdate) < const Duration(milliseconds: 250)) {
+        return;
+      }
+      _lastPositionUiUpdate = now;
+      setState(() {
+        _position = pos;
+        _showNextEpisodePrompt = _shouldShowNextEpisodePrompt(pos, _duration);
+      });
     }));
     _subscriptions.add(_player.stream.duration.listen((dur) {
       if (mounted) {

@@ -52,6 +52,18 @@ class DanmakuController extends ChangeNotifier {
   int get dataVersion => _dataVersion;
   int get runningCount =>
       _running.length + _topStatic.length + _bottomStatic.length;
+
+  /// 是否需要继续渲染帧：有可见弹幕，或已到达发射时间的待发弹幕。
+  /// 发射由 paint 驱动（_getVisibleDanmaku → _spawnDanmaku），所以
+  /// "有待发射"必须算需要帧，否则无可见弹幕时永远不再发射（死锁）。
+  /// 无弹幕时段由该判断让 overlay 停止每帧重建；位置推进、设置变化
+  /// 经 notifyListeners 的 _onUpdate 路径恢复渲染。
+  bool get needsFrame {
+    if (!_visible || _allDanmaku.isEmpty) return false;
+    if (runningCount > 0) return true;
+    return _nextSpawnIndex < _allDanmaku.length &&
+        _allDanmaku[_nextSpawnIndex].time <= _currentTime + 0.1;
+  }
   DanmakuControllerDiagnostics get diagnostics => DanmakuControllerDiagnostics(
         queuedCount: _queuedCount,
         emittedCount: _emittedCount,
@@ -440,6 +452,9 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   void _onTick() {
     final now = DateTime.now();
     _frameDeltaSeconds = _frameDeltaTracker.consume(now);
+    // 无可见且无待发射弹幕时跳过重建：ticker 每帧回调本身极轻，
+    // 省掉的是整棵 overlay 的 build + paint。
+    if (!widget.controller.needsFrame) return;
     if (mounted) setState(() {});
   }
 
