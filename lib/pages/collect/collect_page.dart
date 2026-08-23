@@ -6,6 +6,7 @@ import '../../stores/history_collect_store.dart';
 import '../../stores/theme_store.dart';
 import '../../widgets/vira_page_chrome.dart';
 import '../library/personal_archive_view.dart';
+import '../../utils/app_routes.dart';
 
 class CollectPage extends StatefulWidget {
   const CollectPage({super.key});
@@ -34,9 +35,9 @@ class _CollectPageState extends State<CollectPage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.library,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: Observer(
         builder: (_) {
           final entries = _store.collectList
@@ -63,16 +64,18 @@ class _CollectPageState extends State<CollectPage> {
             ],
             selectedSectionId: 'collect',
             onSectionSelected: (section) {
-              if (section == 'history') Modular.to.navigate('/history');
+              if (section == 'history') Modular.to.navigate(AppRoutes.history);
             },
             onOpen: (entry) {
               final item = _store.collectList
                   .where((candidate) => candidate.animeUrl == entry.id)
                   .firstOrNull;
               Modular.to.pushNamed(
-                '/detail?url=${Uri.encodeComponent(entry.id)}'
-                '&name=${Uri.encodeComponent(entry.title)}'
-                '${item?.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item!.contentId!)}' : ''}',
+                AppRoutes.detail(
+                  url: entry.id,
+                  name: entry.title,
+                  contentId: item?.contentId,
+                ),
               );
             },
             onRemove: (entry) => _store.removeCollect(entry.id),
@@ -91,13 +94,7 @@ class _CollectPageState extends State<CollectPage> {
       };
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.library) {
       Modular.to.navigate(route);
     }

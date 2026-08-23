@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
+import '../../services/plugin/plugin_defaults.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../stores/theme_store.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'anime_catalog_view.dart';
+import '../../utils/app_routes.dart';
 
 class AnimeListPage extends StatefulWidget {
   final String title;
@@ -17,6 +19,33 @@ class AnimeListPage extends StatefulWidget {
     required this.categoryIds,
     this.sourcePlugin = 'cms_yinhua',
   });
+
+  /// 番剧列表：取每个 CMS 源的日本/日韩动漫分类。
+  factory AnimeListPage.anime() {
+    return AnimeListPage(
+      title: '番剧',
+      categoryIds: PluginDefaults.cmsCategories.map((api, categories) {
+        return MapEntry(
+          api,
+          (categories.firstWhere(
+            (category) =>
+                category['name']?.toString().contains('日本') == true ||
+                category['name']?.toString().contains('日韩') == true,
+            orElse: () => categories.first,
+          )['id'] as int),
+        );
+      }),
+    );
+  }
+
+  /// 剧场版列表：取每个 CMS 源的最后一个分类。
+  factory AnimeListPage.movies() {
+    return AnimeListPage(
+      title: '剧场版',
+      categoryIds: PluginDefaults.cmsCategories
+          .map((api, categories) => MapEntry(api, categories.last['id'] as int)),
+    );
+  }
 
   @override
   State<AnimeListPage> createState() => _AnimeListPageState();
@@ -140,9 +169,9 @@ class _AnimeListPageState extends State<AnimeListPage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.discover,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: AnimeCatalogView(
         title: widget.title,
         description: widget.title == '剧场版'
@@ -180,13 +209,7 @@ class _AnimeListPageState extends State<AnimeListPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.discover) {
       Modular.to.navigate(route);
     }
@@ -197,8 +220,7 @@ class _AnimeListPageState extends State<AnimeListPage> {
     final name = item.name;
     if (url.isEmpty) return;
     Modular.to.pushNamed(
-      '/detail?url=${Uri.encodeComponent(url)}'
-      '&name=${Uri.encodeComponent(name)}',
+      AppRoutes.detail(url: url, name: name),
     );
   }
 }

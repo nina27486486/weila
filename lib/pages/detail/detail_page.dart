@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../theme/vira_colors.dart';
+import '../../utils/app_routes.dart';
 import '../../utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -823,16 +824,16 @@ class _DetailPageState extends State<DetailPage> {
     final animeName = detail?['name']?.toString().trim();
     final coverUrl = detail?['cover']?.toString() ?? _anime.cover ?? '';
     Modular.to.pushNamed(
-      '/player?url=${Uri.encodeComponent(ep.url)}'
-      '&title=${Uri.encodeComponent(ep.name)}'
-      '&animeUrl=${Uri.encodeComponent(_libraryAnimeUrl)}'
-      '&animeName=${Uri.encodeComponent(
-        animeName?.isNotEmpty == true ? animeName! : _animeName,
-      )}'
-      '&cover=${Uri.encodeComponent(coverUrl)}'
-      '&ep=$index'
-      '&source=${Uri.encodeComponent(_anime.sourcePlugin)}'
-      '${widget.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(widget.contentId!)}' : ''}',
+      AppRoutes.player(
+        url: ep.url,
+        title: ep.name,
+        animeUrl: _libraryAnimeUrl,
+        animeName: animeName?.isNotEmpty == true ? animeName : _animeName,
+        cover: coverUrl,
+        episodeIndex: index,
+        source: _anime.sourcePlugin,
+        contentId: widget.contentId,
+      ),
     );
   }
 

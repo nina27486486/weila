@@ -6,6 +6,7 @@ import '../../stores/theme_store.dart';
 import '../../utils/logger.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'broadcast_calendar_view.dart';
+import '../../utils/app_routes.dart';
 
 class CalendarPage extends StatefulWidget {
   const CalendarPage({super.key});
@@ -122,9 +123,9 @@ class _CalendarPageState extends State<CalendarPage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.following,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: BroadcastCalendarView(
         weekData: _weekData,
         selectedDay: _selectedDay,
@@ -140,13 +141,7 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.following) {
       Modular.to.navigate(route);
     }
@@ -157,8 +152,7 @@ class _CalendarPageState extends State<CalendarPage> {
     final name = item['name']?.toString() ?? '';
     if (url.isEmpty) return;
     Modular.to.pushNamed(
-      '/detail?url=${Uri.encodeComponent(url)}'
-      '&name=${Uri.encodeComponent(name)}',
+      AppRoutes.detail(url: url, name: name),
     );
   }
 }

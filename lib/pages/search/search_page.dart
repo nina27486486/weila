@@ -16,6 +16,7 @@ import '../../utils/animations.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'search_editorial_masthead.dart';
+import '../../utils/app_routes.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key, this.initialQuery});
@@ -210,7 +211,7 @@ class _SearchPageState extends State<SearchPage> {
 
   void _openDetail(Anime anime) {
     Modular.to.pushNamed(
-      '/detail?url=${Uri.encodeComponent(anime.url)}&name=${Uri.encodeComponent(anime.name)}',
+      AppRoutes.detail(url: anime.url, name: anime.name),
     );
   }
 
@@ -229,7 +230,7 @@ class _SearchPageState extends State<SearchPage> {
           onDestinationSelected: _openDestination,
           onSearch: _focusSearch,
           onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-          onProfile: () => Modular.to.pushNamed('/settings'),
+          onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
           child: Observer(
             builder: (_) {
               final results = _store.searchResults.toList();
@@ -341,13 +342,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     Modular.to.navigate(route);
   }
 }
