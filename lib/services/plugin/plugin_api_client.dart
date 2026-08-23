@@ -1,6 +1,7 @@
 import '../../models/anime.dart';
 import '../../models/playback/playback_source.dart';
 import '../../models/plugin.dart';
+import '../../utils/chinese_text.dart';
 import '../../utils/constants.dart';
 import '../../utils/logger.dart';
 import '../http/http_client.dart';
@@ -534,6 +535,43 @@ class PluginApiClient {
         index: i + 1,
       ),
     );
+  }
+
+  /// 通过 Anilist 同义词找中文标题：优先返回包含汉字的同义词
+  /// （转为简体），否则退回日文 native；都不合适时返回 null。
+  Future<String?> findChineseTitle(String keyword) async {
+    const query = r'''
+      query ($search: String) {
+        Media(search: $search, type: ANIME) {
+          title { romaji native english }
+          synonyms
+        }
+      }
+    ''';
+    try {
+      final data = await _http.postJson(_anilistEndpoint, data: {
+        'query': query,
+        'variables': {'search': keyword},
+      });
+      if (data is! Map<String, dynamic>) return null;
+      final media = data['data']?['Media'] as Map<String, dynamic>?;
+      if (media == null) return null;
+
+      final synonyms = (media['synonyms'] as List?)?.cast<String>() ?? [];
+      for (final synonym in synonyms) {
+        if (RegExp(r'[\u4e00-\u9fff]').hasMatch(synonym) &&
+            synonym != keyword) {
+          return ChineseText.toSimplified(synonym);
+        }
+      }
+
+      final native = media['title']?['native']?.toString();
+      if (native != null && native != keyword) return native;
+      return null;
+    } catch (e) {
+      Log.d('Anilist', '获取中文标题失败: $e');
+      return null;
+    }
   }
 
   // ============================================================

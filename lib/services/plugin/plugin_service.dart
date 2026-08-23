@@ -502,6 +502,11 @@ class PluginService {
     }
   }
 
+  /// 通过 Anilist 同义词查中文标题（详情页 CMS 搜源桥接用）。
+  Future<String?> findChineseTitle(String keyword) {
+    return _apiClient.findChineseTitle(keyword);
+  }
+
   // ============================================================
   // Jikan 排行榜 / 季度新番
   // ============================================================
