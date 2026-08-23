@@ -25,6 +25,7 @@ class StorageService
   late Box<CollectItem> _collectBox;
   late Box<TrackItem> _trackBox;
   late Box _settingsBox;
+  late Box _danmakuCacheBox;
   late CatalogHiveStores _catalogStores;
 
   /// 初始化 Hive（防重入）
@@ -47,6 +48,8 @@ class StorageService
     _collectBox = await Hive.openBox<CollectItem>(AppConstants.boxCollect);
     _trackBox = await Hive.openBox<TrackItem>(AppConstants.boxTrack);
     _settingsBox = await Hive.openBox(AppConstants.boxSettings);
+    _danmakuCacheBox = await Hive.openBox(AppConstants.boxDanmakuCache);
+    await _migrateLegacyDanmakuCache();
     _catalogStores = CatalogHiveStores(
       entriesBox: await Hive.openBox<Object?>(catalogEntriesStoreName),
       referencesBox: await Hive.openBox<Object?>(catalogReferencesStoreName),
@@ -196,6 +199,57 @@ class StorageService
       await _settingsBox.delete(key);
     } catch (error) {
       Log.e('Storage', '删除设置 $key 失败', error);
+    }
+  }
+
+  // === 弹幕缓存（独立 box：单集可达数百 KB，避免混入设置存储） ===
+  static const List<String> _danmakuCacheKeys = [
+    'danmaku_search_cache_v1',
+    'danmaku_match_cache_v1',
+    'danmaku_comment_cache_v1',
+  ];
+
+  Object? getDanmakuCache(String key) {
+    _ensureInitialized();
+    return _danmakuCacheBox.get(key);
+  }
+
+  Future<void> setDanmakuCache(String key, Object value) async {
+    try {
+      await _danmakuCacheBox.put(key, value);
+    } catch (error) {
+      Log.e('Storage', '写入弹幕缓存失败', error);
+    }
+  }
+
+  Future<void> removeDanmakuCache(String key) async {
+    try {
+      await _danmakuCacheBox.delete(key);
+    } catch (error) {
+      Log.e('Storage', '删除弹幕缓存失败', error);
+    }
+  }
+
+  /// 一次性迁移：老版本把弹幕缓存放在 settings box 里，搬到独立 box
+  /// 后把旧键清掉，避免设置存储持续膨胀。
+  Future<void> _migrateLegacyDanmakuCache() async {
+    try {
+      var migrated = false;
+      for (final key in _danmakuCacheKeys) {
+        if (_settingsBox.containsKey(key)) {
+          final value = _settingsBox.get(key);
+          if (value != null && !_danmakuCacheBox.containsKey(key)) {
+            await _danmakuCacheBox.put(key, value);
+          }
+          await _settingsBox.delete(key);
+          migrated = true;
+        }
+      }
+      if (migrated) {
+        Log.d('Storage', '弹幕缓存已迁移到独立 box');
+      }
+    } catch (error) {
+      Log.e('Storage', '迁移弹幕缓存失败（忽略，将重新匹配）', error);
     }
   }
 
