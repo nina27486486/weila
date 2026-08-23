@@ -205,6 +205,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         if (_playbackLifecycle.firstFrameEvidenceReady) {
           _markVideoSignalDetected();
         }
+        // 同一条进度流顺带驱动弹幕时间轴，避免重复订阅。
+        _danmakuController.updatePosition(pos.inMilliseconds / 1000.0);
       }
     }));
     _subscriptions.add(_player.stream.duration.listen((dur) {
@@ -260,13 +262,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
     // 检查当前视频是否已下载
     _checkDownloadStatus();
-
-    // 同步播放位置到弹幕控制器
-    _subscriptions.add(_player.stream.position.listen((pos) {
-      if (mounted) {
-        _danmakuController.updatePosition(pos.inMilliseconds / 1000.0);
-      }
-    }));
 
     // 加载弹幕
     _loadDanmaku();

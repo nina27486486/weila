@@ -25,6 +25,7 @@ class DanmakuController extends ChangeNotifier {
   final List<_StaticDanmaku> _topStatic = [];
   final List<_StaticDanmaku> _bottomStatic = [];
   final Set<int> _renderedSourceIndices = <int>{};
+  int _dataVersion = 0;
 
   int _queuedCount = 0;
   int _emittedCount = 0;
@@ -46,6 +47,9 @@ class DanmakuController extends ChangeNotifier {
   bool get visible => _visible;
   double get opacity => _opacity;
   List<DanmakuItem> get allDanmaku => _allDanmaku;
+
+  /// 弹幕数据版本：每次 loadDanmaku 递增，渲染层据此让 TextPainter 缓存失效。
+  int get dataVersion => _dataVersion;
   int get runningCount =>
       _running.length + _topStatic.length + _bottomStatic.length;
   DanmakuControllerDiagnostics get diagnostics => DanmakuControllerDiagnostics(
@@ -66,6 +70,7 @@ class DanmakuController extends ChangeNotifier {
     _queuedCount = _allDanmaku.length;
     _resetPlaybackPass();
     _nextSpawnIndex = _firstIndexAtOrAfter(max(0.0, _currentTime - 0.1));
+    _dataVersion++;
     notifyListeners();
   }
 
@@ -397,6 +402,13 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   late final DanmakuFrameDeltaTracker _frameDeltaTracker;
   double _frameDeltaSeconds = 0.001;
 
+  // TextPainter 布局缓存：文本排版（shaping）开销大，不能每帧对每条弹幕
+  // 重新 layout。缓存放 State（随 Widget 生命周期），弹幕数据重载时按
+  // dataVersion 整体失效，字号/颜色变化时单条重建。
+  static const int _maxCachedPainters = 512;
+  final Map<int, _CachedDanmakuPainter> _painterCache = {};
+  int _cacheDataVersion = -1;
+
   @override
   void initState() {
     super.initState();
@@ -413,7 +425,16 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   void dispose() {
     _animController.dispose();
     widget.controller.removeListener(_onUpdate);
+    _disposePainterCache();
     super.dispose();
+  }
+
+  void _disposePainterCache() {
+    for (final cached in _painterCache.values) {
+      cached.painter.dispose();
+    }
+    _painterCache.clear();
+    _cacheDataVersion = -1;
   }
 
   void _onTick() {
@@ -433,6 +454,13 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
         painter: _DanmakuPainter(
           controller: widget.controller,
           frameDeltaSeconds: _frameDeltaSeconds,
+          painterCache: _painterCache,
+          cacheDataVersion: _cacheDataVersion,
+          maxCachedPainters: _maxCachedPainters,
+          onDataVersionChanged: (version) {
+            _disposePainterCache();
+            _cacheDataVersion = version;
+          },
         ),
         size: Size.infinite,
       ),
@@ -440,40 +468,81 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   }
 }
 
+class _CachedDanmakuPainter {
+  _CachedDanmakuPainter(this.painter, this.fontSize, this.color);
+
+  final TextPainter painter;
+  final double fontSize;
+  final Color color;
+}
+
 class _DanmakuPainter extends CustomPainter {
   final DanmakuController controller;
   final double frameDeltaSeconds;
+  final Map<int, _CachedDanmakuPainter> painterCache;
+  final int cacheDataVersion;
+  final int maxCachedPainters;
+  final void Function(int version) onDataVersionChanged;
 
   _DanmakuPainter({
     required this.controller,
     required this.frameDeltaSeconds,
+    required this.painterCache,
+    required this.cacheDataVersion,
+    required this.maxCachedPainters,
+    required this.onDataVersionChanged,
   });
+
+  TextPainter _painterFor(_DanmakuRenderInfo item) {
+    final cached = painterCache[item.sourceIndex];
+    if (cached != null &&
+        cached.fontSize == item.fontSize &&
+        cached.color == item.color) {
+      return cached.painter;
+    }
+    final painter = TextPainter(
+      text: TextSpan(
+        text: item.text,
+        style: TextStyle(
+          color: item.color,
+          fontSize: item.fontSize,
+          fontWeight: FontWeight.w500,
+          shadows: const [
+            Shadow(
+              color: Colors.black54,
+              blurRadius: 2,
+              offset: Offset(1, 1),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    if (painterCache.length >= maxCachedPainters) {
+      for (final entry in painterCache.values) {
+        entry.painter.dispose();
+      }
+      painterCache.clear();
+    }
+    painterCache[item.sourceIndex] = _CachedDanmakuPainter(
+      painter,
+      item.fontSize,
+      item.color,
+    );
+    return painter;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
+    // 弹幕数据重载后整体失效缓存；只在这里做一次，同帧内不再重复清理。
+    if (cacheDataVersion != controller.dataVersion) {
+      onDataVersionChanged(controller.dataVersion);
+    }
     final items = controller._getVisibleDanmaku(size, frameDeltaSeconds);
 
     for (final item in items) {
       try {
-        final painter = TextPainter(
-          text: TextSpan(
-            text: item.text,
-            style: TextStyle(
-              color: item.color,
-              fontSize: item.fontSize,
-              fontWeight: FontWeight.w500,
-              shadows: const [
-                Shadow(
-                  color: Colors.black54,
-                  blurRadius: 2,
-                  offset: Offset(1, 1),
-                ),
-              ],
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        );
-        painter.layout();
+        final painter = _painterFor(item);
         painter.paint(canvas, Offset(item.x, item.y));
         controller._markRendered(item.sourceIndex);
       } catch (error) {
