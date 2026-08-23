@@ -1,9 +1,58 @@
 # 薇拉项目交接文件
 
-更新日期：2026-07-31
+更新日期：2026-08-23
 项目位置：仓库根目录
 
-## 0. 2026-07-24 1.0 发布准备
+## 0. 2026-08-23 架构质量改进分支 `improve/architecture-quality`
+
+基于 1.0.0 后的全面检测报告做了一轮系统性重构，全部改动在该分支、
+analyze 零问题、测试 409 项通过、Windows Release 构建与启动冒烟通过。
+
+- 启动健壮性：`main.dart` 三层错误兜底（runZonedGuarded +
+  FlutterError/PlatformDispatcher），存储损坏进入中文降级页，
+  弹幕凭据/主题/插件/下载服务各自降级不再阻断启动。
+- 死代码清理约 2400 行：7 个旧 widget、3 个未接线 API service、
+  StorageService 死下载方法（消除同 box 双 key 策略）、popularList。
+- `PluginService` 从 1183 行拆为四件：`plugin_repository.dart`（文件
+  持久化）、`plugin_defaults.dart`（内置注册表与 CMS 分类）、
+  `plugin_api_client.dart`（API 嗅探与各源客户端）、门面保留搜索编排
+  与播放解析，公共 API 未变。
+- 网络层：`HttpClient` 新增 setProxy（与下载设置共用同一代理规则，
+  启动与设置保存时同步）、probe 可达性探测、per-request 超时与瞬态
+  重试；抽出 `HttpAdapter` 契约供测试注入。
+- 状态管理：HistoryCollectStore 的 isCollected/isTracked 改读
+  observable 列表（删除 _mutationCounter hack）；AnimeStore、
+  HomeStore、HistoryCollectStore 注册为 modular 全局单例，页面不再
+  自建镜像或 dispose；首页三流错误隔离（latest/trending/seasonal）。
+- 路由：新增 `lib/utils/app_routes.dart` 常量与 detail()/player()
+  URI 构造；ViraDestination 增加 route 扩展（13 处重复 switch 收敛）；
+  anime-list 分类映射移入 AnimeListPage 工厂；硬编码路径清零。
+- 组件：新增 `score_badge.dart`、`artwork/artwork_cover_card.dart`，
+  CoverImage 缓存尺寸参数化。
+- 性能：弹幕 TextPainter 布局按条缓存（512 上限、dataVersion 失效）；
+  无可见且无待发弹幕时 overlay 跳过每帧重建（needsFrame 判断防发射
+  死锁）；播放进度整页 setState 节流至约 4Hz（弹幕与诊断保持原精度）。
+- Jikan：限流器提取为 `jikan/jikan_rate_limiter.dart` 的
+  sharedJikanRateLimiter，首页/搜索通道与目录通道共享配额（3 req/s、
+  60 req/min），整周放送表改并发（由限流器排队）。
+- 测试：新增 37 项（plugin 拆分件、AppRoutes、http probe、home_store
+  错误隔离），全仓 409 项。
+
+已知注意事项：
+
+- `build_runner` 在中文路径下 AOT 编译写文件失败，mobx 的 `.g.dart`
+  目前靠手工同步（本轮 anime_store/home_store/history_collect_store 的
+  生成文件均已同步）；建议在无中文路径的环境跑一次
+  `dart run build_runner build --delete-conflicting-outputs` 复核。
+- 搜索页与详情页共享 AnimeStore 单例后，返回搜索页保留上次结果。
+- 未做事项：大页面瘦身（settings_components 1536 行、
+  home_editorial_view 1310 行、player 927、detail 895，detail 页仍有
+  直发 AniList GraphQL）、三态/骨架屏/筛选控件的多份私有实现合并、
+  播放进度 ValueNotifier 完整局部化（当前为节流方案）、弹幕缓存独立
+  Hive box、播放源/清晰度模型（建议下一轮主攻，PluginService 拆分后
+  地基已就绪）。
+
+## 0.1 2026-07-24 1.0 发布准备
 
 - 新增版本化 `AcceptanceReportV1`，播放器诊断和 FakePlayer 调试页均可复制脱敏 JSON。
 - 报告只保留不透明内容/线路标识、媒体主机名与数值指标，禁止完整 URL、请求头、凭据、
@@ -55,7 +104,7 @@
   `d668de50da0f`，安装器哈希前 12 位为 `1a68a7828545`。正式发布仍需完成本地发布准备
   提交、目标提交 CI、推送、`v1.0.0` 标签和 GitHub Release。
 
-## 0.1 2026-07-16 双目录分类浏览升级
+## 0.2 2026-07-16 双目录分类浏览升级
 
 本轮已在脏工作区内完成分类基础设施与页面联动，尚未提交：
 
