@@ -19,7 +19,7 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
-  final _store = HistoryCollectStore();
+  final _store = Modular.get<HistoryCollectStore>();
   bool _refreshingMetadata = false;
 
   @override
@@ -33,7 +33,6 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _store.dispose();
     super.dispose();
   }
 

@@ -18,13 +18,23 @@ import 'pages/discover/ranking_page.dart';
 import 'pages/discover/category_browse_page.dart';
 import 'pages/download/download_page.dart';
 import 'pages/debug/danmaku_debug_page.dart';
+import 'stores/anime_store.dart';
+import 'stores/history_collect_store.dart';
+import 'stores/home_store.dart';
 import 'stores/theme_store.dart';
 import 'utils/app_routes.dart';
 
 class AppModule extends Module {
   @override
   void binds(i) {
+    // ThemeStore 手写单例与这里的 bind 指向同一实例：
+    // main.dart 在 Modular 就绪前就要加载主题，只能走 factory。
     i.addLazySingleton<ThemeStore>(() => ThemeStore());
+    // 全局共享 store：同一份 observable 列表跨页面一致，
+    // 不再需要每页各建镜像靠事件总线缝合。
+    i.addLazySingleton<AnimeStore>(() => AnimeStore());
+    i.addLazySingleton<HomeStore>(() => HomeStore());
+    i.addLazySingleton<HistoryCollectStore>(() => HistoryCollectStore());
   }
 
   @override

@@ -17,8 +17,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final _homeStore = HomeStore();
-  final _trackStore = HistoryCollectStore();
+  final _homeStore = Modular.get<HomeStore>();
+  final _trackStore = Modular.get<HistoryCollectStore>();
 
   @override
   void initState() {
@@ -33,7 +33,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    _trackStore.dispose();
     super.dispose();
   }
 

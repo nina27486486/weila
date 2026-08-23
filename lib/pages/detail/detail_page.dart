@@ -51,8 +51,8 @@ class DetailPage extends StatefulWidget {
 }
 
 class _DetailPageState extends State<DetailPage> {
-  final _store = AnimeStore();
-  final _collectStore = HistoryCollectStore();
+  final _store = Modular.get<AnimeStore>();
+  final _collectStore = Modular.get<HistoryCollectStore>();
   final _pluginService = PluginService();
   late final CatalogRepository _catalogRepository;
   late final DetailController _detailController;
@@ -138,7 +138,6 @@ class _DetailPageState extends State<DetailPage> {
   @override
   void dispose() {
     _detailController.dispose();
-    _collectStore.dispose();
     super.dispose();
   }
 

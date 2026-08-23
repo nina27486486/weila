@@ -16,7 +16,7 @@ class TrackPage extends StatefulWidget {
 }
 
 class _TrackPageState extends State<TrackPage> {
-  final _store = HistoryCollectStore();
+  final _store = Modular.get<HistoryCollectStore>();
 
   @override
   void initState() {
@@ -26,7 +26,6 @@ class _TrackPageState extends State<TrackPage> {
 
   @override
   void dispose() {
-    _store.dispose();
     super.dispose();
   }
 

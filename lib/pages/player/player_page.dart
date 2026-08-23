@@ -80,7 +80,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   final PlayerPlaybackLifecycleCoordinator _playbackLifecycle =
       PlayerPlaybackLifecycleCoordinator();
   final PluginService _pluginService = PluginService();
-  final HistoryCollectStore _historyStore = HistoryCollectStore();
+  final HistoryCollectStore _historyStore =
+      Modular.get<HistoryCollectStore>();
   final DownloadService _downloadService = DownloadService();
   late final PlayerDanmakuSession _danmakuSession;
   final AcceptanceReportService _acceptanceReports = AcceptanceReportService();
@@ -916,7 +917,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     ));
 
     _player.dispose();
-    _historyStore.dispose();
     super.dispose();
   }
 

@@ -34,7 +34,7 @@ class _SearchPageState extends State<SearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
-  final _store = AnimeStore();
+  final _store = Modular.get<AnimeStore>();
   final List<String> _searchHistory = [];
 
   Timer? _debounce;

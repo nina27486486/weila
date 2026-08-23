@@ -16,7 +16,7 @@ class CollectPage extends StatefulWidget {
 }
 
 class _CollectPageState extends State<CollectPage> {
-  final _store = HistoryCollectStore();
+  final _store = Modular.get<HistoryCollectStore>();
 
   @override
   void initState() {
@@ -26,7 +26,6 @@ class _CollectPageState extends State<CollectPage> {
 
   @override
   void dispose() {
-    _store.dispose();
     super.dispose();
   }
 
