@@ -9,22 +9,6 @@ part of 'history_collect_store.dart';
 // ignore_for_file: non_constant_identifier_names, unnecessary_brace_in_string_interps, unnecessary_lambdas, prefer_expression_function_bodies, lines_longer_than_80_chars, avoid_as, avoid_annotating_with_dynamic, no_leading_underscores_for_local_identifiers
 
 mixin _$HistoryCollectStore on _HistoryCollectStore, Store {
-  late final _$_mutationCounterAtom =
-      Atom(name: '_HistoryCollectStore._mutationCounter', context: context);
-
-  @override
-  int get _mutationCounter {
-    _$_mutationCounterAtom.reportRead();
-    return super._mutationCounter;
-  }
-
-  @override
-  set _mutationCounter(int value) {
-    _$_mutationCounterAtom.reportWrite(value, super._mutationCounter, () {
-      super._mutationCounter = value;
-    });
-  }
-
   late final _$historyListAtom =
       Atom(name: '_HistoryCollectStore.historyList', context: context);
 
@@ -89,6 +73,15 @@ mixin _$HistoryCollectStore on _HistoryCollectStore, Store {
   @override
   Future<void> addHistory(HistoryItem item) {
     return _$addHistoryAsyncAction.run(() => super.addHistory(item));
+  }
+
+  late final _$removeHistoryAsyncAction =
+      AsyncAction('_HistoryCollectStore.removeHistory', context: context);
+
+  @override
+  Future<void> removeHistory(String animeUrl) {
+    return _$removeHistoryAsyncAction
+        .run(() => super.removeHistory(animeUrl));
   }
 
   late final _$clearHistoryAsyncAction =

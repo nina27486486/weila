@@ -25,22 +25,6 @@ mixin _$AnimeStore on _AnimeStore, Store {
     });
   }
 
-  late final _$popularListAtom =
-      Atom(name: '_AnimeStore.popularList', context: context);
-
-  @override
-  ObservableList<Anime> get popularList {
-    _$popularListAtom.reportRead();
-    return super.popularList;
-  }
-
-  @override
-  set popularList(ObservableList<Anime> value) {
-    _$popularListAtom.reportWrite(value, super.popularList, () {
-      super.popularList = value;
-    });
-  }
-
   late final _$currentEpisodesAtom =
       Atom(name: '_AnimeStore.currentEpisodes', context: context);
 
@@ -188,10 +172,20 @@ mixin _$AnimeStore on _AnimeStore, Store {
   }
 
   @override
+  void replaceEpisodes(List<Episode> episodes) {
+    final _$actionInfo = _$_AnimeStoreActionController.startAction(
+        name: '_AnimeStore.replaceEpisodes');
+    try {
+      return super.replaceEpisodes(episodes);
+    } finally {
+      _$_AnimeStoreActionController.endAction(_$actionInfo);
+    }
+  }
+
+  @override
   String toString() {
     return '''
 searchResults: ${searchResults},
-popularList: ${popularList},
 currentEpisodes: ${currentEpisodes},
 currentDetail: ${currentDetail},
 isLoading: ${isLoading},

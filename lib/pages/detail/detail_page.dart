@@ -95,6 +95,10 @@ class _DetailPageState extends State<DetailPage> {
       url: widget.animeUrl,
       sourcePlugin: 'unknown',
     );
+    // isCollected/isTracked 以 store 的 observable 列表为事实源，
+    // 读取前必须先加载对应列表。
+    _collectStore.loadCollects();
+    _collectStore.loadTracks();
     _collected = _collectStore.isCollected(_libraryAnimeUrl);
     _tracked = _collectStore.isTracked(_libraryAnimeUrl);
 
@@ -440,8 +444,7 @@ class _DetailPageState extends State<DetailPage> {
     try {
       final episodes = await _pluginService.getEpisodes(cmsAnime);
       if (episodes.isNotEmpty && mounted) {
-        _store.currentEpisodes.clear();
-        _store.currentEpisodes.addAll(episodes);
+        _store.replaceEpisodes(episodes);
         Log.d('Detail', '已加载 ${episodes.length} 个 CMS 集数');
       }
       return episodes.length;
@@ -833,15 +836,15 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  void _toggleTrack({
+  Future<void> _toggleTrack({
     required String name,
     required String? coverUrl,
     required String? status,
     required int totalEpisodes,
-  }) {
-    setState(() => _tracked = !_tracked);
-    if (_tracked) {
-      _collectStore.addTrack(TrackItem(
+  }) async {
+    // store 列表是唯一事实源：先按当前状态决定动作，写完回读刷新本地缓存。
+    if (!_collectStore.isTracked(_libraryAnimeUrl)) {
+      await _collectStore.addTrack(TrackItem(
         animeName: name,
         animeUrl: _libraryAnimeUrl,
         contentId: widget.contentId,
@@ -850,21 +853,23 @@ class _DetailPageState extends State<DetailPage> {
         status: status,
         totalEpisodes: totalEpisodes,
       ));
-      ErrorHandler.showSuccess(context, '已追番');
+      if (mounted) ErrorHandler.showSuccess(context, '已追番');
     } else {
-      _collectStore.removeTrack(_libraryAnimeUrl);
-      ErrorHandler.showInfo(context, '已取消追番');
+      await _collectStore.removeTrack(_libraryAnimeUrl);
+      if (mounted) ErrorHandler.showInfo(context, '已取消追番');
+    }
+    if (mounted) {
+      setState(() => _tracked = _collectStore.isTracked(_libraryAnimeUrl));
     }
   }
 
-  void _toggleCollect({
+  Future<void> _toggleCollect({
     required String name,
     required String? coverUrl,
     required String summary,
-  }) {
-    setState(() => _collected = !_collected);
-    if (_collected) {
-      _collectStore.addCollect(CollectItem(
+  }) async {
+    if (!_collectStore.isCollected(_libraryAnimeUrl)) {
+      await _collectStore.addCollect(CollectItem(
         animeName: name,
         animeUrl: _libraryAnimeUrl,
         contentId: widget.contentId,
@@ -872,10 +877,13 @@ class _DetailPageState extends State<DetailPage> {
         cover: coverUrl,
         description: summary,
       ));
-      ErrorHandler.showSuccess(context, '已收藏');
+      if (mounted) ErrorHandler.showSuccess(context, '已收藏');
     } else {
-      _collectStore.removeCollect(_libraryAnimeUrl);
-      ErrorHandler.showInfo(context, '已取消收藏');
+      await _collectStore.removeCollect(_libraryAnimeUrl);
+      if (mounted) ErrorHandler.showInfo(context, '已取消收藏');
+    }
+    if (mounted) {
+      setState(() => _collected = _collectStore.isCollected(_libraryAnimeUrl));
     }
   }
 

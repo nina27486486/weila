@@ -11,8 +11,6 @@ import '../services/library/library_event_bus.dart';
 import '../services/library/media_metadata_service.dart';
 import '../services/storage/storage_service.dart';
 
-export '../services/library/history_collect_repository.dart';
-
 part 'history_collect_store.g.dart';
 
 class HistoryCollectStore extends _HistoryCollectStore
@@ -39,10 +37,6 @@ abstract class _HistoryCollectStore with Store {
         _events = events ?? LibraryEventBus.instance {
     _eventSubscription = _events.stream.listen(_handleLibraryEvent);
   }
-
-  /// 变更计数器：每次增删操作+1，让isCollected/isTracked触发Observer重建
-  @observable
-  int _mutationCounter = 0;
 
   @observable
   ObservableList<HistoryItem> historyList = ObservableList.of([]);
@@ -86,6 +80,7 @@ abstract class _HistoryCollectStore with Store {
     _publish(LibraryEventScope.history, 'add-history', item.animeUrl);
   }
 
+  @action
   Future<void> removeHistory(String animeUrl) async {
     await _storage.removeHistory(animeUrl);
     loadHistory();
@@ -102,7 +97,6 @@ abstract class _HistoryCollectStore with Store {
   @action
   Future<void> addCollect(CollectItem item) async {
     await _storage.addCollect(item);
-    _mutationCounter++;
     loadCollects();
     _publish(LibraryEventScope.collect, 'add-collect', item.animeUrl);
   }
@@ -110,21 +104,18 @@ abstract class _HistoryCollectStore with Store {
   @action
   Future<void> removeCollect(String animeUrl) async {
     await _storage.removeCollect(animeUrl);
-    _mutationCounter++;
     loadCollects();
     _publish(LibraryEventScope.collect, 'remove-collect', animeUrl);
   }
 
-  /// 读取_mutationCounter以触发Observer重建
-  bool isCollected(String animeUrl) {
-    _mutationCounter; // 触发MobX依赖追踪
-    return _storage.isCollected(animeUrl);
-  }
+  /// 以 collectList 为唯一事实源：读取 observable 列表即可被 Observer 追踪。
+  /// 调用前需保证 loadCollects 已执行过（页面 initState 负责初始化）。
+  bool isCollected(String animeUrl) =>
+      collectList.any((item) => item.animeUrl == animeUrl);
 
   @action
   Future<void> addTrack(TrackItem item) async {
     await _storage.addTrack(item);
-    _mutationCounter++;
     loadTracks();
     _publish(LibraryEventScope.track, 'add-track', item.animeUrl);
   }
@@ -132,16 +123,14 @@ abstract class _HistoryCollectStore with Store {
   @action
   Future<void> removeTrack(String animeUrl) async {
     await _storage.removeTrack(animeUrl);
-    _mutationCounter++;
     loadTracks();
     _publish(LibraryEventScope.track, 'remove-track', animeUrl);
   }
 
-  /// 读取_mutationCounter以触发Observer重建
-  bool isTracked(String animeUrl) {
-    _mutationCounter; // 触发MobX依赖追踪
-    return _storage.isTracked(animeUrl);
-  }
+  /// 以 trackList 为唯一事实源：读取 observable 列表即可被 Observer 追踪。
+  /// 调用前需保证 loadTracks 已执行过（页面 initState 负责初始化）。
+  bool isTracked(String animeUrl) =>
+      trackList.any((item) => item.animeUrl == animeUrl);
 
   void dispose() {
     unawaited(_eventSubscription.cancel());
@@ -152,10 +141,8 @@ abstract class _HistoryCollectStore with Store {
       case LibraryEventScope.history:
         loadHistory();
       case LibraryEventScope.collect:
-        _mutationCounter++;
         loadCollects();
       case LibraryEventScope.track:
-        _mutationCounter++;
         loadTracks();
       case LibraryEventScope.download:
         break;
