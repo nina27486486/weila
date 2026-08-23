@@ -15,7 +15,33 @@ class HttpProbeResult {
   final int? statusCode;
 }
 
-class HttpClient {
+/// 共享 HTTP 客户端契约：需要注入网络依赖的服务面向此接口，
+/// 便于测试提供不触网的替身。
+abstract interface class HttpAdapter {
+  Future<String> getHtml(
+    String url, {
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool retry,
+  });
+
+  Future<dynamic> getJson(
+    String url, {
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool retry,
+  });
+
+  Future<dynamic> postJson(
+    String url, {
+    dynamic data,
+    Map<String, String>? headers,
+    Duration? timeout,
+    bool retry,
+  });
+}
+
+class HttpClient implements HttpAdapter {
   static final HttpClient _instance = HttpClient._();
   factory HttpClient() => _instance;
 
@@ -56,6 +82,7 @@ class HttpClient {
   }
 
   /// GET 请求，返回 HTML 字符串
+  @override
   Future<String> getHtml(
     String url, {
     Map<String, String>? headers,
@@ -77,6 +104,7 @@ class HttpClient {
   }
 
   /// GET 请求，返回 JSON
+  @override
   Future<dynamic> getJson(
     String url, {
     Map<String, String>? headers,
@@ -102,6 +130,7 @@ class HttpClient {
   }
 
   /// POST 请求，返回 JSON（用于 GraphQL 等）
+  @override
   Future<dynamic> postJson(
     String url, {
     dynamic data,

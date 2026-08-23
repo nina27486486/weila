@@ -24,14 +24,14 @@ class CmsVodRecord {
 class PluginApiClient {
   PluginApiClient({
     required List<Plugin> Function() pluginsProvider,
-    HttpClient? http,
+    HttpAdapter? http,
     CmsPlaybackSourceParser? cmsPlaybackParser,
   })  : _pluginsProvider = pluginsProvider,
         _http = http ?? HttpClient(),
         _cmsPlaybackParser = cmsPlaybackParser ?? const CmsPlaybackSourceParser();
 
   final List<Plugin> Function() _pluginsProvider;
-  final HttpClient _http;
+  final HttpAdapter _http;
   final CmsPlaybackSourceParser _cmsPlaybackParser;
   final Map<String, List<PlaybackEpisode>> _cmsPlaybackCache = {};
 
