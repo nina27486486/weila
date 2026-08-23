@@ -12,6 +12,7 @@ import '../../utils/error_handler.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'widgets/plugin_workspace_components.dart';
 import '../../utils/app_routes.dart';
+import '../../../widgets/vira_state_view.dart';
 
 class PluginDetailPage extends StatefulWidget {
   const PluginDetailPage({super.key, required this.pluginApi});
@@ -154,10 +155,10 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
           ),
           Expanded(
             child: plugin == null
-                ? const DataSourceEmptyState(
+                ? const ViraStateView(kind: ViraStateKind.empty,
                     icon: Icons.extension_off_outlined,
                     title: '找不到这个数据源',
-                    subtitle: '它可能已经被删除，请返回工作台重新选择。',
+                    message: '它可能已经被删除，请返回工作台重新选择。',
                   )
                 : _buildDetails(plugin),
           ),

@@ -8,6 +8,7 @@ import '../../widgets/artwork_components.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/editorial_section_header.dart';
 import '../../widgets/vira_state_view.dart';
+import '../../widgets/vira_skeleton.dart';
 
 @immutable
 class HomeContinueStory {
@@ -1244,43 +1245,16 @@ class _HomeLoadingView extends StatelessWidget {
       padding: const EdgeInsets.only(top: 18, bottom: 64),
       child: Column(
         children: [
-          _Skeleton(height: 34, color: context.colors.paper),
+          ViraSkeleton(height: 34, color: context.colors.paper),
           const SizedBox(height: 16),
-          const _Skeleton(height: 390),
+          const ViraSkeleton(height: 390),
           const SizedBox(height: 48),
-          const _Skeleton(height: 48, widthFactor: 0.38),
+          const ViraSkeleton(height: 48, widthFactor: 0.38),
           const SizedBox(height: 18),
-          const _Skeleton(height: 186),
+          const ViraSkeleton(height: 186),
           const SizedBox(height: 50),
-          const _Skeleton(height: 330),
+          const ViraSkeleton(height: 330),
         ],
-      ),
-    );
-  }
-}
-
-class _Skeleton extends StatelessWidget {
-  final double height;
-  final double widthFactor;
-  final Color? color;
-
-  const _Skeleton({
-    required this.height,
-    this.widthFactor = 1,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return FractionallySizedBox(
-      widthFactor: widthFactor,
-      alignment: Alignment.centerLeft,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: color ?? context.colors.bgSurface,
-          border: Border.all(color: context.colors.divider),
-        ),
       ),
     );
   }

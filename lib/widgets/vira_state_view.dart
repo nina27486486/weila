@@ -11,6 +11,15 @@ class ViraStateView extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
 
+  /// 覆盖默认的 kind 图标（如搜索空态的放大镜）。
+  final IconData? icon;
+
+  /// 标题上方的小标签（如"搜索"），不传则不渲染。
+  final String? eyebrow;
+
+  /// 操作按钮图标，不传则只有文字按钮。
+  final IconData? actionIcon;
+
   const ViraStateView({
     super.key,
     required this.kind,
@@ -18,6 +27,9 @@ class ViraStateView extends StatelessWidget {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.icon,
+    this.eyebrow,
+    this.actionIcon,
   });
 
   const ViraStateView.error({
@@ -25,9 +37,12 @@ class ViraStateView extends StatelessWidget {
     required this.title,
     required this.message,
     required VoidCallback onRetry,
+    this.icon,
+    this.eyebrow,
   })  : kind = ViraStateKind.error,
         actionLabel = '重新加载',
-        onAction = onRetry;
+        onAction = onRetry,
+        actionIcon = Icons.refresh_rounded;
 
   const ViraStateView.empty({
     super.key,
@@ -35,6 +50,9 @@ class ViraStateView extends StatelessWidget {
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.icon,
+    this.eyebrow,
+    this.actionIcon,
   }) : kind = ViraStateKind.empty;
 
   const ViraStateView.loading({
@@ -43,16 +61,21 @@ class ViraStateView extends StatelessWidget {
     this.message = '请稍候，故事很快抵达。',
   })  : kind = ViraStateKind.loading,
         actionLabel = null,
-        onAction = null;
+        onAction = null,
+        icon = null,
+        eyebrow = null,
+        actionIcon = null;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final icon = switch (kind) {
-      ViraStateKind.empty => Icons.bookmark_border_rounded,
-      ViraStateKind.error => Icons.cloud_off_outlined,
-      ViraStateKind.loading => Icons.auto_awesome_outlined,
-    };
+    final effectiveIcon =
+        icon ??
+        switch (kind) {
+          ViraStateKind.empty => Icons.bookmark_border_rounded,
+          ViraStateKind.error => Icons.cloud_off_outlined,
+          ViraStateKind.loading => Icons.auto_awesome_outlined,
+        };
 
     return Center(
       child: ConstrainedBox(
@@ -82,13 +105,23 @@ class ViraStateView extends StatelessWidget {
                         ),
                       )
                     : Icon(
-                        icon,
+                        effectiveIcon,
                         color: kind == ViraStateKind.error
                             ? colors.danger
                             : colors.sky,
                         size: 25,
                       ),
               ),
+              if (eyebrow case final label?) ...[
+                const SizedBox(height: 14),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colors.sky,
+                      ),
+                ),
+              ],
               const SizedBox(height: 18),
               Text(
                 title,
@@ -101,12 +134,19 @@ class ViraStateView extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              if (actionLabel case final label?) ...[
+              if (actionLabel != null && onAction != null) ...[
                 const SizedBox(height: 20),
-                OutlinedButton(
-                  onPressed: onAction,
-                  child: Text(label),
-                ),
+                if (actionIcon case final icon?)
+                  OutlinedButton.icon(
+                    onPressed: onAction,
+                    icon: Icon(icon, size: 17),
+                    label: Text(actionLabel!),
+                  )
+                else
+                  OutlinedButton(
+                    onPressed: onAction,
+                    child: Text(actionLabel!),
+                  ),
               ],
             ],
           ),

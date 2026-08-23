@@ -215,65 +215,6 @@ class DataSourceTypeBadge extends StatelessWidget {
   }
 }
 
-class DataSourceEmptyState extends StatelessWidget {
-  const DataSourceEmptyState({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 430),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 62,
-                height: 62,
-                decoration: BoxDecoration(
-                  color: context.colors.bgCard,
-                  border: Border.all(color: context.colors.divider),
-                ),
-                child: Icon(icon, color: AppTheme.primaryBlue, size: 28),
-              ),
-              const SizedBox(height: 17),
-              Text(title, style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 7),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              if (actionLabel != null && onAction != null) ...[
-                const SizedBox(height: 18),
-                FilledButton.icon(
-                  onPressed: onAction,
-                  icon: const Icon(Icons.add_rounded, size: 17),
-                  label: Text(actionLabel!),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 IconData dataSourceTypeIcon(String api) {
   final normalized = api.toLowerCase();
   if (normalized.startsWith('cms_')) return Icons.playlist_play_rounded;

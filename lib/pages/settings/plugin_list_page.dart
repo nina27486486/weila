@@ -11,6 +11,7 @@ import '../../utils/error_handler.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'widgets/plugin_workspace_components.dart';
 import '../../utils/app_routes.dart';
+import '../../widgets/vira_state_view.dart';
 
 enum _SourceFilter { all, enabled, disabled }
 
@@ -149,10 +150,10 @@ class _PluginListPageState extends State<PluginListPage> {
                         if (_plugins.isEmpty)
                           SizedBox(
                             height: 420,
-                            child: DataSourceEmptyState(
+                            child: ViraStateView(kind: ViraStateKind.empty,
                               icon: Icons.hub_outlined,
                               title: '还没有数据源',
-                              subtitle: '添加数据源后，薇拉才能检索番剧信息与播放线路。',
+                              message: '添加数据源后，薇拉才能检索番剧信息与播放线路。',
                               actionLabel: '添加数据源',
                               onAction: _openAddPage,
                             ),
@@ -160,10 +161,10 @@ class _PluginListPageState extends State<PluginListPage> {
                         else if (filteredPlugins.isEmpty)
                           const SizedBox(
                             height: 320,
-                            child: DataSourceEmptyState(
+                            child: ViraStateView(kind: ViraStateKind.empty,
                               icon: Icons.filter_alt_off_outlined,
                               title: '没有匹配的数据源',
-                              subtitle: '尝试清空搜索词或切换状态筛选。',
+                              message: '尝试清空搜索词或切换状态筛选。',
                             ),
                           )
                         else
