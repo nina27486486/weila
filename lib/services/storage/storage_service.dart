@@ -24,7 +24,6 @@ class StorageService
   late Box<HistoryItem> _historyBox;
   late Box<CollectItem> _collectBox;
   late Box<TrackItem> _trackBox;
-  late Box<DownloadItem> _downloadBox;
   late Box _settingsBox;
   late CatalogHiveStores _catalogStores;
 
@@ -47,7 +46,6 @@ class StorageService
     _historyBox = await Hive.openBox<HistoryItem>(AppConstants.boxHistory);
     _collectBox = await Hive.openBox<CollectItem>(AppConstants.boxCollect);
     _trackBox = await Hive.openBox<TrackItem>(AppConstants.boxTrack);
-    _downloadBox = await Hive.openBox<DownloadItem>(AppConstants.boxDownload);
     _settingsBox = await Hive.openBox(AppConstants.boxSettings);
     _catalogStores = CatalogHiveStores(
       entriesBox: await Hive.openBox<Object?>(catalogEntriesStoreName),
@@ -80,17 +78,29 @@ class StorageService
 
   @override
   Future<void> addHistory(HistoryItem item) async {
-    await _historyBox.put(item.animeUrl, item);
+    try {
+      await _historyBox.put(item.animeUrl, item);
+    } catch (error) {
+      Log.e('Storage', '写入历史失败', error);
+    }
   }
 
   @override
   Future<void> removeHistory(String animeUrl) async {
-    await _historyBox.delete(animeUrl);
+    try {
+      await _historyBox.delete(animeUrl);
+    } catch (error) {
+      Log.e('Storage', '删除历史失败', error);
+    }
   }
 
   @override
   Future<void> clearHistory() async {
-    await _historyBox.clear();
+    try {
+      await _historyBox.clear();
+    } catch (error) {
+      Log.e('Storage', '清空历史失败', error);
+    }
   }
 
   // === 收藏 ===
@@ -100,12 +110,20 @@ class StorageService
 
   @override
   Future<void> addCollect(CollectItem item) async {
-    await _collectBox.put(item.animeUrl, item);
+    try {
+      await _collectBox.put(item.animeUrl, item);
+    } catch (error) {
+      Log.e('Storage', '写入收藏失败', error);
+    }
   }
 
   @override
   Future<void> removeCollect(String animeUrl) async {
-    await _collectBox.delete(animeUrl);
+    try {
+      await _collectBox.delete(animeUrl);
+    } catch (error) {
+      Log.e('Storage', '删除收藏失败', error);
+    }
   }
 
   @override
@@ -118,71 +136,67 @@ class StorageService
 
   @override
   Future<void> addTrack(TrackItem item) async {
-    await _trackBox.put(item.animeUrl, item);
+    try {
+      await _trackBox.put(item.animeUrl, item);
+    } catch (error) {
+      Log.e('Storage', '写入追番失败', error);
+    }
   }
 
   @override
   Future<void> removeTrack(String animeUrl) async {
-    await _trackBox.delete(animeUrl);
+    try {
+      await _trackBox.delete(animeUrl);
+    } catch (error) {
+      Log.e('Storage', '删除追番失败', error);
+    }
   }
 
   @override
   bool isTracked(String animeUrl) => _trackBox.containsKey(animeUrl);
 
   Future<void> updateTrackProgress(String animeUrl, int watchedEpisodes) async {
-    final item = _trackBox.get(animeUrl);
-    if (item != null) {
-      item.watchedEpisodes = watchedEpisodes;
-      item.lastUpdated = DateTime.now();
-      await item.save();
-    }
-  }
-
-  // === 下载 ===
-  List<DownloadItem> getDownloads() {
-    _ensureInitialized();
-    return _downloadBox.values.toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  }
-
-  Future<void> addDownload(DownloadItem item) async {
-    await _downloadBox.put('${item.animeUrl}|${item.episodeUrl}', item);
-  }
-
-  Future<void> updateDownload(DownloadItem item) async {
-    await _downloadBox.put('${item.animeUrl}|${item.episodeUrl}', item);
-  }
-
-  Future<void> removeDownload(String animeUrl) async {
-    final keys = _downloadBox.keys
-        .where((k) => k.toString().startsWith('$animeUrl|'))
-        .toList();
-    for (final key in keys) {
-      await _downloadBox.delete(key);
-    }
-  }
-
-  Future<void> clearCompleted() async {
-    final keys = _downloadBox.values
-        .where((item) => item.status == 2)
-        .map((item) => '${item.animeUrl}|${item.episodeUrl}')
-        .toList();
-    for (final key in keys) {
-      await _downloadBox.delete(key);
+    try {
+      final item = _trackBox.get(animeUrl);
+      if (item != null) {
+        item.watchedEpisodes = watchedEpisodes;
+        item.lastUpdated = DateTime.now();
+        await item.save();
+      }
+    } catch (error) {
+      Log.e('Storage', '更新追番进度失败', error);
     }
   }
 
   // === 设置 ===
   T? getSetting<T>(String key, {T? defaultValue}) {
-    return _settingsBox.get(key, defaultValue: defaultValue) as T?;
+    final value = _settingsBox.get(key, defaultValue: defaultValue);
+    if (value is T) return value;
+    if (value != null) {
+      // 存量值类型与期望不符（如旧版本写入格式变化）：回退默认值而不是抛
+      // TypeError 让整页崩溃，并留下日志便于排查。
+      Log.e(
+        'Storage',
+        '设置 $key 的存储类型 $T 不匹配（实际 ${value.runtimeType}），已回退默认值',
+      );
+    }
+    return defaultValue;
   }
 
   Future<void> setSetting(String key, dynamic value) async {
-    await _settingsBox.put(key, value);
+    try {
+      await _settingsBox.put(key, value);
+    } catch (error) {
+      Log.e('Storage', '写入设置 $key 失败', error);
+    }
   }
 
   Future<void> removeSetting(String key) async {
-    await _settingsBox.delete(key);
+    try {
+      await _settingsBox.delete(key);
+    } catch (error) {
+      Log.e('Storage', '删除设置 $key 失败', error);
+    }
   }
 
   HiveCatalogRepository createCatalogRepository({
@@ -218,7 +232,7 @@ class StorageService
     _ensureInitialized();
     final values = settings.toMap();
     for (final entry in values.entries) {
-      await _settingsBox.put(entry.key, entry.value);
+      await setSetting(entry.key, entry.value);
     }
   }
 }
