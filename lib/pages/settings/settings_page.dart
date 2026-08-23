@@ -456,12 +456,16 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SettingsHero(
-                    themeLabel: themeStore.isDarkMode ? '深色模式' : '浅色模式',
-                    enabledPluginCount: enabledPluginCount,
-                    pluginCount: pluginCount,
-                    cacheLabel:
-                        _scanningCache ? '正在扫描' : _formatBytes(_cacheBytes),
+                  Observer(
+                    builder: (_) => SettingsHero(
+                      themeLabel:
+                          themeStore.isDarkMode ? '深色模式' : '浅色模式',
+                      enabledPluginCount: enabledPluginCount,
+                      pluginCount: pluginCount,
+                      cacheLabel: _scanningCache
+                          ? '正在扫描'
+                          : _formatBytes(_cacheBytes),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   KeyedSubtree(

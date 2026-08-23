@@ -426,18 +426,6 @@ class DownloadService implements DownloadLibrary {
       Log.e('Download', '下载失败: ${item.episodeName}', e);
       item.status = 4; // 失败
       item.failureReason = _failureReasonFor(e);
-      // DEBUG: 写错误详情到文件
-      try {
-        final f = io.File('${_downloadDir.path}/error_log.txt');
-        f.writeAsStringSync(
-          '[${DateTime.now()}] ${item.episodeName}\n'
-          'URL: ${item.m3u8Url}\n'
-          'Referer: ${item.referer}\n'
-          'sourcePlugin: ${item.sourcePlugin}\n'
-          'Error: $e\n\n',
-          mode: io.FileMode.append,
-        );
-      } catch (_) {}
       await item.save();
       _publishDownloadChanged('download-failed', item.episodeUrl);
     } finally {
