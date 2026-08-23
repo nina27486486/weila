@@ -469,8 +469,6 @@ class _PosterArchiveCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-
     return ArtworkCardSurface(
       id: 'archive-${entry.id}',
       semanticLabel: '打开第${index + 1}项收藏，${entry.title}',
@@ -484,67 +482,14 @@ class _PosterArchiveCard extends StatelessWidget {
         ),
       ),
       contentBuilder: (context, interaction) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Positioned.fill(
-                    child: ClipRect(
-                      key: ValueKey('archive-cover-clip-${entry.id}'),
-                      child: AnimatedScale(
-                        key: ValueKey('archive-cover-scale-${entry.id}'),
-                        duration: interaction.duration,
-                        curve: Curves.easeOutCubic,
-                        scale: interaction.coverScale,
-                        child: CoverImage(
-                          url: entry.coverUrl,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 9,
-                    top: 9,
-                    child: ArtworkCardBadge(
-                      key: ValueKey('archive-rank-${entry.id}'),
-                      child: Text(
-                        '${index + 1}'.padLeft(2, '0'),
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(color: colors.sky),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    entry.meta.isEmpty ? entry.sourceLabel : entry.meta,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-          ],
+        return ArtworkCoverCard(
+          interaction: interaction,
+          coverUrl: entry.coverUrl,
+          keyPrefix: 'archive',
+          keyId: entry.id,
+          rankIndex: index,
+          title: entry.title,
+          subtitle: entry.meta.isEmpty ? entry.sourceLabel : entry.meta,
         );
       },
     );

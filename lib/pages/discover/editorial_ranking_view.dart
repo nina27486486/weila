@@ -4,6 +4,7 @@ import '../../theme/vira_colors.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/editorial_section_header.dart';
 import '../../widgets/vira_state_view.dart';
+import '../../widgets/score_badge.dart';
 
 @immutable
 class RankingStory {
@@ -932,20 +933,15 @@ class _RankingRowState extends State<_RankingRow> {
                   width: 74,
                   child: widget.story.score == null
                       ? const SizedBox.shrink()
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Icon(
-                              Icons.star_rounded,
-                              size: 15,
-                              color: colors.warning,
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              widget.story.score!.toStringAsFixed(1),
-                              style: Theme.of(context).textTheme.labelLarge,
-                            ),
-                          ],
+                      : Align(
+                          alignment: Alignment.centerRight,
+                          child: ScoreBadge(
+                            score: widget.story.score!,
+                            iconSize: 15,
+                            spacing: 3,
+                            textStyle:
+                                Theme.of(context).textTheme.labelLarge,
+                          ),
                         ),
                 ),
                 SizedBox(

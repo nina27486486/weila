@@ -1,5 +1,6 @@
 export '../services/artwork_palette_service.dart';
 export 'artwork/artwork_card.dart';
+export 'artwork/artwork_cover_card.dart';
 export 'artwork/artwork_models.dart';
 export 'artwork/artwork_palette_builder.dart';
 export 'artwork/artwork_surfaces.dart';

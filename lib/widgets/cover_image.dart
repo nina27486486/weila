@@ -13,6 +13,12 @@ class CoverImage extends StatelessWidget {
   final BoxFit fit;
   final BorderRadius? borderRadius;
 
+  /// 内存解码宽度。默认 300 适合卡片封面；横幅/大图传更大值避免放大模糊。
+  final int? memCacheWidth;
+
+  /// 磁盘缓存最大宽度，默认为内存宽度的 2 倍。
+  final int? maxWidthDiskCache;
+
   const CoverImage({
     super.key,
     required this.url,
@@ -20,6 +26,8 @@ class CoverImage extends StatelessWidget {
     this.height,
     this.fit = BoxFit.cover,
     this.borderRadius,
+    this.memCacheWidth = 300,
+    this.maxWidthDiskCache,
   });
 
   static ImageProvider<Object>? providerFor(String? url) {
@@ -46,8 +54,9 @@ class CoverImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        memCacheWidth: 300,
-        maxWidthDiskCache: 600,
+        memCacheWidth: memCacheWidth,
+        maxWidthDiskCache:
+            maxWidthDiskCache ?? (memCacheWidth == null ? null : memCacheWidth! * 2),
         placeholder: (_, __) => _loadingPlaceholder(context, width, height),
         errorWidget: (_, __, ___) => _placeholder(context, width, height),
       );
