@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -12,6 +11,7 @@ import '../../theme/vira_colors.dart';
 import '../../utils/error_handler.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'widgets/plugin_workspace_components.dart';
+import '../../utils/app_routes.dart';
 
 class PluginDetailPage extends StatefulWidget {
   const PluginDetailPage({super.key, required this.pluginApi});
@@ -78,43 +78,25 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
       _connectionResult = null;
     });
     final stopwatch = Stopwatch()..start();
-    try {
-      final headers = <String, String>{
-        if (plugin.userAgent.isNotEmpty) 'User-Agent': plugin.userAgent,
-        if (plugin.referer?.isNotEmpty == true) 'Referer': plugin.referer!,
-      };
-      final response = await HttpClient().dio.get<Object?>(
-            plugin.baseUrl,
-            options: Options(
-              responseType: ResponseType.plain,
-              headers: headers,
-              validateStatus: (status) => status != null && status < 500,
-            ),
-          );
-      stopwatch.stop();
-      if (!mounted) return;
-      setState(() {
-        _connectionResult = _ConnectionResult(
-          success: true,
-          message: response.statusCode == null
-              ? '基础地址可达'
-              : '基础地址可达（HTTP ${response.statusCode}）',
-          latencyMs: stopwatch.elapsedMilliseconds,
-        );
-      });
-    } catch (_) {
-      stopwatch.stop();
-      if (!mounted) return;
-      setState(() {
-        _connectionResult = _ConnectionResult(
-          success: false,
-          message: '无法连接基础地址，请检查网络或请求头',
-          latencyMs: stopwatch.elapsedMilliseconds,
-        );
-      });
-    } finally {
-      if (mounted) setState(() => _testing = false);
-    }
+    final headers = <String, String>{
+      if (plugin.userAgent.isNotEmpty) 'User-Agent': plugin.userAgent,
+      if (plugin.referer?.isNotEmpty == true) 'Referer': plugin.referer!,
+    };
+    final result = await HttpClient().probe(plugin.baseUrl, headers: headers);
+    stopwatch.stop();
+    if (!mounted) return;
+    setState(() {
+      _connectionResult = _ConnectionResult(
+        success: result.reachable,
+        message: result.reachable
+            ? result.statusCode == null
+                ? '基础地址可达'
+                : '基础地址可达（HTTP ${result.statusCode}）'
+            : '无法连接基础地址，请检查网络或请求头',
+        latencyMs: stopwatch.elapsedMilliseconds,
+      );
+    });
+    if (mounted) setState(() => _testing = false);
   }
 
   Future<void> _deletePlugin() async {
@@ -158,9 +140,9 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
     return ViraPageScaffold(
       activeDestination: null,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.navigate('/settings'),
+      onProfile: () => Modular.to.navigate(AppRoutes.settings),
       child: Column(
         children: [
           DataSourcePageHeader(
@@ -185,13 +167,7 @@ class _PluginDetailPageState extends State<PluginDetailPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     Modular.to.navigate(route);
   }
 

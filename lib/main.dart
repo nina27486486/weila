@@ -10,6 +10,7 @@ import 'app_module.dart';
 import 'app_widget.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'services/storage/storage_service.dart';
+import 'services/http/http_client.dart';
 import 'services/plugin/plugin_service.dart';
 import 'services/download/download_service.dart';
 import 'stores/theme_store.dart';
@@ -60,6 +61,11 @@ Future<void> _bootstrap() async {
     runApp(_StartupFailureApp(reason: error));
     return;
   }
+
+  // 主网络栈与下载栈共用同一份代理设置（存储初始化成功后才可读）。
+  _guardSync('网络代理', () {
+    HttpClient().setProxy(StorageService().getDownloadSettings().proxyRuleFor);
+  });
 
   // 各功能服务独立降级：单个服务失败只损失对应能力，不阻断应用启动。
   await _guard('弹幕凭据', DanmakuCredentialManager().initialize);
