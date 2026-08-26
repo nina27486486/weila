@@ -165,193 +165,66 @@ extension _DetailPageView on _DetailPageState {
     final totalEpisodeCount = totalEps is int
         ? totalEps
         : int.tryParse(totalEps?.toString() ?? '') ?? 0;
+    final playEnabled = _store.currentEpisodes.isNotEmpty;
+
+    DetailHeroSourcePresentation resolveSourcePresentation() {
+      // CMS 直接来源
+      if (_anime.sourcePlugin.startsWith('cms_')) {
+        return DetailHeroSourcePresentation.available(
+          '视频源: ${_anime.sourcePlugin.replaceAll("cms_", "")}',
+        );
+      }
+      // Jikan/Anilist/Bangumi 找到了 CMS 视频源
+      if (_cmsAnimeUrl != null && _cmsSourceName != null) {
+        return DetailHeroSourcePresentation.available(
+          '视频源: $_cmsSourceName',
+        );
+      }
+      // 正在搜索视频源
+      if (_searchingSource) {
+        return const DetailHeroSourcePresentation.searching();
+      }
+      // 未找到视频源 → 提供手动搜索入口
+      if (_anime.sourcePlugin == 'jikan' ||
+          _anime.sourcePlugin == 'anilist' ||
+          _anime.sourcePlugin == 'bangumi') {
+        return DetailHeroSourcePresentation.unavailable(
+          onManualSearch: _manualSearchSource,
+        );
+      }
+      return const DetailHeroSourcePresentation.hidden();
+    }
 
     Widget buildPanel(ArtworkPalette palette) {
-      return Container(
-        key: const ValueKey('detail-ambient-hero'),
-        height: 410,
-        decoration: BoxDecoration(
-          color: context.colors.bgCard,
-          border: Border(
-            top: BorderSide(color: context.colors.divider),
-            bottom: BorderSide(color: context.colors.divider),
-          ),
+      return DetailHeroPanel(
+        palette: palette,
+        coverUrl: coverUrl,
+        heroTag: 'anime-cover-$_libraryAnimeUrl',
+        name: name,
+        nameJa: nameJa,
+        summary: summary,
+        rating: rating,
+        ratingCount: ratingCount,
+        rank: rank,
+        tags: tags,
+        date: date,
+        platform: platform,
+        totalEpisodeCount: totalEpisodeCount,
+        source: resolveSourcePresentation(),
+        playEnabled: playEnabled,
+        tracked: _tracked,
+        collected: _collected,
+        onPlay: playEnabled ? () => _onEpisodeTap(0) : null,
+        onToggleTrack: () => _toggleTrack(
+          name: name,
+          coverUrl: coverUrl,
+          status: status,
+          totalEpisodes: totalEpisodeCount,
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            AmbientArtworkBackdrop(
-              palette: palette,
-              child: const SizedBox.expand(),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.82),
-                    context.colors.bgCard.withValues(alpha: 0.58),
-                    Colors.black.withValues(alpha: 0.2),
-                  ],
-                  stops: const [0, 0.58, 1],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Hero(
-                    tag: 'anime-cover-$_libraryAnimeUrl',
-                    child: ArtworkParallax(
-                      child: _DetailPoster(coverUrl: coverUrl),
-                    ),
-                  ),
-                  const SizedBox(width: 28),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            if (date.isNotEmpty)
-                              _InfoPill(
-                                  icon: Icons.calendar_today_outlined,
-                                  text: date),
-                            if (platform.isNotEmpty)
-                              _InfoPill(
-                                  icon: Icons.tv_outlined, text: platform),
-                            if (totalEpisodeCount > 0)
-                              _InfoPill(
-                                  icon: Icons.video_library_outlined,
-                                  text: '$totalEpisodeCount集'),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            height: 1.08,
-                            shadows: [
-                              Shadow(blurRadius: 12, color: Colors.black87)
-                            ],
-                          ),
-                        ),
-                        if (nameJa.isNotEmpty && nameJa != name) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            nameJa,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.58),
-                              fontSize: 13,
-                              height: 1.3,
-                            ),
-                          ),
-                        ],
-                        if (summary.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            summary,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.72),
-                              fontSize: 13,
-                              height: 1.5,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            if (rating != null) _buildScoreBadge(rating),
-                            if (ratingCount != null)
-                              _InfoPill(
-                                  icon: Icons.people_alt_outlined,
-                                  text: '${ratingCount.toString()}人评分'),
-                            if (rank != null)
-                              _InfoPill(
-                                  icon: Icons.emoji_events_outlined,
-                                  text: '排名 $rank',
-                                  highlighted: true),
-                            _buildSourceIndicator(),
-                          ],
-                        ),
-                        if (tags.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          Wrap(
-                            spacing: 7,
-                            runSpacing: 7,
-                            children: tags
-                                .take(5)
-                                .map((tag) => _DetailTag(text: tag))
-                                .toList(),
-                          ),
-                        ],
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            _HeroActionButton(
-                              icon: Icons.play_arrow_rounded,
-                              label: _store.currentEpisodes.isEmpty
-                                  ? '等待片源'
-                                  : '立即播放',
-                              onTap: _store.currentEpisodes.isEmpty
-                                  ? null
-                                  : () => _onEpisodeTap(0),
-                            ),
-                            const SizedBox(width: 10),
-                            _HeroIconButton(
-                              icon: _tracked
-                                  ? Icons.calendar_month
-                                  : Icons.calendar_month_outlined,
-                              active: _tracked,
-                              tooltip: _tracked ? '已追番' : '追番',
-                              onTap: () => _toggleTrack(
-                                name: name,
-                                coverUrl: coverUrl,
-                                status: status,
-                                totalEpisodes: totalEpisodeCount,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            _HeroIconButton(
-                              icon: _collected
-                                  ? Icons.bookmark
-                                  : Icons.bookmark_border,
-                              active: _collected,
-                              tooltip: _collected ? '已收藏' : '收藏',
-                              onTap: () => _toggleCollect(
-                                name: name,
-                                coverUrl: coverUrl,
-                                summary: summary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        onToggleCollect: () => _toggleCollect(
+          name: name,
+          coverUrl: coverUrl,
+          summary: summary,
         ),
       );
     }
@@ -549,195 +422,6 @@ extension _DetailPageView on _DetailPageState {
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildSourceIndicator() {
-    // CMS 直接来源
-    if (_anime.sourcePlugin.startsWith('cms_')) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppTheme.scoreGreen.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, size: 14, color: AppTheme.scoreGreen),
-            SizedBox(width: 4),
-            Text(
-              '视频源: ${_anime.sourcePlugin.replaceAll("cms_", "")}',
-              style: TextStyle(color: AppTheme.scoreGreen, fontSize: 11),
-            ),
-          ],
-        ),
-      );
-    }
-    // Jikan/Anilist/Bangumi 找到了 CMS 视频源
-    if (_cmsAnimeUrl != null && _cmsSourceName != null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppTheme.scoreGreen.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle, size: 14, color: AppTheme.scoreGreen),
-            SizedBox(width: 4),
-            Text(
-              '视频源: $_cmsSourceName',
-              style: TextStyle(color: AppTheme.scoreGreen, fontSize: 11),
-            ),
-          ],
-        ),
-      );
-    }
-    // 正在搜索视频源
-    if (_searchingSource) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppTheme.scoreOrange.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(
-                strokeWidth: 1.5,
-                color: AppTheme.scoreOrange,
-              ),
-            ),
-            SizedBox(width: 4),
-            Text(
-              '搜索视频源中...',
-              style: TextStyle(color: AppTheme.scoreOrange, fontSize: 11),
-            ),
-          ],
-        ),
-      );
-    }
-    // 未找到视频源 → 显示警告 + 手动搜索按钮
-    if (_anime.sourcePlugin == 'jikan' ||
-        _anime.sourcePlugin == 'anilist' ||
-        _anime.sourcePlugin == 'bangumi') {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppTheme.scoreRed.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.warning_amber, size: 14, color: AppTheme.scoreRed),
-                SizedBox(width: 4),
-                Text(
-                  '暂无视频源',
-                  style: TextStyle(color: AppTheme.scoreRed, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 8),
-          GestureDetector(
-            onTap: _manualSearchSource,
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.search, size: 14, color: AppTheme.primaryBlue),
-                    SizedBox(width: 4),
-                    Text(
-                      '手动搜索',
-                      style: TextStyle(
-                          color: AppTheme.primaryBlue,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
-  Widget _buildScoreBadge(double score) {
-    Color color;
-    String label;
-    if (score >= 8.0) {
-      color = AppTheme.scoreGreen;
-      label = '极好';
-    } else if (score >= 7.0) {
-      color = AppTheme.scoreOrange;
-      label = '不错';
-    } else {
-      color = AppTheme.scoreRed;
-      label = '还行';
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.42),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              value: (score / 10).clamp(0.0, 1.0),
-              color: color,
-              backgroundColor: Colors.white.withValues(alpha: 0.12),
-              strokeWidth: 3,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                score.toStringAsFixed(1),
-                style: TextStyle(
-                  color: color,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
-                ),
-              ),
-              Text(label,
-                  style: TextStyle(color: color, fontSize: 10, height: 1.2)),
-            ],
-          ),
-        ],
       ),
     );
   }
