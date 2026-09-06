@@ -65,7 +65,7 @@ final bool compact;
 - Consumes: `HomeEditorialView`、`AppTheme.lightTheme`、现有 `_EditorialHero` 宽度断点和 `_HeroCopy` 回调。
 - Produces: `_HeroCopy.compact: bool`；窄屏 `image flex: 5` / `copy flex: 7`；提交 `fix(home): prevent narrow hero overflow`。
 
-- [ ] **Step 1: 验证接手边界**
+- [x] **Step 1: 验证接手边界**
 
 Run:
 
@@ -80,7 +80,7 @@ if (Test-Path -LiteralPath (Join-Path $gitDir 'index.lock')) { throw 'index.lock
 
 Expected: 分支为 `codex/android-mvp`；HEAD 为本计划文档提交；index 为空；工作区只剩三份既存 Windows 生成文件差异。
 
-- [ ] **Step 2: 写入能捕获真实回归的失败测试**
+- [x] **Step 2: 写入能捕获真实回归的失败测试**
 
 Use `apply_patch` to append this test inside `main()` in `test/home_editorial_view_test.dart`, before the final closing brace:
 
@@ -139,7 +139,7 @@ Use `apply_patch` to append this test inside `main()` in `test/home_editorial_vi
 
 The production mutation this test catches is restoring the narrow branch to equal flex or removing compact density. It exercises the real `HomeEditorialView`, uses literal expected UI, and does not assert on mocks.
 
-- [ ] **Step 3: 运行测试并确认 RED**
+- [x] **Step 3: 运行测试并确认 RED**
 
 Run:
 
@@ -149,7 +149,7 @@ flutter test test/home_editorial_view_test.dart --plain-name "首页主映在 Pi
 
 Expected: FAIL。输出必须包含 `A RenderFlex overflowed`，失败来自 `_HeroCopy` 文案 Column 的底部溢出，而不是语法、fixture、资源或测试环境错误。保存完整输出到 ignored SDD 报告；在看见该正确失败前不得修改生产代码。
 
-- [ ] **Step 4: 实现最小窄屏布局变更**
+- [x] **Step 4: 实现最小窄屏布局变更**
 
 Use `apply_patch` in `lib/pages/home/home_editorial_view.dart`.
 
@@ -237,7 +237,7 @@ Use those values only at the corresponding existing sites:
 
 Do not alter strings, max lines, ellipsis, callbacks, selector construction, autoplay, desktop Row, heights, or any other section.
 
-- [ ] **Step 5: 运行新增测试并确认 GREEN**
+- [x] **Step 5: 运行新增测试并确认 GREEN**
 
 Run:
 
@@ -247,7 +247,7 @@ flutter test test/home_editorial_view_test.dart --plain-name "首页主映在 Pi
 
 Expected: PASS；输出不包含 RenderFlex overflow、Flutter exception 或资源错误。
 
-- [ ] **Step 6: 运行整个首页测试文件**
+- [x] **Step 6: 运行整个首页测试文件**
 
 Run:
 
@@ -257,7 +257,7 @@ flutter test test/home_editorial_view_test.dart -r compact
 
 Expected: 全部通过，尤其是桌面宽度、主映点击切换、自动轮播和减少动态效果测试。
 
-- [ ] **Step 7: 检查精确差异与代码质量**
+- [x] **Step 7: 检查精确差异与代码质量**
 
 Run:
 
@@ -271,7 +271,7 @@ flutter analyze
 
 Expected: 格式、whitespace 与 analyze 通过；差异只包含规格定义的 flex、compact 常量和单个测试。
 
-- [ ] **Step 8: 运行全量测试与覆盖率门禁**
+- [x] **Step 8: 运行全量测试与覆盖率门禁**
 
 Run:
 
@@ -282,7 +282,7 @@ flutter test --coverage -r compact
 
 Expected: 全量测试通过；唯一真实 API 测试保持按设计跳过；全仓覆盖率不低于 70%，发布关键模块不低于 85%。
 
-- [ ] **Step 9: 只暂存业务修复与测试并提交**
+- [x] **Step 9: 只暂存业务修复与测试并提交**
 
 Run:
 
@@ -320,7 +320,7 @@ Expected: 单一业务修复提交成功，index 为空。
 - Consumes: Task 1 的 `fix(home): prevent narrow hero overflow` 提交。
 - Produces: Windows/Android 构建结果、API 36 两次零输入首页启动证据，以及主运行验收计划 Task 3 的 PASS/BLOCKED 结论。
 
-- [ ] **Step 1: 复核提交和工作区边界**
+- [x] **Step 1: 复核提交和工作区边界**
 
 Run:
 
@@ -334,7 +334,10 @@ git diff --check
 
 Expected: HEAD 是业务修复提交且只含两个文件；index 为空；仅三份 Windows 生成文件差异；diff check 无 whitespace error。
 
-- [ ] **Step 2: 构建 Windows Release**
+- [x] **Step 2: 构建 Windows Release**
+
+  2026-09-06 执行备注：批准的 D 盘 junction 全新构建在 cmake INSTALL 失败（跨盘
+  junction 根因），改用同盘 `C:\weila_android_build_src` 后 PASS；偏差已记入账本。
 
 Run:
 
@@ -346,7 +349,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tool/build_windows_release.p
 
 Expected: Release 构建退出 0；使用显式 ASCII junction；不运行 clean；脚本完成后不遗留该临时 junction。
 
-- [ ] **Step 3: 构建 Android Debug APK**
+- [x] **Step 3: 构建 Android Debug APK**
 
 Run:
 
