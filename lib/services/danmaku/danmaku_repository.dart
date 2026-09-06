@@ -72,7 +72,7 @@ class DanmakuRepository {
       if (!effectiveRefresh) {
         final matched = _readCandidate(_matchCacheKey, cacheKey);
         if (matched != null) {
-          return _loadComments(matched, refresh: false);
+          return await _loadComments(matched, refresh: false);
         }
       }
 
@@ -143,7 +143,7 @@ class DanmakuRepository {
           safeMessage: '找到多个候选，请选择正确剧集',
         );
       }
-      return _loadComments(selected, refresh: effectiveRefresh);
+      return await _loadComments(selected, refresh: effectiveRefresh);
     } on DandanplayApiException catch (error) {
       return _errorResult(error, stage: DanmakuErrorStage.search);
     } catch (_) {
