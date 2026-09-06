@@ -42,6 +42,7 @@ import 'playback_health_coordinator.dart';
 import 'player_danmaku_session.dart';
 import 'player_episode_selection.dart';
 import 'player_playback_lifecycle_coordinator.dart';
+import 'player_touch_gesture.dart';
 
 part 'widgets/player_page_components.dart';
 part 'widgets/player_page_view.dart';
@@ -97,6 +98,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _isPlaying = false;
   bool _isBuffering = false;
   bool _showControls = true;
+  PlayerDoubleTapZone _pendingDoubleTapZone = PlayerDoubleTapZone.center;
   bool _isFullscreen = false;
   bool _isDownloaded = false;
   bool _isDownloading = false;

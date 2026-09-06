@@ -36,6 +36,30 @@ extension _PlayerPageView on _PlayerPageState {
     _startHideTimer();
   }
 
+  /// 触摸屏没有 hover，控制层只能由单击唤出/收起（MVP 计划 §4）。
+  void _handleStageTap() {
+    if (_playbackIssue != null) return;
+    final show = !_showControls;
+    _updateState(() => _showControls = show);
+    if (show) {
+      _startHideTimer();
+    } else {
+      _hideTimer?.cancel();
+    }
+  }
+
+  /// 双击左/右三等分区后退/前进 10 秒，中央双击播放/暂停。
+  void _handleStageDoubleTap() {
+    switch (_pendingDoubleTapZone) {
+      case PlayerDoubleTapZone.back:
+        _seekBy(-playerDoubleTapSeekOffset);
+      case PlayerDoubleTapZone.forward:
+        _seekBy(playerDoubleTapSeekOffset);
+      case PlayerDoubleTapZone.center:
+        _togglePlay();
+    }
+  }
+
   void _seekBy(Duration offset) {
     final newPos = _position + offset;
     if (newPos < Duration.zero) {
@@ -256,8 +280,14 @@ extension _PlayerPageView on _PlayerPageState {
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
-          onTap: _togglePlay,
-          onDoubleTap: _toggleFullscreen,
+        onTap: _handleStageTap,
+        onDoubleTapDown: (details) {
+          _pendingDoubleTapZone = resolveDoubleTapZone(
+            localX: details.localPosition.dx,
+            width: MediaQuery.sizeOf(context).width,
+          );
+        },
+        onDoubleTap: _handleStageDoubleTap,
           child: MouseRegion(
             onHover: (_) => _onMouseMove(),
             child: Stack(
