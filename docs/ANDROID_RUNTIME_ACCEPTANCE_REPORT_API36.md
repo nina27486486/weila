@@ -1,113 +1,111 @@
-# 薇拉 Android 运行验收报告（API 36 · 合并后复验）
+# 薇拉 Android API 36 运行验收报告
 
 更新日期：2026-09-06
-分支：`codex/android-mvp`（合并 master 后 HEAD `ed1cf36`）
-模拟器：`Weila_API_36_Google_APIs`（Pixel 7 档 · API 36 Google APIs x86_64 · 冷启动 `-no-snapshot-load`）
-构建入口：`lib/main_android.dart` · debug APK
+分支：`codex/android-mvp`（master 合并后 HEAD `ed1cf36`，另有验收期修复提交 `5629799`）
 
-## 1. 结论速览
+## 范围与结论
 
-| 项目 | 结论 |
-| --- | --- |
-| 合并后静态检查与测试 | PASS（analyze 零问题，454 项测试全过，含窄屏 hero 回归） |
-| Windows Release 回归 | PASS（同盘 ASCII junction，见 2.3 偏差记录） |
-| Android debug APK 构建 | PASS（206,032,109 字节） |
-| Task 3 两次零输入冷启动 | PASS（均为 `/` 首页，无崩溃/无溢出/无白屏） |
-| Task 4 目录网络链路 | PASS（详情页解析出 CMS 真实线路与选集） |
-| Task 4 Android 能力门控 | PASS（凭据"暂不可用"、下载区、插件编辑区均按门控隐藏） |
-| Task 4 总体 | **PASS**（首轮发现的设置页标签条 18px 溢出已按 TDD 修复并真机复验） |
+本报告只覆盖应用壳、首页信息流网络链路、目录/详情网络链路、
+页面窄屏布局与 Android 能力门控。播放、弹幕渲染、真实凭据、下载、
+签名与发布不在本阶段验收范围内（同主验收计划的阶段边界）。
 
-## 2. 构建回归
+## 环境
 
-### 2.1 合并
+事实来源：`device.txt`（取自 AVD config）。
 
-master 17 笔提交（含 `improve/architecture-quality` 全部 16 笔）合入本分支，
-合并提交 `ed1cf36`。冲突解决原则：保留本分支的平台能力门控与启动组合，
-吸收 master 的全局错误兜底、store 单例化、路由常量、弹幕缓存独立 box。
-`AppBootstrap` 各步独立降级、存储失败上抛进入降级页；顺序测试保持通过。
+- AVD：`Weila_API_36_Google_APIs`
+- API：36，ABI：x86_64
+- 机型档案：pixel_7，分辨率 1080x2400，密度 420
+- 启动方式：可见窗口、`-no-snapshot-load` 冷启动
 
-### 2.2 Android APK
+## 构建产物
 
-- bytes：`206032109`
-- SHA-256：`5BAF6E68FA06C34F1DCAC346AA4199A03BD567CA1A489F929F985EF3BE9C93B9`
-- 设备安装后 `base.apk` 哈希与本地一致。
+事实来源：`apk.txt`。
 
-两个构建阻塞的恢复记录（未触碰任何仓库文件）：
+- 合并后首版 debug APK：206032109 字节，
+  SHA-256 `5BAF6E68FA06C34F1DCAC346AA4199A03BD567CA1A489F929F985EF3BE9C93B9`，
+  设备安装后 base.apk 哈希与本地一致。
+- 窄屏修复版 debug APK（提交 `5629799` 后）：206032109 字节，
+  SHA-256 `FEB308AAA7551090224BD0C5159BB51752DA8340477481573E89C312F50B645B`，
+  设备安装后 base.apk 哈希与本地一致。
 
-1. 在 git-bash 中 `cd` 穿透 workspace junction 会被规范化为真实非 ASCII
-   路径，触发 AGP 路径检查；构建必须在 PowerShell 内以 junction 路径为
-   工作目录执行。
-2. worktree `build/` 清理后丢失 media_kit 原生库缓存；4 个 libmpv
-   `v1.1.7` JAR 已按上游 MD5 逐一校验恢复（arm64 原件本就有效；
-   armeabi-v7a/x86_64/x86 经 GitHub 镜像代理下载并 MD5 匹配）。
+## 启动稳定性
 
-### 2.3 Windows Release（偏差记录）
+事实来源：`first-launch.txt`、`second-launch.txt`、`startup-signal-scan.txt`
+（两轮截图与 UI hierarchy：`task3-first-20260906.png/xml`、
+`task3-second-20260906.png/xml`）。
 
-按批准计划使用 `D:\VeraMobile\Temp\weila_windows_build_src` junction 全新
-构建在 cmake INSTALL 阶段失败：跨盘 junction（D:→C: 真实非 ASCII 路径）
-下新生成缓存的 `cmake_install.cmake` include 解析失败。2026-08-12 的
-历史 PASS 依赖预绑定缓存。本次改用同盘 ASCII junction
-`C:\weila_android_build_src`（脚本默认模式）后完整 Release 构建通过。
-该偏差与根因已记入 SDD 账本，建议后续把计划的 Windows 回归命令改为
-同盘 junction。
+| 轮次 | 状态 | LaunchState | TotalTime | 进程 |
+| --- | --- | --- | --- | --- |
+| 第一次零输入冷启动 | ok | COLD | 4453ms | 存活贯穿采集 |
+| 第二次（force-stop 后）零输入冷启动 | ok | COLD | 3349ms | 存活贯穿采集 |
 
-## 3. 运行验收（合并后 APK）
+两轮截图均为 `/` 首页（本周主映 hero、立即播放/查看详情、章节选择器），
+无白屏、无 splash 残留、无 overflow 条。UIAutomator 常规 dump 因持续
+动画无法 idle，均按协议备份三动画参数→置零→dump→恢复→逐项复核，
+恢复值与原值一致，进程未变。合并日志七项致命扫描
+（FATAL EXCEPTION / 包内 ANR / Unhandled Exception / FlutterError /
+设备丢失 / RenderFlex / BOTTOM OVERFLOWED）全部零命中。
 
-证据目录：本轮 D 盘 acceptance run（`20260906-postmerge-api36`）。
+## 页面与网络链路矩阵
 
-### 3.1 Task 3 — 两次零输入冷启动：PASS
+事实来源：下列证据文件 basename（均在本地证据目录）。
 
-| 轮次 | LaunchState | TotalTime | 采集 | PID | 结论 |
-| --- | --- | --- | --- | --- | --- |
-| 第一次 | COLD | 4453ms | 15s PNG+XML | 3759 全程存活 | `/` 首页 |
-| 第二次 | COLD（force-stop 后） | 3349ms | 10s PNG+XML | 4929 全程存活 | `/` 首页 |
+| 页面/路径 | 结果 | 证据 |
+| --- | --- | --- |
+| 首页 `/`（信息流网络链路） | 通过 | `task3-first-20260906.png`、`task3-second-20260906.png`（hero 真实数据与封面） |
+| 详情（首页 hero 进入，CMS 链路） | 通过 | `task4-detail-20260906.png/xml`（真实线路"视频源 ffzy"与 10 集选集） |
+| 设置（章节索引窄屏布局） | 修复后通过 | 修复前 `task4-settings-20260906.png`（右溢出 18px）；修复后 `task4-settings-fixed-20260906.png`（无溢出） |
+| 发现/目录（筛选维度遍历） | 通过 | `task4-discover-20260906.png/xml`（动画目录、双标签、题材/年份芯片完整） |
+| 搜索"葬送的芙莉莲" | 本轮未执行 | 本轮计划范围未包含搜索遍历；历史基线记录见 2026-08-02 run |
 
-- 两次截图均为首页：本周主映 hero（第二次封面完整加载）、立即播放/查看
-  详情、选集指示器，无白屏、无 splash 残留、无 overflow 条。
-- XML 均含"首页""搜索"，不含目录加载标记。
-- UIAutomator 常规 dump 因持续动画无法 idle，全部按协议执行
-  三动画参数备份→置零→dump→恢复→逐项复核（恢复后 1.0/1.0/未设置，
-  与原值一致），PID 未变。
-- 合并日志七项致命扫描（FATAL EXCEPTION / 包内 ANR / Unhandled
-  Exception / FlutterError / 设备丢失 / RenderFlex / BOTTOM OVERFLOWED）
-  全部零命中。
+## Android 能力门控
 
-### 3.2 Task 4 — 目录网络链路与能力门控
+事实来源：`ui-assertions.txt` 及设置页证据。
 
-**网络链路 PASS**：首页 hero 点击"查看详情"进入真实作品详情页（PID
-4929 连续存活），页面完整渲染海报、日期/地区/集数芯片、评分、题材标签、
-选集网格；CMS 检索真实返回线路（视频源 ffzy）与 10 集选集——目录/CMS
-网络链路在 Android 上真实可用。详情页日志扫描六项全部零命中。
-**2026-08-26 的详情页窄屏 hero 修复经真机复验确认生效**（历史 Task 4
-阻塞项 `BOTTOM OVERFLOWED BY 275 PIXELS` 未再出现）。
+- 凭据状态展示"暂不可用"：通过（Android 无安全凭据存储时的降级门控）。
+- 下载区按能力隐藏：通过。
+- 插件编辑入口按能力隐藏：通过。
+- 修复后章节索引无水平溢出：通过。
 
-**能力门控 PASS**：设置页 XML 校验——凭据状态为"暂不可用"（Android
-安全存储门控生效）、下载区不存在（`downloads=false`）、插件编辑入口不
-存在（`pluginEditing=false`）。
+## 故障与修复
 
-**首轮发现并已闭环的缺陷**：设置页分段标签条在 Pixel 7 窄屏右溢出
-18 像素（`task4-settings-20260906.png`）。按计划纪律另立 TDD 修复计划
-（`2026-09-06-android-settings-chapter-index-overflow-fix.md`）：根因为
-章节项在 Expanded 槽位内放置不可收缩的序号+标签行；修复为标签
-`Flexible` + 单行省略（提交 `5629799`，RED 19px → GREEN）。修复版
-APK（SHA-256 `FEB308AAA7551090224BD0C5159BB51752DA8340477481573E89C312F50B645B`）
-真机复验：章节索引完整渲染、宽标签按设计省略、溢出条消失。
+本轮验收发现并按 TDD 修复一个真实缺陷，未做任何猜测性修改：
 
-**Task 4 余项 PASS**：修复版 APK 上设置页复验通过（
-`task4-settings-fixed-20260906.png`）；发现页目录遍历断言通过——
-动画目录刊头、发现动画/可播放片库双标签、题材/年份多维筛选芯片
-完整渲染（`task4-discover-20260906.png/xml`），最终日志六项致命扫描
-零命中。
+- 缺陷：设置页章节索引条在 Pixel 7 窄屏右溢出 18 像素（修复前证据
+  `task4-settings-20260906.png`）。
+- 根因：章节项在 `Expanded` 槽位内放置不可收缩的"序号 + 标签"行，
+  最宽标签超出窄屏槽位。
+- 修复：标签改为 `Flexible` + 单行省略（桌面视觉不变），提交
+  `5629799`，回归测试在 411px 宽度先 RED（19px）后 GREEN。
+- 回归：修复版 APK 真机复验无溢出（`task4-settings-fixed-20260906.png`），
+  全仓 455 项测试通过，静态检查零问题。
 
-## 4. Git 边界审计
+Windows 回归的构建环境偏差（非应用缺陷）：跨盘 junction 下全新缓存的
+cmake INSTALL include 解析失败，改用同盘 ASCII junction 后构建通过；
+已记入 SDD 账本，不涉及仓库文件。
 
-- 本次验收新增仓库文件仅本报告；SDD 账本更新均为 ignored 文件。
-- 三份 Windows 生成文件差异保持未暂存；无推送、无打标签、无版本变更、
-  无 Release。
-- 计划勾选更新仅限本次实际执行的窄屏修复计划 Task 2 步骤。
+## 安全与脱敏
 
-## 5. 后续顺序
+原始证据（截图、UI hierarchy、完整日志、哈希清单）只保存在本地验收
+证据目录，仓库只保留本报告。Cookie 与凭据已脱敏；报告不包含 Header、
+AppId、AppSecret、ProxyAuthorization 或完整媒体 URL。
 
-1. 主验收计划 Task 5：Git 边界终审与报告终稿（本报告即终稿基础）。
-2. 真机（arm64 实体手机）验收：锁屏恢复、后台返回、音频中断、横竖屏。
-3. 窄屏布局的系统性巡检（目录筛选行、个人资料库在 360 宽度下的表现）。
+## 已验证、未验证与风险
+
+已验证：应用壳两次冷启动稳定；首页信息流与目录/详情 CMS 网络链路在
+模拟器真实可用；窄屏布局经三处缺陷修复（首页 hero、详情页 hero、
+设置页章节索引）后主要页面无溢出；能力门控按预期生效。
+
+未验证：视频播放、弹幕、真实凭据、下载、签名、发布；搜索页遍历与
+实体 arm64 手机项（锁屏恢复、后台返回、音频中断、横竖屏）留待
+后续阶段。
+
+风险：目录索引计数在本轮显示为初始状态，目录数据的完整聚合需要更长
+网络窗口确认；窄屏布局仍有未巡检页面（360 宽度极端场景）。
+
+## Git 边界
+
+本报告提交前未 push、未 merge、未升版、未打标签、未创建 Release；
+三份 Windows 生成文件保持未暂存；本地证据目录、SDD 账本与
+`android/local.properties` 均不进入 Git。
