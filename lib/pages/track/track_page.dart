@@ -6,6 +6,7 @@ import '../../stores/history_collect_store.dart';
 import '../../stores/theme_store.dart';
 import '../../widgets/vira_page_chrome.dart';
 import '../library/personal_archive_view.dart';
+import '../../utils/app_routes.dart';
 
 class TrackPage extends StatefulWidget {
   const TrackPage({super.key});
@@ -15,7 +16,7 @@ class TrackPage extends StatefulWidget {
 }
 
 class _TrackPageState extends State<TrackPage> {
-  final _store = HistoryCollectStore();
+  final _store = Modular.get<HistoryCollectStore>();
 
   @override
   void initState() {
@@ -25,7 +26,6 @@ class _TrackPageState extends State<TrackPage> {
 
   @override
   void dispose() {
-    _store.dispose();
     super.dispose();
   }
 
@@ -34,9 +34,9 @@ class _TrackPageState extends State<TrackPage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.following,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: Observer(
         builder: (_) {
           final entries = _store.trackList
@@ -69,16 +69,18 @@ class _TrackPageState extends State<TrackPage> {
             ],
             selectedSectionId: 'track',
             onSectionSelected: (section) {
-              if (section == 'calendar') Modular.to.navigate('/calendar');
+              if (section == 'calendar') Modular.to.navigate(AppRoutes.calendar);
             },
             onOpen: (entry) {
               final item = _store.trackList
                   .where((candidate) => candidate.animeUrl == entry.id)
                   .firstOrNull;
               Modular.to.pushNamed(
-                '/detail?url=${Uri.encodeComponent(entry.id)}'
-                '&name=${Uri.encodeComponent(entry.title)}'
-                '${item?.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item!.contentId!)}' : ''}',
+                AppRoutes.detail(
+                  url: entry.id,
+                  name: entry.title,
+                  contentId: item?.contentId,
+                ),
               );
             },
             onRemove: (entry) => _store.removeTrack(entry.id),
@@ -103,13 +105,7 @@ class _TrackPageState extends State<TrackPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.following) {
       Modular.to.navigate(route);
     }

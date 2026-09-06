@@ -16,9 +16,6 @@ abstract class _AnimeStore with Store {
   ObservableList<Anime> searchResults = ObservableList.of([]);
 
   @observable
-  ObservableList<Anime> popularList = ObservableList.of([]);
-
-  @observable
   ObservableList<Episode> currentEpisodes = ObservableList.of([]);
 
   @observable
@@ -115,5 +112,14 @@ abstract class _AnimeStore with Store {
   @action
   void clearEpisodes() {
     currentEpisodes.clear();
+  }
+
+  /// 整表替换集数：页面加载 CMS 集数后走这里，避免在 action 外
+  /// 直接 clear/addAll observable 列表。
+  @action
+  void replaceEpisodes(List<Episode> episodes) {
+    currentEpisodes
+      ..clear()
+      ..addAll(episodes);
   }
 }

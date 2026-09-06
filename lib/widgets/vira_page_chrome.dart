@@ -3,8 +3,20 @@ import 'package:flutter/material.dart';
 import '../theme/vira_colors.dart';
 import 'liquid_glass_surface.dart';
 import 'vira_mascot_badge.dart';
+import '../utils/app_routes.dart';
 
 enum ViraDestination { home, discover, following, library, downloads }
+
+/// 目标页对应的路由路径，统一引用 AppRoutes 常量。
+extension ViraDestinationRoute on ViraDestination {
+  String get route => switch (this) {
+        ViraDestination.home => AppRoutes.home,
+        ViraDestination.discover => AppRoutes.category,
+        ViraDestination.following => AppRoutes.track,
+        ViraDestination.library => AppRoutes.collect,
+        ViraDestination.downloads => AppRoutes.download,
+      };
+}
 
 extension on ViraDestination {
   String get label => switch (this) {

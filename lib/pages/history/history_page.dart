@@ -9,6 +9,7 @@ import '../../stores/theme_store.dart';
 import '../../theme/vira_colors.dart';
 import '../../widgets/vira_page_chrome.dart';
 import '../library/personal_archive_view.dart';
+import '../../utils/app_routes.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
@@ -18,7 +19,7 @@ class HistoryPage extends StatefulWidget {
 }
 
 class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
-  final _store = HistoryCollectStore();
+  final _store = Modular.get<HistoryCollectStore>();
   bool _refreshingMetadata = false;
 
   @override
@@ -32,7 +33,6 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _store.dispose();
     super.dispose();
   }
 
@@ -59,9 +59,9 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
     return ViraPageScaffold(
       activeDestination: ViraDestination.library,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: Observer(
         builder: (_) {
           final historyById = {
@@ -96,20 +96,23 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
             ],
             selectedSectionId: 'history',
             onSectionSelected: (section) {
-              if (section == 'collect') Modular.to.navigate('/collect');
+              if (section == 'collect') Modular.to.navigate(AppRoutes.collect);
             },
             onOpen: (entry) {
               final item = historyById[entry.id];
               if (item == null) return;
               Modular.to.pushNamed(
-                '/player?url=${Uri.encodeComponent(item.episodeUrl)}'
-                '&title=${Uri.encodeComponent(item.episodeName)}'
-                '&animeUrl=${Uri.encodeComponent(item.animeUrl)}'
-                '&animeName=${Uri.encodeComponent(item.animeName)}'
-                '&cover=${Uri.encodeComponent(item.cover ?? '')}'
-                '&ep=${item.episodeUrl.split('/ep/').last}'
-                '&source=${Uri.encodeComponent(item.sourcePlugin)}'
-                '${item.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item.contentId!)}' : ''}',
+                AppRoutes.player(
+                  url: item.episodeUrl,
+                  title: item.episodeName,
+                  animeUrl: item.animeUrl,
+                  animeName: item.animeName,
+                  cover: item.cover,
+                  episodeIndex:
+                      int.tryParse(item.episodeUrl.split('/ep/').last),
+                  source: item.sourcePlugin,
+                  contentId: item.contentId,
+                ),
               );
             },
             onRemove: (entry) async {
@@ -159,13 +162,7 @@ class _HistoryPageState extends State<HistoryPage> with WidgetsBindingObserver {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.library) {
       Modular.to.navigate(route);
     }

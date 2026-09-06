@@ -160,10 +160,11 @@ class DanmakuService {
     return DanmakuRepository(
       client: _createApi(credentials),
       matcher: const DanmakuMatcher(),
+      // 弹幕缓存走独立 Hive box，避免大体量数据混入设置存储。
       cache: SettingsDanmakuCacheStore(
-        read: (key) => storage.getSetting<Object>(key),
-        write: storage.setSetting,
-        remove: storage.removeSetting,
+        read: storage.getDanmakuCache,
+        write: storage.setDanmakuCache,
+        remove: storage.removeDanmakuCache,
       ),
     );
   }

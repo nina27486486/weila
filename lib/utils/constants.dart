@@ -15,6 +15,7 @@ class AppConstants {
   static const String boxTrack = 'track_box';
   static const String boxSettings = 'settings_box';
   static const String boxDownload = 'download_box';
+  static const String boxDanmakuCache = 'danmaku_cache_v1';
 
   // 默认设置
   static const String defaultUserAgent =

@@ -39,16 +39,16 @@ extension _DetailPageView on _DetailPageState {
         final animeName = detail?['name']?.toString().trim();
         final coverUrl = detail?['cover']?.toString() ?? _anime.cover ?? '';
         Modular.to.pushNamed(
-          '/player?url=${Uri.encodeComponent(resolved.variant.url)}'
-          '&title=${Uri.encodeComponent(ep.name)}'
-          '&animeUrl=${Uri.encodeComponent(_libraryAnimeUrl)}'
-          '&animeName=${Uri.encodeComponent(
-            animeName?.isNotEmpty == true ? animeName! : _animeName,
-          )}'
-          '&cover=${Uri.encodeComponent(coverUrl)}'
-          '&ep=$epIndex'
-          '&source=${Uri.encodeComponent(_cmsAnimeUrl!.split(':').first)}'
-          '${widget.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(widget.contentId!)}' : ''}',
+          AppRoutes.player(
+            url: resolved.variant.url,
+            title: ep.name,
+            animeUrl: _libraryAnimeUrl,
+            animeName: animeName?.isNotEmpty == true ? animeName : _animeName,
+            cover: coverUrl,
+            episodeIndex: epIndex,
+            source: _cmsAnimeUrl!.split(':').first,
+            contentId: widget.contentId,
+          ),
         );
       }
     } catch (e) {
@@ -69,9 +69,9 @@ extension _DetailPageView on _DetailPageState {
     return ViraPageScaffold(
       activeDestination: null,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: Observer(
         builder: (_) {
           final detail = _store.currentDetail;
@@ -138,14 +138,7 @@ extension _DetailPageView on _DetailPageState {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
-    Modular.to.navigate(route);
+    Modular.to.navigate(destination.route);
   }
 
   Widget _buildHeroPanel({

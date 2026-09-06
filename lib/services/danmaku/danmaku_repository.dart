@@ -1,3 +1,6 @@
+import 'package:flutter/foundation.dart'
+    show compute;
+
 import '../../models/danmaku_item.dart';
 import 'dandanplay_api_client.dart';
 import 'danmaku_diagnostics.dart';
@@ -69,7 +72,7 @@ class DanmakuRepository {
       if (!effectiveRefresh) {
         final matched = _readCandidate(_matchCacheKey, cacheKey);
         if (matched != null) {
-          return _loadComments(matched, refresh: false);
+          return await _loadComments(matched, refresh: false);
         }
       }
 
@@ -140,7 +143,7 @@ class DanmakuRepository {
           safeMessage: '找到多个候选，请选择正确剧集',
         );
       }
-      return _loadComments(selected, refresh: effectiveRefresh);
+      return await _loadComments(selected, refresh: effectiveRefresh);
     } on DandanplayApiException catch (error) {
       return _errorResult(error, stage: DanmakuErrorStage.search);
     } catch (_) {
@@ -248,15 +251,7 @@ class DanmakuRepository {
         ),
       );
     }
-    final items = <DanmakuItem>[];
-    for (final value in comments) {
-      if (value is! Map) continue;
-      final item = DanmakuItem.tryParseDandanplay(
-        value['p']?.toString() ?? '',
-        value['m']?.toString() ?? '',
-      );
-      if (item != null) items.add(item);
-    }
+    final items = await _parseCommentItems(comments);
     items.sort((a, b) => a.time.compareTo(b.time));
     if (comments.isNotEmpty && items.isEmpty) {
       return DanmakuLoadResult(
@@ -290,6 +285,32 @@ class DanmakuRepository {
     if (last != null && now.difference(last) < _refreshDebounce) return false;
     _lastRefreshAt[key] = now;
     return true;
+  }
+
+  /// 解析评论列表：大集合在 isolate 中做字符串拆解与排序
+  /// （单集可达几千条），小集合直接同步避免 isolate 启动开销。
+  /// isolate 侧只回传轻量元组，不在工作线程构造 HiveObject。
+  static const _isolateParseThreshold = 200;
+
+  Future<List<DanmakuItem>> _parseCommentItems(List comments) async {
+    final maps = comments.whereType<Map>().toList();
+    if (maps.isEmpty) return [];
+    List<List<dynamic>> tuples;
+    if (maps.length >= _isolateParseThreshold) {
+      tuples = await compute(_parseDanmakuTuples, maps);
+    } else {
+      tuples = _parseDanmakuTuples(maps);
+    }
+    return [
+      for (final tuple in tuples)
+        DanmakuItem(
+          text: tuple[4] as String,
+          time: tuple[0] as double,
+          type: tuple[1] as int,
+          color: tuple[2] as int,
+          fontSize: tuple[3] as int,
+        ),
+    ];
   }
 
   String _requestKey(String anime, int episode) {
@@ -457,4 +478,20 @@ class DanmakuRepository {
       ),
     );
   }
+}
+
+/// compute 入口：解析弹弹play评论为轻量元组（time/type/color/fontSize/text）
+/// 并按时间排序。必须是顶层函数，且不构造 HiveObject（不可跨 isolate 传输）。
+List<List<dynamic>> _parseDanmakuTuples(List<Map> comments) {
+  final parsed = <List<dynamic>>[];
+  for (final value in comments) {
+    final item = DanmakuItem.tryParseDandanplay(
+      value['p']?.toString() ?? '',
+      value['m']?.toString() ?? '',
+    );
+    if (item == null) continue;
+    parsed.add([item.time, item.type, item.color, item.fontSize, item.text]);
+  }
+  parsed.sort((a, b) => (a[0] as double).compareTo(b[0] as double));
+  return parsed;
 }

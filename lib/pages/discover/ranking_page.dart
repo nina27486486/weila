@@ -5,6 +5,7 @@ import '../../services/plugin/plugin_service.dart';
 import '../../stores/theme_store.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'editorial_ranking_view.dart';
+import '../../utils/app_routes.dart';
 
 class RankingPage extends StatefulWidget {
   const RankingPage({super.key});
@@ -204,9 +205,9 @@ class _RankingPageState extends State<RankingPage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.discover,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: EditorialRankingView(
         stories: stories,
         source: _source,
@@ -230,13 +231,7 @@ class _RankingPageState extends State<RankingPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.discover) {
       Modular.to.navigate(route);
     }
@@ -247,8 +242,7 @@ class _RankingPageState extends State<RankingPage> {
     final name = item['name']?.toString() ?? '';
     if (url.isEmpty) return;
     Modular.to.pushNamed(
-      '/detail?url=${Uri.encodeComponent(url)}'
-      '&name=${Uri.encodeComponent(name)}',
+      AppRoutes.detail(url: url, name: name),
     );
   }
 }

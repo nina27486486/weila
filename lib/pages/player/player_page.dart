@@ -80,7 +80,8 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   final PlayerPlaybackLifecycleCoordinator _playbackLifecycle =
       PlayerPlaybackLifecycleCoordinator();
   final PluginService _pluginService = PluginService();
-  final HistoryCollectStore _historyStore = HistoryCollectStore();
+  final HistoryCollectStore _historyStore =
+      Modular.get<HistoryCollectStore>();
   final DownloadService _downloadService = DownloadService();
   late final PlayerDanmakuSession _danmakuSession;
   final AcceptanceReportService _acceptanceReports = AcceptanceReportService();
@@ -99,6 +100,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   bool _showNextEpisodePrompt = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  DateTime? _lastPositionUiUpdate;
   double _volume = 100;
   double _playbackSpeed = 1.0;
   double _danmakuOpacity = 1.0;
@@ -192,20 +194,29 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       if (mounted) setState(() => _isPlaying = playing);
     }));
     _subscriptions.add(_player.stream.position.listen((pos) {
-      if (mounted) {
-        final shouldShowNext = _shouldShowNextEpisodePrompt(pos, _duration);
-        setState(() {
-          _position = pos;
-          _showNextEpisodePrompt = shouldShowNext;
-        });
-        _playbackLifecycle.recordPlaybackPosition(
-          generation: _playbackLifecycle.currentGeneration,
-          position: pos,
-        );
-        if (_playbackLifecycle.firstFrameEvidenceReady) {
-          _markVideoSignalDetected();
-        }
+      if (!mounted) return;
+      // 弹幕时间轴与播放诊断保持流原始精度（约 100ms）。
+      _danmakuController.updatePosition(pos.inMilliseconds / 1000.0);
+      _playbackLifecycle.recordPlaybackPosition(
+        generation: _playbackLifecycle.currentGeneration,
+        position: pos,
+      );
+      if (_playbackLifecycle.firstFrameEvidenceReady) {
+        _markVideoSignalDetected();
       }
+      // 整页重建节流到约 4Hz：进度条对显示粒度不敏感，
+      // 观看历史取值在 dispose 时最多滞后一个节流窗口，无感。
+      final now = DateTime.now();
+      final lastUpdate = _lastPositionUiUpdate;
+      if (lastUpdate != null &&
+          now.difference(lastUpdate) < const Duration(milliseconds: 250)) {
+        return;
+      }
+      _lastPositionUiUpdate = now;
+      setState(() {
+        _position = pos;
+        _showNextEpisodePrompt = _shouldShowNextEpisodePrompt(pos, _duration);
+      });
     }));
     _subscriptions.add(_player.stream.duration.listen((dur) {
       if (mounted) {
@@ -260,13 +271,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
     // 检查当前视频是否已下载
     _checkDownloadStatus();
-
-    // 同步播放位置到弹幕控制器
-    _subscriptions.add(_player.stream.position.listen((pos) {
-      if (mounted) {
-        _danmakuController.updatePosition(pos.inMilliseconds / 1000.0);
-      }
-    }));
 
     // 加载弹幕
     _loadDanmaku();
@@ -921,7 +925,6 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     ));
 
     _player.dispose();
-    _historyStore.dispose();
     super.dispose();
   }
 

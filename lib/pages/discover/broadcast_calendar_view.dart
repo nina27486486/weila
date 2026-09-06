@@ -4,6 +4,7 @@ import '../../theme/vira_colors.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/editorial_section_header.dart';
 import '../../widgets/vira_state_view.dart';
+import '../../widgets/score_badge.dart';
 
 class BroadcastCalendarView extends StatelessWidget {
   static const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -487,18 +488,13 @@ class _ScheduleCardState extends State<_ScheduleCard> {
                                   ),
                             ),
                             const Spacer(),
-                            if (score != null) ...[
-                              Icon(
-                                Icons.star_rounded,
-                                size: 13,
-                                color: colors.warning,
+                            if (score != null)
+                              ScoreBadge(
+                                score: score,
+                                iconSize: 13,
+                                textStyle:
+                                    Theme.of(context).textTheme.labelSmall,
                               ),
-                              const SizedBox(width: 2),
-                              Text(
-                                score.toStringAsFixed(1),
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                            ],
                           ],
                         ),
                         const SizedBox(height: 6),

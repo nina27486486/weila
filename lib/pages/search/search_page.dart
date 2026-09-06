@@ -16,6 +16,8 @@ import '../../utils/animations.dart';
 import '../../widgets/cover_image.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'search_editorial_masthead.dart';
+import '../../utils/app_routes.dart';
+import '../../widgets/vira_state_view.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key, this.initialQuery});
@@ -33,7 +35,7 @@ class _SearchPageState extends State<SearchPage> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   final _scrollController = ScrollController();
-  final _store = AnimeStore();
+  final _store = Modular.get<AnimeStore>();
   final List<String> _searchHistory = [];
 
   Timer? _debounce;
@@ -210,7 +212,7 @@ class _SearchPageState extends State<SearchPage> {
 
   void _openDetail(Anime anime) {
     Modular.to.pushNamed(
-      '/detail?url=${Uri.encodeComponent(anime.url)}&name=${Uri.encodeComponent(anime.name)}',
+      AppRoutes.detail(url: anime.url, name: anime.name),
     );
   }
 
@@ -229,7 +231,7 @@ class _SearchPageState extends State<SearchPage> {
           onDestinationSelected: _openDestination,
           onSearch: _focusSearch,
           onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-          onProfile: () => Modular.to.pushNamed('/settings'),
+          onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
           child: Observer(
             builder: (_) {
               final results = _store.searchResults.toList();
@@ -285,11 +287,11 @@ class _SearchPageState extends State<SearchPage> {
                   else if (hasRealError && results.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _SearchStatePanel(
+                      child: ViraStateView(kind: ViraStateKind.empty,
                         icon: Icons.cloud_off_outlined,
                         eyebrow: '连接未完成',
                         title: '这次搜索没有顺利抵达',
-                        subtitle: '请检查插件状态或网络连接，然后再试一次。',
+                        message: '请检查插件状态或网络连接，然后再试一次。',
                         actionLabel: '重新搜索',
                         onAction: _doSearch,
                       ),
@@ -297,21 +299,21 @@ class _SearchPageState extends State<SearchPage> {
                   else if (!_hasSearched && results.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _SearchStatePanel(
+                      child: ViraStateView(kind: ViraStateKind.empty,
                         icon: Icons.explore_outlined,
                         eyebrow: '发现下一部作品',
                         title: '从一个名字开始',
-                        subtitle: '支持中文名、原名、别名与关键词，按 Enter 立即搜索。',
+                        message: '支持中文名、原名、别名与关键词，按 Enter 立即搜索。',
                       ),
                     )
                   else if (results.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _SearchStatePanel(
+                      child: ViraStateView(kind: ViraStateKind.empty,
                         icon: Icons.search_off_rounded,
                         eyebrow: '没有匹配结果',
                         title: '换一种说法试试看',
-                        subtitle: '可以尝试作品别名、缩短关键词，或确认已启用对应数据源。',
+                        message: '可以尝试作品别名、缩短关键词，或确认已启用对应数据源。',
                         actionLabel: '修改关键词',
                         onAction: _focusSearch,
                       ),
@@ -319,11 +321,11 @@ class _SearchPageState extends State<SearchPage> {
                   else if (filteredResults.isEmpty)
                     SliverFillRemaining(
                       hasScrollBody: false,
-                      child: _SearchStatePanel(
+                      child: ViraStateView(kind: ViraStateKind.empty,
                         icon: Icons.filter_alt_off_outlined,
                         eyebrow: '当前来源为空',
                         title: '这个来源暂时没有结果',
-                        subtitle: '切换到“全部来源”查看其他数据源返回的作品。',
+                        message: '切换到“全部来源”查看其他数据源返回的作品。',
                       ),
                     )
                   else
@@ -341,13 +343,7 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     Modular.to.navigate(route);
   }
 }
@@ -841,79 +837,6 @@ class _SkeletonLine extends StatelessWidget {
         decoration: BoxDecoration(
           color: color,
           borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchStatePanel extends StatelessWidget {
-  const _SearchStatePanel({
-    required this.icon,
-    required this.eyebrow,
-    required this.title,
-    required this.subtitle,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  final IconData icon;
-  final String eyebrow;
-  final String title;
-  final String subtitle;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 64,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: context.colors.bgCard,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.colors.divider),
-                ),
-                child: Icon(icon, color: AppTheme.primaryBlue, size: 28),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                eyebrow,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: AppTheme.primaryBlue,
-                    ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                subtitle,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              if (actionLabel != null && onAction != null) ...[
-                const SizedBox(height: 18),
-                OutlinedButton.icon(
-                  onPressed: onAction,
-                  icon: const Icon(Icons.refresh_rounded, size: 17),
-                  label: Text(actionLabel!),
-                ),
-              ],
-            ],
-          ),
         ),
       ),
     );

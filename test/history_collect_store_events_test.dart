@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/models/collect_item.dart';
 import 'package:weila/models/history_item.dart';
 import 'package:weila/models/track_item.dart';
+import 'package:weila/services/library/history_collect_repository.dart';
 import 'package:weila/services/library/library_event_bus.dart';
 import 'package:weila/stores/history_collect_store.dart';
 

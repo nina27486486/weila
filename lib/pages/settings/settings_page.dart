@@ -23,6 +23,7 @@ import '../../utils/constants.dart';
 import '../../utils/error_handler.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'widgets/settings_components.dart';
+import '../../utils/app_routes.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -397,7 +398,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return ViraPageScaffold(
       activeDestination: null,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: themeStore.toggleTheme,
       onProfile: () {},
       child: Column(
@@ -426,13 +427,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     Modular.to.navigate(route);
   }
 
@@ -461,12 +456,16 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SettingsHero(
-                    themeLabel: themeStore.isDarkMode ? '深色模式' : '浅色模式',
-                    enabledPluginCount: enabledPluginCount,
-                    pluginCount: pluginCount,
-                    cacheLabel:
-                        _scanningCache ? '正在扫描' : _formatBytes(_cacheBytes),
+                  Observer(
+                    builder: (_) => SettingsHero(
+                      themeLabel:
+                          themeStore.isDarkMode ? '深色模式' : '浅色模式',
+                      enabledPluginCount: enabledPluginCount,
+                      pluginCount: pluginCount,
+                      cacheLabel: _scanningCache
+                          ? '正在扫描'
+                          : _formatBytes(_cacheBytes),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   KeyedSubtree(
@@ -591,7 +590,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 title: '管理数据源',
                                 subtitle: '启用、停用或检查已安装插件',
                                 onTap: () => Modular.to.pushNamed(
-                                  '/settings/plugins',
+                                  AppRoutes.plugins,
                                 ),
                               ),
                               SettingsActionRow(
@@ -599,7 +598,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 title: '添加数据源',
                                 subtitle: '从网络地址或本地文件导入插件',
                                 onTap: () => Modular.to.pushNamed(
-                                  '/settings/plugin-add',
+                                  AppRoutes.pluginAdd,
                                 ),
                               ),
                               SettingsActionRow(
