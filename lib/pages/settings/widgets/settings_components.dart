@@ -135,13 +135,20 @@ class _SettingsChapterItemState extends State<_SettingsChapterItem> {
                       ),
                 ),
                 const SizedBox(width: 7),
-                Text(
-                  widget.destination.label,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: widget.selected || _hovered
-                            ? colors.textPrimary
-                            : colors.textSecondary,
-                      ),
+                // 窄屏槽位放不下宽标签时省略收缩，避免章节索引水平溢出；
+                // 桌面空间充足时展示完整标签，视觉不变。
+                Flexible(
+                  child: Text(
+                    widget.destination.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: widget.selected || _hovered
+                              ? colors.textPrimary
+                              : colors.textSecondary,
+                        ),
+                  ),
                 ),
               ],
             ),
@@ -1491,9 +1498,8 @@ class _ProxyModeOption extends StatelessWidget {
                     selected
                         ? Icons.radio_button_checked_rounded
                         : Icons.radio_button_off_rounded,
-                    color: selected
-                        ? AppTheme.primaryBlue
-                        : colors.textSecondary,
+                    color:
+                        selected ? AppTheme.primaryBlue : colors.textSecondary,
                     size: 20,
                   ),
                   const SizedBox(width: 10),
