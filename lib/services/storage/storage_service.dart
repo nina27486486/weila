@@ -24,8 +24,8 @@ class StorageService
   late Box<HistoryItem> _historyBox;
   late Box<CollectItem> _collectBox;
   late Box<TrackItem> _trackBox;
-  late Box<DownloadItem> _downloadBox;
   late Box _settingsBox;
+  late Box _danmakuCacheBox;
   late CatalogHiveStores _catalogStores;
 
   /// 初始化 Hive（防重入）
@@ -47,8 +47,9 @@ class StorageService
     _historyBox = await Hive.openBox<HistoryItem>(AppConstants.boxHistory);
     _collectBox = await Hive.openBox<CollectItem>(AppConstants.boxCollect);
     _trackBox = await Hive.openBox<TrackItem>(AppConstants.boxTrack);
-    _downloadBox = await Hive.openBox<DownloadItem>(AppConstants.boxDownload);
     _settingsBox = await Hive.openBox(AppConstants.boxSettings);
+    _danmakuCacheBox = await Hive.openBox(AppConstants.boxDanmakuCache);
+    await _migrateLegacyDanmakuCache();
     _catalogStores = CatalogHiveStores(
       entriesBox: await Hive.openBox<Object?>(catalogEntriesStoreName),
       referencesBox: await Hive.openBox<Object?>(catalogReferencesStoreName),
@@ -80,17 +81,29 @@ class StorageService
 
   @override
   Future<void> addHistory(HistoryItem item) async {
-    await _historyBox.put(item.animeUrl, item);
+    try {
+      await _historyBox.put(item.animeUrl, item);
+    } catch (error) {
+      Log.e('Storage', '写入历史失败', error);
+    }
   }
 
   @override
   Future<void> removeHistory(String animeUrl) async {
-    await _historyBox.delete(animeUrl);
+    try {
+      await _historyBox.delete(animeUrl);
+    } catch (error) {
+      Log.e('Storage', '删除历史失败', error);
+    }
   }
 
   @override
   Future<void> clearHistory() async {
-    await _historyBox.clear();
+    try {
+      await _historyBox.clear();
+    } catch (error) {
+      Log.e('Storage', '清空历史失败', error);
+    }
   }
 
   // === 收藏 ===
@@ -100,12 +113,20 @@ class StorageService
 
   @override
   Future<void> addCollect(CollectItem item) async {
-    await _collectBox.put(item.animeUrl, item);
+    try {
+      await _collectBox.put(item.animeUrl, item);
+    } catch (error) {
+      Log.e('Storage', '写入收藏失败', error);
+    }
   }
 
   @override
   Future<void> removeCollect(String animeUrl) async {
-    await _collectBox.delete(animeUrl);
+    try {
+      await _collectBox.delete(animeUrl);
+    } catch (error) {
+      Log.e('Storage', '删除收藏失败', error);
+    }
   }
 
   @override
@@ -118,71 +139,118 @@ class StorageService
 
   @override
   Future<void> addTrack(TrackItem item) async {
-    await _trackBox.put(item.animeUrl, item);
+    try {
+      await _trackBox.put(item.animeUrl, item);
+    } catch (error) {
+      Log.e('Storage', '写入追番失败', error);
+    }
   }
 
   @override
   Future<void> removeTrack(String animeUrl) async {
-    await _trackBox.delete(animeUrl);
+    try {
+      await _trackBox.delete(animeUrl);
+    } catch (error) {
+      Log.e('Storage', '删除追番失败', error);
+    }
   }
 
   @override
   bool isTracked(String animeUrl) => _trackBox.containsKey(animeUrl);
 
   Future<void> updateTrackProgress(String animeUrl, int watchedEpisodes) async {
-    final item = _trackBox.get(animeUrl);
-    if (item != null) {
-      item.watchedEpisodes = watchedEpisodes;
-      item.lastUpdated = DateTime.now();
-      await item.save();
-    }
-  }
-
-  // === 下载 ===
-  List<DownloadItem> getDownloads() {
-    _ensureInitialized();
-    return _downloadBox.values.toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  }
-
-  Future<void> addDownload(DownloadItem item) async {
-    await _downloadBox.put('${item.animeUrl}|${item.episodeUrl}', item);
-  }
-
-  Future<void> updateDownload(DownloadItem item) async {
-    await _downloadBox.put('${item.animeUrl}|${item.episodeUrl}', item);
-  }
-
-  Future<void> removeDownload(String animeUrl) async {
-    final keys = _downloadBox.keys
-        .where((k) => k.toString().startsWith('$animeUrl|'))
-        .toList();
-    for (final key in keys) {
-      await _downloadBox.delete(key);
-    }
-  }
-
-  Future<void> clearCompleted() async {
-    final keys = _downloadBox.values
-        .where((item) => item.status == 2)
-        .map((item) => '${item.animeUrl}|${item.episodeUrl}')
-        .toList();
-    for (final key in keys) {
-      await _downloadBox.delete(key);
+    try {
+      final item = _trackBox.get(animeUrl);
+      if (item != null) {
+        item.watchedEpisodes = watchedEpisodes;
+        item.lastUpdated = DateTime.now();
+        await item.save();
+      }
+    } catch (error) {
+      Log.e('Storage', '更新追番进度失败', error);
     }
   }
 
   // === 设置 ===
   T? getSetting<T>(String key, {T? defaultValue}) {
-    return _settingsBox.get(key, defaultValue: defaultValue) as T?;
+    final value = _settingsBox.get(key, defaultValue: defaultValue);
+    if (value is T) return value;
+    if (value != null) {
+      // 存量值类型与期望不符（如旧版本写入格式变化）：回退默认值而不是抛
+      // TypeError 让整页崩溃，并留下日志便于排查。
+      Log.e(
+        'Storage',
+        '设置 $key 的存储类型 $T 不匹配（实际 ${value.runtimeType}），已回退默认值',
+      );
+    }
+    return defaultValue;
   }
 
   Future<void> setSetting(String key, dynamic value) async {
-    await _settingsBox.put(key, value);
+    try {
+      await _settingsBox.put(key, value);
+    } catch (error) {
+      Log.e('Storage', '写入设置 $key 失败', error);
+    }
   }
 
   Future<void> removeSetting(String key) async {
-    await _settingsBox.delete(key);
+    try {
+      await _settingsBox.delete(key);
+    } catch (error) {
+      Log.e('Storage', '删除设置 $key 失败', error);
+    }
+  }
+
+  // === 弹幕缓存（独立 box：单集可达数百 KB，避免混入设置存储） ===
+  static const List<String> _danmakuCacheKeys = [
+    'danmaku_search_cache_v1',
+    'danmaku_match_cache_v1',
+    'danmaku_comment_cache_v1',
+  ];
+
+  Object? getDanmakuCache(String key) {
+    _ensureInitialized();
+    return _danmakuCacheBox.get(key);
+  }
+
+  Future<void> setDanmakuCache(String key, Object value) async {
+    try {
+      await _danmakuCacheBox.put(key, value);
+    } catch (error) {
+      Log.e('Storage', '写入弹幕缓存失败', error);
+    }
+  }
+
+  Future<void> removeDanmakuCache(String key) async {
+    try {
+      await _danmakuCacheBox.delete(key);
+    } catch (error) {
+      Log.e('Storage', '删除弹幕缓存失败', error);
+    }
+  }
+
+  /// 一次性迁移：老版本把弹幕缓存放在 settings box 里，搬到独立 box
+  /// 后把旧键清掉，避免设置存储持续膨胀。
+  Future<void> _migrateLegacyDanmakuCache() async {
+    try {
+      var migrated = false;
+      for (final key in _danmakuCacheKeys) {
+        if (_settingsBox.containsKey(key)) {
+          final value = _settingsBox.get(key);
+          if (value != null && !_danmakuCacheBox.containsKey(key)) {
+            await _danmakuCacheBox.put(key, value);
+          }
+          await _settingsBox.delete(key);
+          migrated = true;
+        }
+      }
+      if (migrated) {
+        Log.d('Storage', '弹幕缓存已迁移到独立 box');
+      }
+    } catch (error) {
+      Log.e('Storage', '迁移弹幕缓存失败（忽略，将重新匹配）', error);
+    }
   }
 
   HiveCatalogRepository createCatalogRepository({
@@ -218,7 +286,7 @@ class StorageService
     _ensureInitialized();
     final values = settings.toMap();
     for (final entry in values.entries) {
-      await _settingsBox.put(entry.key, entry.value);
+      await setSetting(entry.key, entry.value);
     }
   }
 }

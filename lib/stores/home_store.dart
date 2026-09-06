@@ -32,20 +32,30 @@ abstract class _HomeStore with Store {
   @observable
   bool isLoadingSeasonal = false;
 
+  // 三个信息流独立记录错误，避免互相覆盖或误清；
+  // errorMessage 聚合给整体空态提示使用。
   @observable
-  String? errorMessage;
+  String? latestError;
+
+  @observable
+  String? trendingError;
+
+  @observable
+  String? seasonalError;
+
+  String? get errorMessage => latestError ?? trendingError ?? seasonalError;
 
   @action
   Future<void> loadLatest() async {
     isLoadingLatest = true;
-    errorMessage = null;
+    latestError = null;
     try {
       final results = await _feedService.loadLatest();
       latestList.clear();
       latestList.addAll(results);
     } catch (e) {
       Log.e('HomeStore', '加载最新番剧失败', e);
-      errorMessage = '加载最新番剧失败，请检查网络';
+      latestError = '加载最新番剧失败，请检查网络';
     } finally {
       isLoadingLatest = false;
     }
@@ -54,14 +64,14 @@ abstract class _HomeStore with Store {
   @action
   Future<void> loadTrending() async {
     isLoadingTrending = true;
-    errorMessage = null;
+    trendingError = null;
     try {
       final results = await _feedService.loadTrending();
       trendingList.clear();
       trendingList.addAll(results);
     } catch (e) {
       Log.e('HomeStore', '加载热门番剧失败', e);
-      errorMessage = '加载热门番剧失败，请检查网络';
+      trendingError = '加载热门番剧失败，请检查网络';
     } finally {
       isLoadingTrending = false;
     }
@@ -70,6 +80,7 @@ abstract class _HomeStore with Store {
   @action
   Future<void> loadSeasonal() async {
     isLoadingSeasonal = true;
+    seasonalError = null;
     try {
       final results = await _feedService.loadSeasonal();
 
@@ -77,6 +88,7 @@ abstract class _HomeStore with Store {
       seasonalList.addAll(results);
     } catch (e) {
       Log.e('HomeStore', '加载季度新番失败', e);
+      seasonalError = '加载季度新番失败，请检查网络';
     } finally {
       isLoadingSeasonal = false;
     }

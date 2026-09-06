@@ -1,4 +1,5 @@
 import 'package:flutter_modular/flutter_modular.dart';
+
 import 'debug/danmaku_debug_config.dart';
 import 'pages/home/home_page.dart';
 import 'pages/search/search_page.dart';
@@ -17,11 +18,14 @@ import 'pages/discover/ranking_page.dart';
 import 'pages/discover/category_browse_page.dart';
 import 'pages/download/download_page.dart';
 import 'pages/debug/danmaku_debug_page.dart';
-import 'services/plugin/plugin_service.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
+import 'stores/anime_store.dart';
+import 'stores/history_collect_store.dart';
+import 'stores/home_store.dart';
 import 'stores/theme_store.dart';
 import 'platform/app_capabilities.dart';
 import 'platform/fullscreen_controller.dart';
+import 'utils/app_routes.dart';
 
 class AppModule extends Module {
   AppModule({
@@ -36,23 +40,30 @@ class AppModule extends Module {
 
   @override
   void binds(i) {
+    // ThemeStore 手写单例与这里的 bind 指向同一实例：
+    // main.dart 在 Modular 就绪前就要加载主题，只能走 factory。
     i.addLazySingleton<ThemeStore>(() => ThemeStore());
+    // 全局共享 store：同一份 observable 列表跨页面一致，
+    // 不再需要每页各建镜像靠事件总线缝合。
+    i.addLazySingleton<AnimeStore>(() => AnimeStore());
+    i.addLazySingleton<HomeStore>(() => HomeStore());
+    i.addLazySingleton<HistoryCollectStore>(() => HistoryCollectStore());
   }
 
   @override
   void routes(r) {
     r.child(
-      '/',
+      AppRoutes.home,
       child: (context) => const HomePage(),
     );
     r.child(
-      '/search',
+      AppRoutes.search,
       child: (context) => SearchPage(
         initialQuery: r.args.queryParams['q'],
       ),
     );
     r.child(
-      '/detail',
+      AppRoutes.detailPath,
       child: (context) => DetailPage(
         contentId: r.args.queryParams['contentId'],
         animeUrl: r.args.queryParams['url'] ?? '',
@@ -60,7 +71,7 @@ class AppModule extends Module {
       ),
     );
     r.child(
-      '/player',
+      AppRoutes.playerPath,
       child: (context) => PlayerPage(
         videoUrl: r.args.queryParams['url'] ?? '',
         title: r.args.queryParams['title'] ?? '',
@@ -75,19 +86,19 @@ class AppModule extends Module {
       ),
     );
     r.child(
-      '/history',
+      AppRoutes.history,
       child: (context) => const HistoryPage(),
     );
     r.child(
-      '/collect',
+      AppRoutes.collect,
       child: (context) => const CollectPage(),
     );
     r.child(
-      '/track',
+      AppRoutes.track,
       child: (context) => const TrackPage(),
     );
     r.child(
-      '/settings',
+      AppRoutes.settings,
       child: (context) => SettingsPage(
         credentialManager: credentialManager,
         capabilities: capabilities,
@@ -101,58 +112,41 @@ class AppModule extends Module {
     }
     if (capabilities.pluginEditing) {
       r.child(
-        '/settings/plugins',
+        AppRoutes.plugins,
         child: (context) => const PluginListPage(),
       );
       r.child(
-        '/settings/plugin-add',
+        AppRoutes.pluginAdd,
         child: (context) => const PluginAddPage(),
       );
       r.child(
-        '/settings/plugin-detail',
+        AppRoutes.pluginDetail,
         child: (context) => PluginDetailPage(
           pluginApi: r.args.queryParams['api'] ?? '',
         ),
       );
     }
     r.child(
-      '/anime-list',
-      child: (context) {
-        final type = r.args.queryParams['type'] ?? 'anime';
-        if (type == 'movie') {
-          return AnimeListPage(
-            title: '剧场版',
-            categoryIds: PluginService.cmsCategories
-                .map((k, v) => MapEntry(k, (v.last['id'] as int))),
-          );
-        }
-        return AnimeListPage(
-          title: '番剧',
-          categoryIds: PluginService.cmsCategories.map((k, v) => MapEntry(
-              k,
-              (v.firstWhere(
-                  (c) =>
-                      c['name']?.toString().contains('日本') == true ||
-                      c['name']?.toString().contains('日韩') == true,
-                  orElse: () => v.first)['id'] as int))),
-        );
-      },
+      AppRoutes.animeList,
+      child: (context) => r.args.queryParams['type'] == 'movie'
+          ? AnimeListPage.movies()
+          : AnimeListPage.anime(),
     );
     r.child(
-      '/calendar',
+      AppRoutes.calendar,
       child: (context) => const CalendarPage(),
     );
     r.child(
-      '/ranking',
+      AppRoutes.ranking,
       child: (context) => const RankingPage(),
     );
     r.child(
-      '/category',
+      AppRoutes.category,
       child: (context) => const CategoryBrowsePage(),
     );
     if (capabilities.downloads) {
       r.child(
-        '/download',
+        AppRoutes.download,
         child: (context) => const DownloadPage(),
       );
     }

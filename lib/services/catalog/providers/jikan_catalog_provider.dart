@@ -3,74 +3,16 @@ import 'dart:async';
 import '../../../models/catalog/catalog_enums.dart';
 import '../../../models/catalog/catalog_values.dart';
 import '../../http/http_client.dart';
+import '../../jikan/jikan_rate_limiter.dart';
 import '../catalog_normalizer.dart';
 import 'catalog_provider.dart';
-
-abstract interface class CatalogRequestLimiter {
-  Future<void> acquire();
-}
-
-typedef JikanClock = DateTime Function();
-typedef JikanDelay = Future<void> Function(Duration duration);
-
-class JikanRequestLimiter implements CatalogRequestLimiter {
-  JikanRequestLimiter({JikanClock? now, JikanDelay? delay})
-      : _now = now ?? DateTime.now,
-        _delay = delay ?? Future<void>.delayed;
-
-  final JikanClock _now;
-  final JikanDelay _delay;
-  final List<DateTime> _admitted = [];
-  Future<void> _tail = Future<void>.value();
-
-  @override
-  Future<void> acquire() {
-    final result = _tail.then((_) => _waitForSlot());
-    _tail = result.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace __) {},
-    );
-    return result;
-  }
-
-  Future<void> _waitForSlot() async {
-    while (true) {
-      final now = _now().toUtc();
-      _admitted.removeWhere(
-        (instant) => !instant.isAfter(now.subtract(const Duration(minutes: 1))),
-      );
-      final inSecond = _admitted
-          .where(
-            (instant) =>
-                instant.isAfter(now.subtract(const Duration(seconds: 1))),
-          )
-          .toList(growable: false);
-      Duration wait = Duration.zero;
-      if (inSecond.length >= 3) {
-        wait = inSecond.first.add(const Duration(seconds: 1)).difference(now);
-      }
-      if (_admitted.length >= 60) {
-        final minuteWait =
-            _admitted.first.add(const Duration(minutes: 1)).difference(now);
-        if (minuteWait > wait) wait = minuteWait;
-      }
-      if (wait <= Duration.zero) {
-        _admitted.add(now);
-        return;
-      }
-      await _delay(wait);
-    }
-  }
-}
 
 class JikanCatalogProvider implements CatalogProvider {
   JikanCatalogProvider({
     CatalogGetJson? getJson,
     CatalogRequestLimiter? limiter,
   })  : _getJson = getJson ?? _defaultGetJson,
-        _limiter = limiter ?? _sharedLimiter;
-
-  static final CatalogRequestLimiter _sharedLimiter = JikanRequestLimiter();
+        _limiter = limiter ?? sharedJikanRateLimiter;
   static final Uri _endpoint = Uri.parse('https://api.jikan.moe/v4/anime');
   static const _normalizer = CatalogNormalizer();
 

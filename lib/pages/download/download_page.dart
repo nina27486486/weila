@@ -11,6 +11,7 @@ import '../../theme/vira_colors.dart';
 import '../../utils/error_handler.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'offline_library_view.dart';
+import '../../utils/app_routes.dart';
 
 class DownloadPage extends StatefulWidget {
   final DownloadLibrary? service;
@@ -107,9 +108,9 @@ class _DownloadPageState extends State<DownloadPage>
     return ViraPageScaffold(
       activeDestination: ViraDestination.downloads,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: OfflineLibraryView(
         episodes: episodes,
         onPause: (episode) async {
@@ -168,13 +169,15 @@ class _DownloadPageState extends State<DownloadPage>
       return;
     }
     Modular.to.pushNamed(
-      '/player?url=${Uri.encodeComponent(localPath)}'
-      '&title=${Uri.encodeComponent(item.episodeName)}'
-      '&animeUrl=${Uri.encodeComponent(item.animeUrl)}'
-      '&animeName=${Uri.encodeComponent(item.animeName)}'
-      '&cover=${Uri.encodeComponent(item.cover ?? '')}'
-      '&source=${Uri.encodeComponent(item.sourcePlugin)}'
-      '${item.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(item.contentId!)}' : ''}',
+      AppRoutes.player(
+        url: localPath,
+        title: item.episodeName,
+        animeUrl: item.animeUrl,
+        animeName: item.animeName,
+        cover: item.cover,
+        source: item.sourcePlugin,
+        contentId: item.contentId,
+      ),
     );
   }
 
@@ -211,13 +214,7 @@ class _DownloadPageState extends State<DownloadPage>
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.downloads) {
       Modular.to.navigate(route);
     }

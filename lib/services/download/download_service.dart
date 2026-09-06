@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:io' as io;
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -7,6 +7,7 @@ import 'package:hive_ce_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/download_item.dart';
 import '../storage/storage_service.dart';
+import '../http/http_client.dart';
 import 'download_settings.dart';
 import 'segment_downloader.dart';
 import '../library/library_event_bus.dart';
@@ -34,7 +35,7 @@ class DownloadService implements DownloadLibrary {
   static const int _maxConcurrent = 3;
 
   late Dio _dio;
-  late Directory _downloadDir;
+  late io.Directory _downloadDir;
   late Box<DownloadItem> _downloadBox;
   DownloadSettings _settings = DownloadSettings.defaults;
 
@@ -71,7 +72,7 @@ class DownloadService implements DownloadLibrary {
 
     // 获取应用支持目录 & 创建 downloads 子目录
     final appDir = await getApplicationSupportDirectory();
-    _downloadDir = Directory('${appDir.path}/downloads');
+    _downloadDir = io.Directory('${appDir.path}/downloads');
     if (!await _downloadDir.exists()) {
       await _downloadDir.create(recursive: true);
     }
@@ -129,6 +130,8 @@ class DownloadService implements DownloadLibrary {
     if (_initialized) {
       await StorageService().setDownloadSettings(normalized);
       _applyProxySettings();
+      // 主网络栈（搜索/详情/弹幕等）跟随同一份代理设置。
+      HttpClient().setProxy(normalized.proxyRuleFor);
       _publishDownloadChanged('download-settings-updated');
     }
   }
@@ -254,7 +257,7 @@ class DownloadService implements DownloadLibrary {
     final item = _downloadBox.get(episodeUrl);
     if (item == null) return false;
     if (item.status != 2 || item.localPath == null) return false;
-    return File(item.localPath!).existsSync();
+    return io.File(item.localPath!).existsSync();
   }
 
   /// 获取本地文件路径（用于播放）
@@ -264,7 +267,7 @@ class DownloadService implements DownloadLibrary {
     final item = _downloadBox.get(episodeUrl);
     if (item == null || item.status != 2) return null;
     if (item.localPath == null) return null;
-    if (!File(item.localPath!).existsSync()) return null;
+    if (!io.File(item.localPath!).existsSync()) return null;
     return item.localPath;
   }
 
@@ -335,12 +338,12 @@ class DownloadService implements DownloadLibrary {
       // 3. 准备临时目录和最终文件路径
       final safeAnime = _sanitizeFileName(item.animeName);
       final safeEpisode = _sanitizeFileName(item.episodeName);
-      final animeDir = Directory('${_downloadDir.path}/$safeAnime');
+      final animeDir = io.Directory('${_downloadDir.path}/$safeAnime');
       if (!await animeDir.exists()) {
         await animeDir.create(recursive: true);
       }
 
-      final tempDir = Directory('${animeDir.path}/.tmp_$safeEpisode');
+      final tempDir = io.Directory('${animeDir.path}/.tmp_$safeEpisode');
       if (!await tempDir.exists()) {
         await tempDir.create(recursive: true);
       }
@@ -361,9 +364,9 @@ class DownloadService implements DownloadLibrary {
         cancelToken: cancelToken,
         concurrency: _settings.segmentConcurrency,
         retries: _settings.segmentRetries,
-        exists: (index) => File('${tempDir.path}/seg_$index.ts').exists(),
+        exists: (index) => io.File('${tempDir.path}/seg_$index.ts').exists(),
         write: (index, bytes) async {
-          await File('${tempDir.path}/seg_$index.ts').writeAsBytes(bytes);
+          await io.File('${tempDir.path}/seg_$index.ts').writeAsBytes(bytes);
         },
         onProgress: (completedSegments) async {
           item.downloadedSegments = completedSegments;
@@ -376,10 +379,10 @@ class DownloadService implements DownloadLibrary {
 
       // 5. 合并所有分片为 .mp4 文件
       Log.d('Download', '合并分片...');
-      final outputFile = File(outputPath);
+      final outputFile = io.File(outputPath);
       final sink = outputFile.openWrite();
       for (int i = 0; i < segmentUrls.length; i++) {
-        final segmentFile = File('${tempDir.path}/seg_$i.ts');
+        final segmentFile = io.File('${tempDir.path}/seg_$i.ts');
         if (await segmentFile.exists()) {
           sink.add(await segmentFile.readAsBytes());
         }
@@ -423,18 +426,6 @@ class DownloadService implements DownloadLibrary {
       Log.e('Download', '下载失败: ${item.episodeName}', e);
       item.status = 4; // 失败
       item.failureReason = _failureReasonFor(e);
-      // DEBUG: 写错误详情到文件
-      try {
-        final f = File('${_downloadDir.path}/error_log.txt');
-        f.writeAsStringSync(
-          '[${DateTime.now()}] ${item.episodeName}\n'
-          'URL: ${item.m3u8Url}\n'
-          'Referer: ${item.referer}\n'
-          'sourcePlugin: ${item.sourcePlugin}\n'
-          'Error: $e\n\n',
-          mode: FileMode.append,
-        );
-      } catch (_) {}
       await item.save();
       _publishDownloadChanged('download-failed', item.episodeUrl);
     } finally {
@@ -575,7 +566,7 @@ class DownloadService implements DownloadLibrary {
   Future<void> _cleanupFiles(DownloadItem item) async {
     try {
       if (item.localPath != null) {
-        final file = File(item.localPath!);
+        final file = io.File(item.localPath!);
         if (await file.exists()) {
           await file.delete();
         }
@@ -584,7 +575,7 @@ class DownloadService implements DownloadLibrary {
       // 清理临时目录
       final safeAnime = _sanitizeFileName(item.animeName);
       final safeEpisode = _sanitizeFileName(item.episodeName);
-      final tempDir = Directory(
+      final tempDir = io.Directory(
         '${_downloadDir.path}/$safeAnime/.tmp_$safeEpisode',
       );
       if (await tempDir.exists()) {
@@ -648,7 +639,7 @@ class DownloadService implements DownloadLibrary {
     final settings = _settings.normalized();
     _dio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
-        final client = HttpClient();
+        final client = io.HttpClient();
         client.findProxy = settings.proxyRuleFor;
         return client;
       },

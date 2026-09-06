@@ -105,19 +105,51 @@ mixin _$HomeStore on _HomeStore, Store {
     });
   }
 
-  late final _$errorMessageAtom =
-      Atom(name: '_HomeStore.errorMessage', context: context);
+  late final _$latestErrorAtom =
+      Atom(name: '_HomeStore.latestError', context: context);
 
   @override
-  String? get errorMessage {
-    _$errorMessageAtom.reportRead();
-    return super.errorMessage;
+  String? get latestError {
+    _$latestErrorAtom.reportRead();
+    return super.latestError;
   }
 
   @override
-  set errorMessage(String? value) {
-    _$errorMessageAtom.reportWrite(value, super.errorMessage, () {
-      super.errorMessage = value;
+  set latestError(String? value) {
+    _$latestErrorAtom.reportWrite(value, super.latestError, () {
+      super.latestError = value;
+    });
+  }
+
+  late final _$trendingErrorAtom =
+      Atom(name: '_HomeStore.trendingError', context: context);
+
+  @override
+  String? get trendingError {
+    _$trendingErrorAtom.reportRead();
+    return super.trendingError;
+  }
+
+  @override
+  set trendingError(String? value) {
+    _$trendingErrorAtom.reportWrite(value, super.trendingError, () {
+      super.trendingError = value;
+    });
+  }
+
+  late final _$seasonalErrorAtom =
+      Atom(name: '_HomeStore.seasonalError', context: context);
+
+  @override
+  String? get seasonalError {
+    _$seasonalErrorAtom.reportRead();
+    return super.seasonalError;
+  }
+
+  @override
+  set seasonalError(String? value) {
+    _$seasonalErrorAtom.reportWrite(value, super.seasonalError, () {
+      super.seasonalError = value;
     });
   }
 
@@ -162,7 +194,9 @@ isLoadingLatest: ${isLoadingLatest},
 isLoadingTrending: ${isLoadingTrending},
 seasonalList: ${seasonalList},
 isLoadingSeasonal: ${isLoadingSeasonal},
-errorMessage: ${errorMessage}
+latestError: ${latestError},
+trendingError: ${trendingError},
+seasonalError: ${seasonalError}
     ''';
   }
 }

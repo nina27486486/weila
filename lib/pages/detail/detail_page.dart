@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import '../../theme/vira_colors.dart';
+import '../../utils/app_routes.dart';
 import '../../utils/logger.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -17,7 +18,6 @@ import '../../models/collect_item.dart';
 import '../../models/track_item.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/jikan/jikan_service.dart';
-import '../../services/http/http_client.dart';
 import '../../services/catalog/catalog_repository.dart';
 import '../../services/playback/playback_error_sanitizer.dart';
 import '../../services/storage/storage_service.dart';
@@ -50,8 +50,8 @@ class DetailPage extends StatefulWidget {
 }
 
 class _DetailPageState extends State<DetailPage> {
-  final _store = AnimeStore();
-  final _collectStore = HistoryCollectStore();
+  final _store = Modular.get<AnimeStore>();
+  final _collectStore = Modular.get<HistoryCollectStore>();
   final _pluginService = PluginService();
   late final CatalogRepository _catalogRepository;
   late final DetailController _detailController;
@@ -95,6 +95,10 @@ class _DetailPageState extends State<DetailPage> {
       url: widget.animeUrl,
       sourcePlugin: 'unknown',
     );
+    // isCollected/isTracked 以 store 的 observable 列表为事实源，
+    // 读取前必须先加载对应列表。
+    _collectStore.loadCollects();
+    _collectStore.loadTracks();
     _collected = _collectStore.isCollected(_libraryAnimeUrl);
     _tracked = _collectStore.isTracked(_libraryAnimeUrl);
 
@@ -133,7 +137,6 @@ class _DetailPageState extends State<DetailPage> {
   @override
   void dispose() {
     _detailController.dispose();
-    _collectStore.dispose();
     super.dispose();
   }
 
@@ -246,7 +249,7 @@ class _DetailPageState extends State<DetailPage> {
           (_anime.sourcePlugin == 'jikan' ||
               _anime.sourcePlugin == 'anilist')) {
         try {
-          final cnName = await _getChineseTitleFromAnilist(baseTitle).timeout(
+          final cnName = await _pluginService.findChineseTitle(baseTitle).timeout(
             const Duration(seconds: 8),
             onTimeout: () => null,
           );
@@ -440,8 +443,7 @@ class _DetailPageState extends State<DetailPage> {
     try {
       final episodes = await _pluginService.getEpisodes(cmsAnime);
       if (episodes.isNotEmpty && mounted) {
-        _store.currentEpisodes.clear();
-        _store.currentEpisodes.addAll(episodes);
+        _store.replaceEpisodes(episodes);
         Log.d('Detail', '已加载 ${episodes.length} 个 CMS 集数');
       }
       return episodes.length;
@@ -466,49 +468,6 @@ class _DetailPageState extends State<DetailPage> {
       if (score != null && (best == null || score > best)) best = score;
     }
     return best;
-  }
-
-  /// 通过 Anilist GraphQL 获取中文标题（从 synonyms 中找中文，并转简体）
-  Future<String?> _getChineseTitleFromAnilist(String keyword) async {
-    try {
-      const query = r'''
-        query ($search: String) {
-          Media(search: $search, type: ANIME) {
-            title { romaji native english }
-            synonyms
-          }
-        }
-      ''';
-      final data = await HttpClient().postJson(
-        'https://graphql.anilist.co',
-        data: {
-          'query': query,
-          'variables': {'search': keyword}
-        },
-      );
-      if (data is! Map<String, dynamic>) return null;
-      final media = data['data']?['Media'] as Map<String, dynamic>?;
-      if (media == null) return null;
-
-      // 从 synonyms 中找中文标题（包含中文字符的）
-      final synonyms = (media['synonyms'] as List?)?.cast<String>() ?? [];
-      for (final s in synonyms) {
-        if (RegExp(r'[\u4e00-\u9fff]').hasMatch(s) && s != keyword) {
-          final simplified = _traditionalToSimplified(s);
-          Log.d('Detail', 'Anilist 找到中文标题: $s → 简体: $simplified');
-          return simplified;
-        }
-      }
-
-      // 没有中文同义词，用 native（日文标题）
-      final native = media['title']?['native']?.toString();
-      if (native != null && native != keyword) return native;
-
-      return null;
-    } catch (e) {
-      Log.d('Detail', 'Anilist 获取中文标题失败: $e');
-      return null;
-    }
   }
 
   /// 去除标题中的季度/季数后缀，提取基础标题
@@ -652,144 +611,6 @@ class _DetailPageState extends State<DetailPage> {
     return result.length >= 2 ? result : null;
   }
 
-  /// 繁体中文 → 简体中文（覆盖动漫常用字）
-  static String _traditionalToSimplified(String text) {
-    final map = {
-      '歡': '欢',
-      '迎': '迎',
-      '來': '来',
-      '實': '实',
-      '義': '义',
-      '國': '国',
-      '學': '学',
-      '時': '时',
-      '間': '间',
-      '動': '动',
-      '畫': '画',
-      '戰': '战',
-      '術': '术',
-      '機': '机',
-      '關': '关',
-      '開': '开',
-      '發': '发',
-      '現': '现',
-      '點': '点',
-      '問': '问',
-      '題': '题',
-      '場': '场',
-      '報': '报',
-      '書': '书',
-      '記': '记',
-      '長': '长',
-      '門': '门',
-      '車': '车',
-      '電': '电',
-      '風': '风',
-      '雲': '云',
-      '飛': '飞',
-      '魚': '鱼',
-      '鳥': '鸟',
-      '馬': '马',
-      '龍': '龙',
-      '鳳': '凤',
-      '華': '华',
-      '麗': '丽',
-      '語': '语',
-      '說': '说',
-      '話': '话',
-      '讀': '读',
-      '寫': '写',
-      '聽': '听',
-      '見': '见',
-      '視': '视',
-      '覺': '觉',
-      '頭': '头',
-      '臉': '脸',
-      '眼': '眼',
-      '淚': '泪',
-      '愛': '爱',
-      '夢': '梦',
-      '燈': '灯',
-      '師': '师',
-      '將': '将',
-      '軍': '军',
-      '後': '后',
-      '從': '从',
-      '對': '对',
-      '歲': '岁',
-      '萬': '万',
-      '億': '亿',
-      '號': '号',
-      '裡': '里',
-      '錢': '钱',
-      '銀': '银',
-      '鐵': '铁',
-      '種': '种',
-      '類': '类',
-      '葉': '叶',
-      '節': '节',
-      '經': '经',
-      '練': '练',
-      '組': '组',
-      '結': '结',
-      '統': '统',
-      '續': '续',
-      '維': '维',
-      '網': '网',
-      '總': '总',
-      '線': '线',
-      '綠': '绿',
-      '紅': '红',
-      '黃': '黄',
-      '藍': '蓝',
-      '親': '亲',
-      '產': '产',
-      '業': '业',
-      '無': '无',
-      '東': '东',
-      '區': '区',
-      '強': '强',
-      '當': '当',
-      '應': '应',
-      '進': '进',
-      '達': '达',
-      '過': '过',
-      '還': '还',
-      '遠': '远',
-      '連': '连',
-      '運': '运',
-      '選': '选',
-      '邊': '边',
-      '週': '周',
-      '遊': '游',
-      '錄': '录',
-      '鑰': '钥',
-      '隊': '队',
-      '陽': '阳',
-      '陰': '阴',
-      '陣': '阵',
-      '階': '阶',
-      '離': '离',
-      '難': '难',
-      '靈': '灵',
-      '響': '响',
-      '頂': '顶',
-      '順': '顺',
-      '預': '预',
-      '須': '须',
-      '頁': '页',
-      '館': '馆',
-      '體': '体',
-      '驗': '验',
-      '鬥': '斗',
-    };
-    final buf = StringBuffer();
-    for (final ch in text.split('')) {
-      buf.write(map[ch] ?? ch);
-    }
-    return buf.toString();
-  }
-
   /// 点击集数时，优先使用 CMS 源
   void _onEpisodeTap(int index) {
     // CMS 来源的动漫直接用已加载的集数播放
@@ -820,28 +641,28 @@ class _DetailPageState extends State<DetailPage> {
     final animeName = detail?['name']?.toString().trim();
     final coverUrl = detail?['cover']?.toString() ?? _anime.cover ?? '';
     Modular.to.pushNamed(
-      '/player?url=${Uri.encodeComponent(ep.url)}'
-      '&title=${Uri.encodeComponent(ep.name)}'
-      '&animeUrl=${Uri.encodeComponent(_libraryAnimeUrl)}'
-      '&animeName=${Uri.encodeComponent(
-        animeName?.isNotEmpty == true ? animeName! : _animeName,
-      )}'
-      '&cover=${Uri.encodeComponent(coverUrl)}'
-      '&ep=$index'
-      '&source=${Uri.encodeComponent(_anime.sourcePlugin)}'
-      '${widget.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(widget.contentId!)}' : ''}',
+      AppRoutes.player(
+        url: ep.url,
+        title: ep.name,
+        animeUrl: _libraryAnimeUrl,
+        animeName: animeName?.isNotEmpty == true ? animeName : _animeName,
+        cover: coverUrl,
+        episodeIndex: index,
+        source: _anime.sourcePlugin,
+        contentId: widget.contentId,
+      ),
     );
   }
 
-  void _toggleTrack({
+  Future<void> _toggleTrack({
     required String name,
     required String? coverUrl,
     required String? status,
     required int totalEpisodes,
-  }) {
-    setState(() => _tracked = !_tracked);
-    if (_tracked) {
-      _collectStore.addTrack(TrackItem(
+  }) async {
+    // store 列表是唯一事实源：先按当前状态决定动作，写完回读刷新本地缓存。
+    if (!_collectStore.isTracked(_libraryAnimeUrl)) {
+      await _collectStore.addTrack(TrackItem(
         animeName: name,
         animeUrl: _libraryAnimeUrl,
         contentId: widget.contentId,
@@ -850,21 +671,23 @@ class _DetailPageState extends State<DetailPage> {
         status: status,
         totalEpisodes: totalEpisodes,
       ));
-      ErrorHandler.showSuccess(context, '已追番');
+      if (mounted) ErrorHandler.showSuccess(context, '已追番');
     } else {
-      _collectStore.removeTrack(_libraryAnimeUrl);
-      ErrorHandler.showInfo(context, '已取消追番');
+      await _collectStore.removeTrack(_libraryAnimeUrl);
+      if (mounted) ErrorHandler.showInfo(context, '已取消追番');
+    }
+    if (mounted) {
+      setState(() => _tracked = _collectStore.isTracked(_libraryAnimeUrl));
     }
   }
 
-  void _toggleCollect({
+  Future<void> _toggleCollect({
     required String name,
     required String? coverUrl,
     required String summary,
-  }) {
-    setState(() => _collected = !_collected);
-    if (_collected) {
-      _collectStore.addCollect(CollectItem(
+  }) async {
+    if (!_collectStore.isCollected(_libraryAnimeUrl)) {
+      await _collectStore.addCollect(CollectItem(
         animeName: name,
         animeUrl: _libraryAnimeUrl,
         contentId: widget.contentId,
@@ -872,10 +695,13 @@ class _DetailPageState extends State<DetailPage> {
         cover: coverUrl,
         description: summary,
       ));
-      ErrorHandler.showSuccess(context, '已收藏');
+      if (mounted) ErrorHandler.showSuccess(context, '已收藏');
     } else {
-      _collectStore.removeCollect(_libraryAnimeUrl);
-      ErrorHandler.showInfo(context, '已取消收藏');
+      await _collectStore.removeCollect(_libraryAnimeUrl);
+      if (mounted) ErrorHandler.showInfo(context, '已取消收藏');
+    }
+    if (mounted) {
+      setState(() => _collected = _collectStore.isCollected(_libraryAnimeUrl));
     }
   }
 

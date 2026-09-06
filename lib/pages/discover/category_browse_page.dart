@@ -18,6 +18,7 @@ import '../../theme/vira_colors.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'anime_catalog_view.dart';
 import 'catalog_controller.dart';
+import '../../utils/app_routes.dart';
 
 class CategoryBrowsePage extends StatefulWidget {
   const CategoryBrowsePage({
@@ -110,9 +111,9 @@ class _CategoryBrowsePageState extends State<CategoryBrowsePage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.discover,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
@@ -403,29 +404,18 @@ class _CategoryBrowsePageState extends State<CategoryBrowsePage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     if (destination != ViraDestination.discover) Modular.to.navigate(route);
   }
 
   void _openDetail(CatalogCardData item) {
-    final params = <String, String>{
-      if (item.contentId.isNotEmpty) 'contentId': item.contentId,
-      if (item.legacyUrl?.isNotEmpty == true) 'url': item.legacyUrl!,
-      'name': item.name,
-    };
-    final query = params.entries
-        .map(
-          (entry) =>
-              '${Uri.encodeQueryComponent(entry.key)}=${Uri.encodeQueryComponent(entry.value)}',
-        )
-        .join('&');
-    Modular.to.pushNamed('/detail?$query');
+    Modular.to.pushNamed(
+      AppRoutes.detail(
+        contentId: item.contentId.isNotEmpty ? item.contentId : null,
+        url: item.legacyUrl,
+        name: item.name,
+      ),
+    );
   }
 }
 

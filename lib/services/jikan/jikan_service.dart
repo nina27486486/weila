@@ -1,10 +1,11 @@
 import '../../utils/logger.dart';
 import '../../models/anime.dart';
 import '../http/http_client.dart';
+import 'jikan_rate_limiter.dart';
 
 /// Jikan API 客户端（MyAnimeList 非官方封装）
 /// 文档：https://docs.api.jikan.moe/
-/// 限流：60 req/min, 3 req/sec
+/// 限流：60 req/min, 3 req/sec（经 [sharedJikanRateLimiter] 与目录通道共享配额）
 class JikanService {
   static final JikanService _instance = JikanService._();
   factory JikanService() => _instance;
@@ -26,6 +27,8 @@ class JikanService {
       return cached.data;
     }
 
+    // 未命中缓存才消耗限流名额；命中缓存不占配额。
+    await sharedJikanRateLimiter.acquire();
     try {
       Log.d('Jikan', '请求: $_baseUrl$path');
       final data = await _http.getJson('$_baseUrl$path');
@@ -240,7 +243,8 @@ class JikanService {
     return _parseAnimeList(data);
   }
 
-  /// 获取整周放送表（7天全部）
+  /// 获取整周放送表（7天全部）。
+  /// 并发请求由共享限流器排队（3 req/s），比逐个串行等待更快也更稳。
   Future<Map<String, List<Map<String, dynamic>>>> getFullWeekSchedule() async {
     final days = [
       'monday',
@@ -251,12 +255,13 @@ class JikanService {
       'saturday',
       'sunday'
     ];
-    final result = <String, List<Map<String, dynamic>>>{};
-
-    for (final day in days) {
-      result[day] = await getSchedule(day: day);
-    }
-    return result;
+    final results = await Future.wait(
+      days.map((day) => getSchedule(day: day)),
+      eagerError: false,
+    );
+    return {
+      for (var i = 0; i < days.length; i++) days[i]: results[i],
+    };
   }
 
   // ============================================================

@@ -4,7 +4,6 @@ import '../../models/catalog/catalog_enums.dart';
 import '../../models/catalog/catalog_values.dart';
 import '../../theme/vira_colors.dart';
 import '../../widgets/artwork_components.dart';
-import '../../widgets/cover_image.dart';
 import '../../widgets/vira_state_view.dart';
 
 const _catalogCardBodyHeight = 326.0;
@@ -617,96 +616,22 @@ class _CatalogAnimeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
     return ArtworkCardSurface(
       id: 'catalog-$index',
       semanticLabel: '打开第${index + 1}部作品，${item.name}',
       onOpen: onTap,
       lift: _catalogCardLift,
-      contentBuilder: (context, interaction) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ClipRect(
-                  key: ValueKey('catalog-cover-clip-$index'),
-                  clipBehavior: Clip.hardEdge,
-                  child: AnimatedScale(
-                    key: ValueKey('catalog-cover-scale-$index'),
-                    duration: interaction.duration,
-                    curve: Curves.easeOutCubic,
-                    scale: interaction.coverScale,
-                    child: CoverImage(url: item.coverUrl, fit: BoxFit.cover),
-                  ),
-                ),
-                Positioned(
-                  left: 9,
-                  top: 9,
-                  child: ArtworkCardBadge(
-                    key: ValueKey('catalog-rank-$index'),
-                    child: Text(
-                      '${index + 1}'.padLeft(2, '0'),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: colors.sky,
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                  ),
-                ),
-                if (item.score != null)
-                  Positioned(
-                    right: 9,
-                    top: 9,
-                    child: ArtworkCardBadge(
-                      key: ValueKey('catalog-score-$index'),
-                      dark: true,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.star_rounded,
-                              size: 12, color: colors.warning),
-                          const SizedBox(width: 2),
-                          Text(
-                            item.score!.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(11, 10, 11, 11),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  item.genres.isEmpty
-                      ? item.statusLabel
-                      : item.genres.take(2).join(' · '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        ],
+      contentBuilder: (context, interaction) => ArtworkCoverCard(
+        interaction: interaction,
+        coverUrl: item.coverUrl,
+        keyPrefix: 'catalog',
+        keyId: index,
+        rankIndex: index,
+        score: item.score,
+        title: item.name,
+        subtitle: item.genres.isEmpty
+            ? item.statusLabel
+            : item.genres.take(2).join(' · '),
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../../stores/home_store.dart';
 import '../../stores/theme_store.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'home_editorial_view.dart';
+import '../../utils/app_routes.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,8 +17,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final _homeStore = HomeStore();
-  final _trackStore = HistoryCollectStore();
+  final _homeStore = Modular.get<HomeStore>();
+  final _trackStore = Modular.get<HistoryCollectStore>();
 
   @override
   void initState() {
@@ -32,7 +33,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    _trackStore.dispose();
     super.dispose();
   }
 
@@ -41,9 +41,9 @@ class _HomePageState extends State<HomePage> {
     return ViraPageScaffold(
       activeDestination: ViraDestination.home,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.pushNamed('/settings'),
+      onProfile: () => Modular.to.pushNamed(AppRoutes.settings),
       child: Observer(
         builder: (_) {
           final continueStories = _trackStore.trackList
@@ -81,14 +81,16 @@ class _HomePageState extends State<HomePage> {
             errorMessage: _homeStore.errorMessage,
             onOpenAnime: _openDetail,
             onOpenContinue: (story) => Modular.to.pushNamed(
-              '/detail?url=${Uri.encodeComponent(story.animeUrl)}'
-              '&name=${Uri.encodeComponent(story.title)}'
-              '${story.contentId?.isNotEmpty == true ? '&contentId=${Uri.encodeComponent(story.contentId!)}' : ''}',
+              AppRoutes.detail(
+                url: story.animeUrl,
+                name: story.title,
+                contentId: story.contentId,
+              ),
             ),
             onRetry: _loadPage,
-            onOpenHistory: () => Modular.to.pushNamed('/history'),
-            onOpenCalendar: () => Modular.to.pushNamed('/calendar'),
-            onOpenRanking: () => Modular.to.pushNamed('/ranking'),
+            onOpenHistory: () => Modular.to.pushNamed(AppRoutes.history),
+            onOpenCalendar: () => Modular.to.pushNamed(AppRoutes.calendar),
+            onOpenRanking: () => Modular.to.pushNamed(AppRoutes.ranking),
           );
         },
       ),
@@ -96,13 +98,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
 
     if (destination != ViraDestination.home) {
       Modular.to.navigate(route);
@@ -111,8 +107,10 @@ class _HomePageState extends State<HomePage> {
 
   void _openDetail(Map<String, dynamic> item) {
     Modular.to.pushNamed(
-      '/detail?url=${Uri.encodeComponent(item['url']?.toString() ?? '')}'
-      '&name=${Uri.encodeComponent(item['name']?.toString() ?? '')}',
+      AppRoutes.detail(
+        url: item['url']?.toString(),
+        name: item['name']?.toString(),
+      ),
     );
   }
 

@@ -12,6 +12,7 @@ import '../../utils/constants.dart';
 import '../../utils/error_handler.dart';
 import '../../widgets/vira_page_chrome.dart';
 import 'widgets/plugin_workspace_components.dart';
+import '../../utils/app_routes.dart';
 
 class PluginAddPage extends StatefulWidget {
   const PluginAddPage({super.key});
@@ -182,9 +183,9 @@ class _PluginAddPageState extends State<PluginAddPage> {
     return ViraPageScaffold(
       activeDestination: null,
       onDestinationSelected: _openDestination,
-      onSearch: () => Modular.to.pushNamed('/search'),
+      onSearch: () => Modular.to.pushNamed(AppRoutes.search),
       onThemeToggle: () => Modular.get<ThemeStore>().toggleTheme(),
-      onProfile: () => Modular.to.navigate('/settings'),
+      onProfile: () => Modular.to.navigate(AppRoutes.settings),
       child: Column(
         children: [
           DataSourcePageHeader(
@@ -231,13 +232,7 @@ class _PluginAddPageState extends State<PluginAddPage> {
   }
 
   void _openDestination(ViraDestination destination) {
-    final route = switch (destination) {
-      ViraDestination.home => '/',
-      ViraDestination.discover => '/category',
-      ViraDestination.following => '/track',
-      ViraDestination.library => '/collect',
-      ViraDestination.downloads => '/download',
-    };
+    final route = destination.route;
     Modular.to.navigate(route);
   }
 
