@@ -18,13 +18,26 @@ import 'pages/discover/ranking_page.dart';
 import 'pages/discover/category_browse_page.dart';
 import 'pages/download/download_page.dart';
 import 'pages/debug/danmaku_debug_page.dart';
+import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'stores/anime_store.dart';
 import 'stores/history_collect_store.dart';
 import 'stores/home_store.dart';
 import 'stores/theme_store.dart';
+import 'platform/app_capabilities.dart';
+import 'platform/fullscreen_controller.dart';
 import 'utils/app_routes.dart';
 
 class AppModule extends Module {
+  AppModule({
+    required this.credentialManager,
+    required this.capabilities,
+    required this.fullscreenController,
+  });
+
+  final DanmakuCredentialManager credentialManager;
+  final AppCapabilities capabilities;
+  final FullscreenController fullscreenController;
+
   @override
   void binds(i) {
     // ThemeStore 手写单例与这里的 bind 指向同一实例：
@@ -68,6 +81,8 @@ class AppModule extends Module {
         episodeIndex: int.tryParse(r.args.queryParams['ep'] ?? '0') ?? 0,
         sourcePlugin: r.args.queryParams['source'] ?? '',
         contentId: r.args.queryParams['contentId'],
+        capabilities: capabilities,
+        fullscreenController: fullscreenController,
       ),
     );
     r.child(
@@ -84,7 +99,10 @@ class AppModule extends Module {
     );
     r.child(
       AppRoutes.settings,
-      child: (context) => const SettingsPage(),
+      child: (context) => SettingsPage(
+        credentialManager: credentialManager,
+        capabilities: capabilities,
+      ),
     );
     if (danmakuDebugModeEnabled) {
       r.child(
@@ -92,20 +110,22 @@ class AppModule extends Module {
         child: (context) => const DanmakuDebugPage(),
       );
     }
-    r.child(
-      AppRoutes.plugins,
-      child: (context) => const PluginListPage(),
-    );
-    r.child(
-      AppRoutes.pluginAdd,
-      child: (context) => const PluginAddPage(),
-    );
-    r.child(
-      AppRoutes.pluginDetail,
-      child: (context) => PluginDetailPage(
-        pluginApi: r.args.queryParams['api'] ?? '',
-      ),
-    );
+    if (capabilities.pluginEditing) {
+      r.child(
+        AppRoutes.plugins,
+        child: (context) => const PluginListPage(),
+      );
+      r.child(
+        AppRoutes.pluginAdd,
+        child: (context) => const PluginAddPage(),
+      );
+      r.child(
+        AppRoutes.pluginDetail,
+        child: (context) => PluginDetailPage(
+          pluginApi: r.args.queryParams['api'] ?? '',
+        ),
+      );
+    }
     r.child(
       AppRoutes.animeList,
       child: (context) => r.args.queryParams['type'] == 'movie'
@@ -124,9 +144,11 @@ class AppModule extends Module {
       AppRoutes.category,
       child: (context) => const CategoryBrowsePage(),
     );
-    r.child(
-      AppRoutes.download,
-      child: (context) => const DownloadPage(),
-    );
+    if (capabilities.downloads) {
+      r.child(
+        AppRoutes.download,
+        child: (context) => const DownloadPage(),
+      );
+    }
   }
 }

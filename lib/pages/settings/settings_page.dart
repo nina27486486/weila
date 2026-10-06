@@ -8,6 +8,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../debug/danmaku_debug_config.dart';
+import '../../platform/app_capabilities.dart';
 import '../../services/danmaku/dandanplay_credential_manager.dart';
 import '../../services/danmaku/dandanplay_credentials.dart';
 import '../../services/danmaku/danmaku_service.dart';
@@ -26,7 +27,14 @@ import 'widgets/settings_components.dart';
 import '../../utils/app_routes.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({
+    super.key,
+    required this.credentialManager,
+    required this.capabilities,
+  });
+
+  final DanmakuCredentialManager credentialManager;
+  final AppCapabilities capabilities;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -175,7 +183,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _showDanmakuSettings() async {
-    final credentialManager = DanmakuCredentialManager();
+    final credentialManager = widget.credentialManager;
     final storedCredentials = credentialManager.credentials;
     final draft = DanmakuCredentialDraft(
       storedAppId: storedCredentials?.appId ?? '',
@@ -347,7 +355,7 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _retryDanmakuCredentialMigration() async {
-    final result = await DanmakuCredentialManager().retryMigration();
+    final result = await widget.credentialManager.retryMigration();
     if (!mounted) return;
     setState(() {});
     if (result.failed) {
@@ -358,6 +366,8 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _showDownloadNetworkSettings() async {
+    if (!widget.capabilities.downloads) return;
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -367,7 +377,9 @@ class _SettingsPageState extends State<SettingsPage> {
             settings: _downloadSettings,
             onSave: (settings) async {
               await StorageService().setDownloadSettings(settings);
-              await DownloadService().configure(settings);
+              if (widget.capabilities.downloads) {
+                await DownloadService().configure(settings);
+              }
               if (!mounted) return;
               setState(() => _downloadSettings = settings);
               if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -524,25 +536,31 @@ class _SettingsPageState extends State<SettingsPage> {
                           SettingsActionRow(
                             icon: Icons.subtitles_outlined,
                             title: '弹幕服务',
-                            subtitle: DanmakuCredentialManager().hasCredentials
-                                ? '弹弹play凭据已保存在 Windows 凭据管理器'
-                                : '配置弹弹play开放平台凭证',
+                            subtitle:
+                                widget.capabilities.secureCredentialStorage
+                                    ? (widget.credentialManager.hasCredentials
+                                        ? '弹弹play凭据已保存在 Windows 凭据管理器'
+                                        : '配置弹弹play开放平台凭证')
+                                    : 'Android 编译基线暂不提供安全凭据存储',
                             statusLabel:
-                                DanmakuCredentialManager().hasCredentials
-                                    ? '已连接'
-                                    : '未配置',
-                            statusTone:
-                                DanmakuCredentialManager().hasCredentials
-                                    ? SettingsStatusTone.success
-                                    : SettingsStatusTone.neutral,
-                            onTap: _showDanmakuSettings,
+                                widget.capabilities.secureCredentialStorage
+                                    ? (widget.credentialManager.hasCredentials
+                                        ? '已连接'
+                                        : '未配置')
+                                    : '暂不可用',
+                            statusTone: widget.credentialManager.hasCredentials
+                                ? SettingsStatusTone.success
+                                : SettingsStatusTone.neutral,
+                            onTap: widget.capabilities.secureCredentialStorage
+                                ? _showDanmakuSettings
+                                : null,
                           ),
-                          if (DanmakuCredentialManager().migrationFailed)
+                          if (widget.capabilities.secureCredentialStorage &&
+                              widget.credentialManager.migrationFailed)
                             SettingsActionRow(
                               icon: Icons.warning_amber_rounded,
                               title: '安全迁移失败',
-                              subtitle: DanmakuCredentialManager()
-                                      .migrationResult
+                              subtitle: widget.credentialManager.migrationResult
                                       ?.safeMessage ??
                                   '旧凭据仍被保留，请重试或重新填写。',
                               statusLabel: '需要处理',
@@ -585,22 +603,24 @@ class _SettingsPageState extends State<SettingsPage> {
                           const SizedBox(height: 12),
                           SettingsActionList(
                             children: [
-                              SettingsActionRow(
-                                icon: Icons.tune_rounded,
-                                title: '管理数据源',
-                                subtitle: '启用、停用或检查已安装插件',
-                                onTap: () => Modular.to.pushNamed(
-                                  AppRoutes.plugins,
+                              if (widget.capabilities.pluginEditing)
+                                SettingsActionRow(
+                                  icon: Icons.tune_rounded,
+                                  title: '管理数据源',
+                                  subtitle: '启用、停用或检查已安装插件',
+                                  onTap: () => Modular.to.pushNamed(
+                                    AppRoutes.plugins,
+                                  ),
                                 ),
-                              ),
-                              SettingsActionRow(
-                                icon: Icons.add_link_rounded,
-                                title: '添加数据源',
-                                subtitle: '从网络地址或本地文件导入插件',
-                                onTap: () => Modular.to.pushNamed(
-                                  AppRoutes.pluginAdd,
+                              if (widget.capabilities.pluginEditing)
+                                SettingsActionRow(
+                                  icon: Icons.add_link_rounded,
+                                  title: '添加数据源',
+                                  subtitle: '从网络地址或本地文件导入插件',
+                                  onTap: () => Modular.to.pushNamed(
+                                    AppRoutes.pluginAdd,
+                                  ),
                                 ),
-                              ),
                               SettingsActionRow(
                                 key: const ValueKey(
                                   'settings-catalog-include-adult',
@@ -630,28 +650,30 @@ class _SettingsPageState extends State<SettingsPage> {
                       description: '临时缓存用于加快封面与弹幕加载，可安全地定期清理。',
                       child: Column(
                         children: [
-                          SettingsActionList(
-                            children: [
-                              SettingsActionRow(
-                                icon: Icons.cloud_download_outlined,
-                                title: '下载网络',
-                                subtitle:
-                                    '代理：${_downloadSettings.proxySummary()} · '
-                                    '分片并发 ${_downloadSettings.segmentConcurrency} · '
-                                    '重试 ${_downloadSettings.segmentRetries}',
-                                statusLabel: _downloadSettings.proxyMode ==
-                                        DownloadProxyMode.direct
-                                    ? '直连'
-                                    : '代理',
-                                statusTone: _downloadSettings.proxyMode ==
-                                        DownloadProxyMode.direct
-                                    ? SettingsStatusTone.neutral
-                                    : SettingsStatusTone.success,
-                                onTap: _showDownloadNetworkSettings,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
+                          if (widget.capabilities.downloads) ...[
+                            SettingsActionList(
+                              children: [
+                                SettingsActionRow(
+                                  icon: Icons.cloud_download_outlined,
+                                  title: '下载网络',
+                                  subtitle:
+                                      '代理：${_downloadSettings.proxySummary()} · '
+                                      '分片并发 ${_downloadSettings.segmentConcurrency} · '
+                                      '重试 ${_downloadSettings.segmentRetries}',
+                                  statusLabel: _downloadSettings.proxyMode ==
+                                          DownloadProxyMode.direct
+                                      ? '直连'
+                                      : '代理',
+                                  statusTone: _downloadSettings.proxyMode ==
+                                          DownloadProxyMode.direct
+                                      ? SettingsStatusTone.neutral
+                                      : SettingsStatusTone.success,
+                                  onTap: _showDownloadNetworkSettings,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                           StorageOverview(
                             bytes: _cacheBytes,
                             loading: _scanningCache,

@@ -5,6 +5,12 @@ import 'package:weila/services/danmaku/dandanplay_credential_migrator.dart';
 import 'package:weila/services/danmaku/danmaku_credential_store.dart';
 
 void main() {
+  test('platform manager accepts an explicitly supplied store', () {
+    final store = _MemoryCredentialStore();
+    final manager = DanmakuCredentialManager.platform(store: store);
+    expect(manager, isA<DanmakuCredentialManager>());
+  });
+
   test('initialize migrates legacy credentials and configures service',
       () async {
     final legacy = <String, Object?>{

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../platform/app_capabilities.dart';
 import '../theme/vira_colors.dart';
 import 'liquid_glass_surface.dart';
 import 'vira_mascot_badge.dart';
@@ -51,6 +52,13 @@ class ViraPageScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final capabilities = AppCapabilitiesScope.of(context);
+    final destinations = [
+      for (final destination in ViraDestination.values)
+        if (destination != ViraDestination.downloads || capabilities.downloads)
+          destination,
+    ];
+
     return Scaffold(
       backgroundColor: context.colors.bgDark,
       body: SafeArea(
@@ -58,6 +66,7 @@ class ViraPageScaffold extends StatelessWidget {
           children: [
             _Masthead(
               activeDestination: activeDestination,
+              destinations: destinations,
               onDestinationSelected: onDestinationSelected,
               onSearch: onSearch,
               onThemeToggle: onThemeToggle,
@@ -95,6 +104,7 @@ class ViraPageScaffold extends StatelessWidget {
 
 class _Masthead extends StatefulWidget {
   final ViraDestination? activeDestination;
+  final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onDestinationSelected;
   final VoidCallback onSearch;
   final VoidCallback onThemeToggle;
@@ -102,6 +112,7 @@ class _Masthead extends StatefulWidget {
 
   const _Masthead({
     required this.activeDestination,
+    required this.destinations,
     required this.onDestinationSelected,
     required this.onSearch,
     required this.onThemeToggle,
@@ -195,19 +206,28 @@ class _MastheadState extends State<_Masthead>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 920;
-          final horizontal = constraints.maxWidth >= 1440 ? 56.0 : 24.0;
+          // 360 档超窄屏收窄水平内边距：工具排与紧凑导航的最小宽度
+          // 之下已无余量，24px 边距会带来数像素溢出。
+          final horizontal = constraints.maxWidth >= 1440
+              ? 56.0
+              : (constraints.maxWidth < 420 ? 12.0 : 24.0);
 
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontal),
             child: Row(
               children: [
-                const _Brand(),
+                // 窄屏空间不足时品牌文案省略收缩；超窄只留徽章，
+                // 避免刊头水平溢出。桌面空间充足时保持完整展示。
+                Flexible(
+                  child: _Brand(showText: constraints.maxWidth >= 420),
+                ),
                 const Spacer(),
                 if (compact)
                   AnimatedBuilder(
                     animation: _glassMotion,
                     builder: (context, _) => _CompactNavigation(
                       activeDestination: widget.activeDestination,
+                      destinations: widget.destinations,
                       onSelected: widget.onDestinationSelected,
                       motionProgress: _glassMotion.value,
                     ),
@@ -217,6 +237,7 @@ class _MastheadState extends State<_Masthead>
                     animation: _glassMotion,
                     builder: (context, _) => _GlassNavigationRail(
                       activeDestination: widget.activeDestination,
+                      destinations: widget.destinations,
                       onSelected: widget.onDestinationSelected,
                       motionProgress: _glassMotion.value,
                       disableAnimations: disableAnimations,
@@ -273,12 +294,14 @@ class _MastheadState extends State<_Masthead>
 class _GlassNavigationRail extends StatelessWidget {
   const _GlassNavigationRail({
     required this.activeDestination,
+    required this.destinations,
     required this.onSelected,
     required this.motionProgress,
     required this.disableAnimations,
   });
 
   final ViraDestination? activeDestination;
+  final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onSelected;
   final double motionProgress;
   final bool disableAnimations;
@@ -287,7 +310,7 @@ class _GlassNavigationRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeIndex = activeDestination == null
         ? -1
-        : ViraDestination.values.indexOf(activeDestination!);
+        : destinations.indexOf(activeDestination!);
 
     return LiquidGlassSurface(
       key: const ValueKey('vira-navigation-glass'),
@@ -295,7 +318,7 @@ class _GlassNavigationRail extends StatelessWidget {
       borderRadius: BorderRadius.circular(26),
       padding: const EdgeInsets.all(5),
       child: SizedBox(
-        width: 340,
+        width: destinations.length * 68.0,
         height: 42,
         child: Stack(
           children: [
@@ -324,7 +347,7 @@ class _GlassNavigationRail extends StatelessWidget {
               ),
             Row(
               children: [
-                for (final destination in ViraDestination.values)
+                for (final destination in destinations)
                   _NavigationItem(
                     destination: destination,
                     selected: destination == activeDestination,
@@ -387,7 +410,11 @@ class _SelectedGlassLens extends StatelessWidget {
 }
 
 class _Brand extends StatelessWidget {
-  const _Brand();
+  const _Brand({this.showText = true});
+
+  /// 360 档超窄屏下只留看板娘徽章：品牌文案的最小宽度会让刊头
+  /// 无法与导航、工具排共存，隐藏文案优于溢出。
+  final bool showText;
 
   @override
   Widget build(BuildContext context) {
@@ -402,27 +429,33 @@ class _Brand extends StatelessWidget {
           const ViraMascotBadge(
             key: ValueKey('vira-brand-mascot-badge'),
           ),
-          const SizedBox(width: 10),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '薇拉',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colors.textPrimary,
-                      letterSpacing: 0.5,
-                    ),
-              ),
-              Text(
-                '私人动画放映室',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.textMuted,
-                      fontWeight: FontWeight.w400,
-                    ),
-              ),
-            ],
-          ),
+          if (showText) ...[
+            const SizedBox(width: 10),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '薇拉',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colors.textPrimary,
+                        letterSpacing: 0.5,
+                      ),
+                ),
+                Text(
+                  '私人动画放映室',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colors.textMuted,
+                        fontWeight: FontWeight.w400,
+                      ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -531,11 +564,13 @@ class _NavigationItemState extends State<_NavigationItem> {
 
 class _CompactNavigation extends StatelessWidget {
   final ViraDestination? activeDestination;
+  final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onSelected;
   final double motionProgress;
 
   const _CompactNavigation({
     required this.activeDestination,
+    required this.destinations,
     required this.onSelected,
     required this.motionProgress,
   });
@@ -546,7 +581,7 @@ class _CompactNavigation extends StatelessWidget {
       tooltip: '切换页面',
       onSelected: onSelected,
       itemBuilder: (context) => [
-        for (final destination in ViraDestination.values)
+        for (final destination in destinations)
           PopupMenuItem(
             value: destination,
             child: Text(destination.label),
