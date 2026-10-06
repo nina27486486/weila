@@ -1028,18 +1028,26 @@ class _RankingSection extends StatelessWidget {
                 bottom: BorderSide(color: context.colors.divider),
               ),
             ),
-            child: Row(
-              children: [
-                for (var index = 0; index < visible.length; index++)
-                  Expanded(
-                    child: _RankingEntry(
-                      rank: index + 1,
-                      item: visible[index],
-                      onOpen: () => onOpen(visible[index]),
-                      showDivider: index != visible.length - 1,
-                    ),
-                  ),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // 360 档窄屏下每张卡的固定开销（序号+间距+内边距+箭头）
+                // 超过五等分槽位，只展示前三名；宽屏保持五张。
+                final maxEntries = constraints.maxWidth < 460 ? 3 : 5;
+                final entries = visible.take(maxEntries).toList();
+                return Row(
+                  children: [
+                    for (var index = 0; index < entries.length; index++)
+                      Expanded(
+                        child: _RankingEntry(
+                          rank: index + 1,
+                          item: entries[index],
+                          onOpen: () => onOpen(entries[index]),
+                          showDivider: index != entries.length - 1,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
       ],

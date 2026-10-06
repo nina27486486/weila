@@ -280,14 +280,14 @@ extension _PlayerPageView on _PlayerPageState {
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
-        onTap: _handleStageTap,
-        onDoubleTapDown: (details) {
-          _pendingDoubleTapZone = resolveDoubleTapZone(
-            localX: details.localPosition.dx,
-            width: MediaQuery.sizeOf(context).width,
-          );
-        },
-        onDoubleTap: _handleStageDoubleTap,
+          onTap: _handleStageTap,
+          onDoubleTapDown: (details) {
+            _pendingDoubleTapZone = resolveDoubleTapZone(
+              localX: details.localPosition.dx,
+              width: MediaQuery.sizeOf(context).width,
+            );
+          },
+          onDoubleTap: _handleStageDoubleTap,
           child: MouseRegion(
             onHover: (_) => _onMouseMove(),
             child: Stack(
@@ -436,7 +436,9 @@ extension _PlayerPageView on _PlayerPageState {
                   ),
                   SizedBox(
                     key: const ValueKey('player-expandable-toolbar'),
-                    width: 360,
+                    width: playerTopToolbarWidthFor(
+                      MediaQuery.sizeOf(context).width,
+                    ),
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: ExpandableToolTabs(

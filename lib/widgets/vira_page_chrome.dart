@@ -206,13 +206,21 @@ class _MastheadState extends State<_Masthead>
       child: LayoutBuilder(
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 920;
-          final horizontal = constraints.maxWidth >= 1440 ? 56.0 : 24.0;
+          // 360 档超窄屏收窄水平内边距：工具排与紧凑导航的最小宽度
+          // 之下已无余量，24px 边距会带来数像素溢出。
+          final horizontal = constraints.maxWidth >= 1440
+              ? 56.0
+              : (constraints.maxWidth < 420 ? 12.0 : 24.0);
 
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontal),
             child: Row(
               children: [
-                const _Brand(),
+                // 窄屏空间不足时品牌文案省略收缩；超窄只留徽章，
+                // 避免刊头水平溢出。桌面空间充足时保持完整展示。
+                Flexible(
+                  child: _Brand(showText: constraints.maxWidth >= 420),
+                ),
                 const Spacer(),
                 if (compact)
                   AnimatedBuilder(
@@ -402,7 +410,11 @@ class _SelectedGlassLens extends StatelessWidget {
 }
 
 class _Brand extends StatelessWidget {
-  const _Brand();
+  const _Brand({this.showText = true});
+
+  /// 360 档超窄屏下只留看板娘徽章：品牌文案的最小宽度会让刊头
+  /// 无法与导航、工具排共存，隐藏文案优于溢出。
+  final bool showText;
 
   @override
   Widget build(BuildContext context) {
@@ -417,27 +429,33 @@ class _Brand extends StatelessWidget {
           const ViraMascotBadge(
             key: ValueKey('vira-brand-mascot-badge'),
           ),
-          const SizedBox(width: 10),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '薇拉',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: colors.textPrimary,
-                      letterSpacing: 0.5,
-                    ),
-              ),
-              Text(
-                '私人动画放映室',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.textMuted,
-                      fontWeight: FontWeight.w400,
-                    ),
-              ),
-            ],
-          ),
+          if (showText) ...[
+            const SizedBox(width: 10),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '薇拉',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colors.textPrimary,
+                        letterSpacing: 0.5,
+                      ),
+                ),
+                Text(
+                  '私人动画放映室',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colors.textMuted,
+                        fontWeight: FontWeight.w400,
+                      ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

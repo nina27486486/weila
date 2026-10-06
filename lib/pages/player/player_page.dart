@@ -41,6 +41,7 @@ import 'playback_session.dart';
 import 'playback_health_coordinator.dart';
 import 'player_danmaku_session.dart';
 import 'player_episode_selection.dart';
+import 'player_layout_metrics.dart';
 import 'player_playback_lifecycle_coordinator.dart';
 import 'player_touch_gesture.dart';
 

@@ -234,7 +234,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final width in [960.0, 1280.0, 1600.0]) {
+  for (final width in [360.0, 960.0, 1280.0, 1600.0]) {
     testWidgets('刊头在 ${width.toInt()} 宽度下无布局溢出', (tester) async {
       await tester.binding.setSurfaceSize(Size(width, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -253,10 +253,10 @@ void main() {
         ),
       );
 
-      expect(
-        find.byKey(const ValueKey('vira-navigation-glass')),
-        findsOneWidget,
-      );
+      final navigationKey = width < 920
+          ? const ValueKey('vira-compact-navigation-glass')
+          : const ValueKey('vira-navigation-glass');
+      expect(find.byKey(navigationKey), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
