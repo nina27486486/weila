@@ -36,6 +36,30 @@ extension _PlayerPageView on _PlayerPageState {
     _startHideTimer();
   }
 
+  /// 触摸屏没有 hover，控制层只能由单击唤出/收起（MVP 计划 §4）。
+  void _handleStageTap() {
+    if (_playbackIssue != null) return;
+    final show = !_showControls;
+    _updateState(() => _showControls = show);
+    if (show) {
+      _startHideTimer();
+    } else {
+      _hideTimer?.cancel();
+    }
+  }
+
+  /// 双击左/右三等分区后退/前进 10 秒，中央双击播放/暂停。
+  void _handleStageDoubleTap() {
+    switch (_pendingDoubleTapZone) {
+      case PlayerDoubleTapZone.back:
+        _seekBy(-playerDoubleTapSeekOffset);
+      case PlayerDoubleTapZone.forward:
+        _seekBy(playerDoubleTapSeekOffset);
+      case PlayerDoubleTapZone.center:
+        _togglePlay();
+    }
+  }
+
   void _seekBy(Duration offset) {
     final newPos = _position + offset;
     if (newPos < Duration.zero) {
@@ -119,20 +143,18 @@ extension _PlayerPageView on _PlayerPageState {
     _danmakuController.setFontSizeScale(value);
   }
 
-  void _toggleFullscreen() async {
+  Future<void> _toggleFullscreen() async {
     final goingFullscreen = !_isFullscreen;
     _updateState(() => _isFullscreen = goingFullscreen);
-    if (goingFullscreen) {
-      await windowManager.setFullScreen(true);
-    } else {
-      await windowManager.setFullScreen(false);
-    }
+    await widget.fullscreenController.setFullscreen(goingFullscreen);
   }
 
   void _checkDownloadStatus() async {
+    final downloadService = _downloadService;
+    if (downloadService == null) return;
     final url = _currentVideoUrl ?? widget.videoUrl;
-    final downloaded = await _downloadService.isDownloaded(url);
-    final allDownloads = _downloadService.getAllDownloads();
+    final downloaded = await downloadService.isDownloaded(url);
+    final allDownloads = downloadService.getAllDownloads();
     if (mounted) {
       _updateState(() {
         _isDownloaded = downloaded;
@@ -167,6 +189,8 @@ extension _PlayerPageView on _PlayerPageState {
   }
 
   void _startDownload() {
+    final downloadService = _downloadService;
+    if (downloadService == null) return;
     final url = _currentVideoUrl ?? widget.videoUrl;
     if (url.isEmpty) return;
 
@@ -193,7 +217,7 @@ extension _PlayerPageView on _PlayerPageState {
     } catch (_) {}
 
     // DEBUG: 确认 Referer 已设置
-    _downloadService.addDownload(item);
+    downloadService.addDownload(item);
     _updateState(() => _isDownloading = true);
 
     ErrorHandler.showInfo(context, '已添加缓存: $epName');
@@ -256,8 +280,14 @@ extension _PlayerPageView on _PlayerPageState {
         autofocus: true,
         onKeyEvent: _handleKeyEvent,
         child: GestureDetector(
-          onTap: _togglePlay,
-          onDoubleTap: _toggleFullscreen,
+          onTap: _handleStageTap,
+          onDoubleTapDown: (details) {
+            _pendingDoubleTapZone = resolveDoubleTapZone(
+              localX: details.localPosition.dx,
+              width: MediaQuery.sizeOf(context).width,
+            );
+          },
+          onDoubleTap: _handleStageDoubleTap,
           child: MouseRegion(
             onHover: (_) => _onMouseMove(),
             child: Stack(
@@ -406,7 +436,9 @@ extension _PlayerPageView on _PlayerPageState {
                   ),
                   SizedBox(
                     key: const ValueKey('player-expandable-toolbar'),
-                    width: 360,
+                    width: playerTopToolbarWidthFor(
+                      MediaQuery.sizeOf(context).width,
+                    ),
                     child: Align(
                       alignment: Alignment.centerRight,
                       child: ExpandableToolTabs(
@@ -433,14 +465,15 @@ extension _PlayerPageView on _PlayerPageState {
                             label: '弹幕设置',
                             tooltip: '弹幕设置',
                           ),
-                          ExpandableToolTab(
-                            id: 'download',
-                            icon: _isDownloading
-                                ? Icons.downloading_rounded
-                                : Icons.download_rounded,
-                            label: _isDownloaded ? '已缓存' : '缓存',
-                            tooltip: _isDownloaded ? '已缓存' : '缓存本集',
-                          ),
+                          if (widget.capabilities.downloads)
+                            ExpandableToolTab(
+                              id: 'download',
+                              icon: _isDownloading
+                                  ? Icons.downloading_rounded
+                                  : Icons.download_rounded,
+                              label: _isDownloaded ? '已缓存' : '缓存',
+                              tooltip: _isDownloaded ? '已缓存' : '缓存本集',
+                            ),
                           const ExpandableToolTab(
                             id: 'shortcuts',
                             icon: Icons.keyboard_command_key_rounded,

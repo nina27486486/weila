@@ -470,4 +470,97 @@ void main() {
       expect(find.byType(PosterRail), findsOneWidget);
     }
   });
+
+  testWidgets('首页在 360 窄屏宽度下无布局溢出', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 914));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final items = List.generate(
+      5,
+      (index) => <String, dynamic>{
+        'name': '上升榜作品 ${index + 1}号特别长标题',
+        'cover': null,
+        'status': '更新至第${index + 1}0集',
+        'score': '${9 - index}.$index',
+        'genres': ['剧情', '动作'],
+        'url': 'narrow-ranking:$index',
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: HomeEditorialView(
+                latestItems: items,
+                seasonalItems: const [],
+                trendingItems: items,
+                continueStories: const [],
+                onOpenAnime: (_) {},
+                onOpenContinue: (_) {},
+                onRetry: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: '360 窄屏不应产生任何 RenderFlex overflow（含本周上升榜）',
+    );
+  });
+
+  testWidgets('首页主映在 Pixel 7 逻辑尺寸和长标题下无底部溢出', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(411, 914));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final longTitleItems = List.generate(
+      4,
+      (index) => <String, dynamic>{
+        'name': index == 0 ? '死神千年血战篇－祸进谭－特别放送篇' : '主映作品 ${index + 1}',
+        'cover': null,
+        'status': '更新至第03集',
+        'genres': ['剧情', '动作', '动画'],
+        'url': 'pixel-hero:$index',
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: HomeEditorialView(
+              latestItems: longTitleItems,
+              seasonalItems: const [],
+              trendingItems: const [],
+              continueStories: const [],
+              onOpenAnime: (_) {},
+              onOpenContinue: (_) {},
+              onRetry: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'Pixel 7 窄屏不应产生 RenderFlex overflow',
+    );
+    expect(find.widgetWithText(FilledButton, '立即播放'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '查看详情'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('home-hero-selector-3')),
+      findsOneWidget,
+    );
+  });
 }

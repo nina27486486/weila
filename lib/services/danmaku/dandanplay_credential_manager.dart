@@ -3,13 +3,25 @@ import 'dandanplay_credential_migrator.dart';
 import 'dandanplay_credentials.dart';
 import 'danmaku_credential_store.dart';
 import 'danmaku_service.dart';
-import 'windows_danmaku_credential_store.dart';
 
 typedef CredentialsApplier = void Function(DandanplayCredentials credentials);
 typedef CredentialsClearer = void Function();
 
 class DanmakuCredentialManager {
-  factory DanmakuCredentialManager() => _instance;
+  factory DanmakuCredentialManager.platform({
+    required DanmakuCredentialStore store,
+  }) {
+    return DanmakuCredentialManager._(
+      store: store,
+      readLegacy: (key) => StorageService().getSetting<Object>(key),
+      removeLegacy: StorageService().removeSetting,
+      applyCredentials: (credentials) => DanmakuService().setCredentials(
+        credentials.appId,
+        credentials.appSecret,
+      ),
+      clearCredentials: DanmakuService().clearCredentials,
+    );
+  }
 
   DanmakuCredentialManager.testing({
     required DanmakuCredentialStore store,
@@ -36,17 +48,6 @@ class DanmakuCredentialManager {
         _removeLegacy = removeLegacy,
         _applyCredentials = applyCredentials,
         _clearCredentials = clearCredentials;
-
-  static final DanmakuCredentialManager _instance = DanmakuCredentialManager._(
-    store: WindowsDanmakuCredentialStore(),
-    readLegacy: (key) => StorageService().getSetting<Object>(key),
-    removeLegacy: StorageService().removeSetting,
-    applyCredentials: (credentials) => DanmakuService().setCredentials(
-      credentials.appId,
-      credentials.appSecret,
-    ),
-    clearCredentials: DanmakuService().clearCredentials,
-  );
 
   final DanmakuCredentialStore _store;
   final LegacyCredentialReader _readLegacy;

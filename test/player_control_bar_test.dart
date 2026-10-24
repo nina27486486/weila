@@ -222,6 +222,32 @@ void main() {
     }
   });
 
+  testWidgets('控制条在 360 窄屏宽度下无布局溢出', (tester) async {
+    await tester.pumpWidget(_buildControlBar(
+      width: 360,
+      sourceOptions: const [
+        PlayerControlMenuOption(
+          id: 'auto',
+          label: '自动',
+          selected: true,
+        ),
+      ],
+      qualityOptions: const [
+        PlayerControlMenuOption(
+          id: 'auto',
+          label: '自动',
+          selected: true,
+        ),
+      ],
+    ));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('player-progress-slider')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('控制条展示线路和清晰度菜单并转发选择', (tester) async {
     String? selectedSource;
     String? selectedQuality;

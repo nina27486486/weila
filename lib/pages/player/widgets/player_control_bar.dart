@@ -79,6 +79,9 @@ class PlayerControlBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 760;
+        // 360 档手机竖屏：compact 仍按 ~400px 设计会溢出；
+        // 触摸已有双击 ±10s seek、系统有音量键，可安全隐藏冗余控件。
+        final ultraCompact = constraints.maxWidth < 420;
         return Container(
           padding: EdgeInsets.fromLTRB(
             compact ? 14 : 22,
@@ -180,6 +183,7 @@ class PlayerControlBar extends StatelessWidget {
                   fullscreen: fullscreen,
                   canPlayNext: canPlayNext,
                   compact: compact,
+                  ultraCompact: ultraCompact,
                   speeds: _speeds,
                   onRewind: onRewind,
                   onTogglePlay: onTogglePlay,
@@ -448,6 +452,7 @@ class _TransportRow extends StatelessWidget {
     required this.fullscreen,
     required this.canPlayNext,
     required this.compact,
+    required this.ultraCompact,
     required this.speeds,
     required this.onRewind,
     required this.onTogglePlay,
@@ -464,6 +469,9 @@ class _TransportRow extends StatelessWidget {
   final bool fullscreen;
   final bool canPlayNext;
   final bool compact;
+
+  /// 360 档：隐藏 ±5 秒与音量条（触摸双击已可 seek，音量走系统键）。
+  final bool ultraCompact;
   final List<double> speeds;
   final VoidCallback onRewind;
   final VoidCallback onTogglePlay;
@@ -477,24 +485,28 @@ class _TransportRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _ControlIconButton(
-          icon: Icons.replay_5_rounded,
-          tooltip: '后退 5 秒',
-          onPressed: onRewind,
-        ),
-        const SizedBox(width: 7),
+        if (!ultraCompact) ...[
+          _ControlIconButton(
+            icon: Icons.replay_5_rounded,
+            tooltip: '后退 5 秒',
+            onPressed: onRewind,
+          ),
+          const SizedBox(width: 7),
+        ],
         _PrimaryPlayButton(
           playing: playing,
           onPressed: onTogglePlay,
         ),
-        const SizedBox(width: 7),
-        _ControlIconButton(
-          icon: Icons.forward_5_rounded,
-          tooltip: '前进 5 秒',
-          onPressed: onForward,
-        ),
+        if (!ultraCompact) ...[
+          const SizedBox(width: 7),
+          _ControlIconButton(
+            icon: Icons.forward_5_rounded,
+            tooltip: '前进 5 秒',
+            onPressed: onForward,
+          ),
+        ],
         if (canPlayNext) ...[
-          SizedBox(width: compact ? 4 : 10),
+          SizedBox(width: ultraCompact ? 4 : (compact ? 4 : 10)),
           if (compact)
             _ControlIconButton(
               icon: Icons.skip_next_rounded,
@@ -505,43 +517,46 @@ class _TransportRow extends StatelessWidget {
             _NextEpisodeButton(onPressed: onPlayNext),
         ],
         const Spacer(),
-        Icon(
-          volume <= 0
-              ? Icons.volume_off_rounded
-              : volume < 50
-                  ? Icons.volume_down_rounded
-                  : Icons.volume_up_rounded,
-          color: Colors.white.withValues(alpha: 0.72),
-          size: 19,
-        ),
-        SizedBox(width: compact ? 2 : 5),
-        SizedBox(
-          width: compact ? 72 : 112,
-          child: Semantics(
-            label: '音量',
-            value: '${volume.round()}%',
-            child: SliderTheme(
-              data: SliderThemeData(
-                activeTrackColor: Colors.white.withValues(alpha: 0.82),
-                inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
-                thumbColor: AppTheme.primaryBlue,
-                overlayColor: AppTheme.primaryBlue.withValues(alpha: 0.14),
-                trackHeight: 2.5,
-                thumbShape:
-                    const RoundSliderThumbShape(enabledThumbRadius: 4.5),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
-              ),
-              child: Slider(
-                key: const ValueKey('player-volume-slider'),
-                value: volume,
-                min: 0,
-                max: 100,
-                onChanged: onVolumeChanged,
-                semanticFormatterCallback: (value) => '音量 ${value.round()}%',
+        if (!ultraCompact) ...[
+          Icon(
+            volume <= 0
+                ? Icons.volume_off_rounded
+                : volume < 50
+                    ? Icons.volume_down_rounded
+                    : Icons.volume_up_rounded,
+            color: Colors.white.withValues(alpha: 0.72),
+            size: 19,
+          ),
+          SizedBox(width: compact ? 2 : 5),
+          SizedBox(
+            width: compact ? 72 : 112,
+            child: Semantics(
+              label: '音量',
+              value: '${volume.round()}%',
+              child: SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: Colors.white.withValues(alpha: 0.82),
+                  inactiveTrackColor: Colors.white.withValues(alpha: 0.18),
+                  thumbColor: AppTheme.primaryBlue,
+                  overlayColor: AppTheme.primaryBlue.withValues(alpha: 0.14),
+                  trackHeight: 2.5,
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 4.5),
+                  overlayShape:
+                      const RoundSliderOverlayShape(overlayRadius: 11),
+                ),
+                child: Slider(
+                  key: const ValueKey('player-volume-slider'),
+                  value: volume,
+                  min: 0,
+                  max: 100,
+                  onChanged: onVolumeChanged,
+                  semanticFormatterCallback: (value) => '音量 ${value.round()}%',
+                ),
               ),
             ),
           ),
-        ),
+        ],
         SizedBox(width: compact ? 3 : 8),
         _SpeedMenu(
           currentSpeed: playbackSpeed,
