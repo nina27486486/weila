@@ -1,4 +1,4 @@
-name: Windows CI
+name: CI
 
 on:
   push:
@@ -68,3 +68,38 @@ jobs:
             build/release/weila-*-windows-x64-setup.exe
             build/release/SHA256SUMS.txt
           if-no-files-found: error
+
+  android:
+    name: Android analyze and debug build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Show toolchain
+        run: flutter --version
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 全量测试与覆盖率由 Windows job 负责（win32 FFI 测试仅桌面可运行）；
+      # 本 job 守住 Android 侧的静态检查与编译完整性。
+      - name: Analyze
+        run: dart analyze
+
+      - name: Build Android debug APK
+        run: flutter build apk --debug --target lib/main_android.dart --no-pub
