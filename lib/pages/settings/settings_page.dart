@@ -14,7 +14,6 @@ import '../../services/danmaku/dandanplay_credentials.dart';
 import '../../services/danmaku/danmaku_service.dart';
 import '../../services/danmaku/danmaku_credential_draft.dart';
 import '../../services/catalog/catalog_settings.dart';
-import '../../services/download/download_service.dart';
 import '../../services/download/download_settings.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/storage/storage_service.dart';
@@ -31,10 +30,12 @@ class SettingsPage extends StatefulWidget {
     super.key,
     required this.credentialManager,
     required this.capabilities,
+    this.configureDownloads,
   });
 
   final DanmakuCredentialManager credentialManager;
   final AppCapabilities capabilities;
+  final Future<void> Function(DownloadSettings)? configureDownloads;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -378,7 +379,7 @@ class _SettingsPageState extends State<SettingsPage> {
             onSave: (settings) async {
               await StorageService().setDownloadSettings(settings);
               if (widget.capabilities.downloads) {
-                await DownloadService().configure(settings);
+                await widget.configureDownloads!(settings);
               }
               if (!mounted) return;
               setState(() => _downloadSettings = settings);

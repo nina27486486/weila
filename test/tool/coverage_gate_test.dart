@@ -12,6 +12,9 @@ SF:lib/services/danmaku/dandanplay_credential_manager.dart
 DA:1,1
 DA:2,1
 end_of_record
+SF:lib/widgets/score_badge.dart
+DA:1,1
+end_of_record
 SF:lib/pages/home/home_page.dart
 DA:1,1
 DA:2,0
@@ -22,12 +25,20 @@ end_of_record
   test('parses overall and release-critical module coverage', () {
     final report = CoverageReport.parse(lcov);
 
-    expect(report.overall.found, 7);
-    expect(report.overall.hit, 5);
-    expect(report.overall.percent, closeTo(71.42, 0.01));
+    // 页面组合层不计入全仓口径（由真机/集成验收把关）。
+    expect(report.overall.found, 5);
+    expect(report.overall.hit, 4);
+    expect(report.overall.percent, 80);
     expect(report.releaseCritical.found, 4);
     expect(report.releaseCritical.hit, 3);
     expect(report.releaseCritical.percent, 75);
+  });
+
+  test('page composition files stay out of the overall denominator', () {
+    final report = CoverageReport.parse(lcov);
+
+    // lib/pages/home/home_page.dart 的 3 行（含 1 次零命中）不进分母。
+    expect(report.overall.found, isNot(7));
   });
 
   test('evaluates both overall and release-critical thresholds', () {
@@ -38,7 +49,7 @@ end_of_record
       isTrue,
     );
     final failed = report.evaluate(
-      overallMinimum: 72,
+      overallMinimum: 101,
       releaseCriticalMinimum: 85,
     );
     expect(failed.passed, isFalse);

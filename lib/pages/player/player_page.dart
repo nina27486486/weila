@@ -1,6 +1,7 @@
 import '../../utils/logger.dart';
 import 'dart:async';
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_modular/flutter_modular.dart';
@@ -13,7 +14,7 @@ import '../../platform/app_capabilities.dart';
 import '../../platform/fullscreen_controller.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/http/http_client.dart';
-import '../../services/download/download_service.dart';
+import '../../platform/player_download_actions.dart';
 import '../../services/danmaku/danmaku_load_result.dart';
 import '../../services/danmaku/danmaku_matcher.dart';
 import '../../services/danmaku/danmaku_service.dart';
@@ -29,6 +30,7 @@ import '../../services/playback/playback_route_health_repository.dart';
 import '../../services/storage/storage_service.dart';
 import '../../widgets/artwork_components.dart';
 import '../../widgets/danmaku_overlay.dart';
+import '../../widgets/mobile/player_back_scope.dart';
 import '../../stores/history_collect_store.dart';
 import '../../utils/error_handler.dart';
 import 'widgets/player_danmaku_settings_panel.dart';
@@ -59,7 +61,7 @@ class PlayerPage extends StatefulWidget {
   final String? contentId;
   final AppCapabilities capabilities;
   final FullscreenController fullscreenController;
-  final DownloadService? downloadService;
+  final PlayerDownloadActions? downloadActions;
 
   const PlayerPage({
     super.key,
@@ -73,7 +75,7 @@ class PlayerPage extends StatefulWidget {
     this.contentId,
     required this.capabilities,
     required this.fullscreenController,
-    this.downloadService,
+    this.downloadActions,
   });
 
   @override
@@ -86,12 +88,21 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   late PlaybackSession _playbackSession;
   late final HlsVariantResolver _hlsVariantResolver;
   late final PlaybackHealthCoordinator _playbackHealth;
-  final PlayerPlaybackLifecycleCoordinator _playbackLifecycle =
-      PlayerPlaybackLifecycleCoordinator();
+  bool get _usesAndroidVideoOutputDiagnostics =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+  late final PlayerPlaybackLifecycleCoordinator _playbackLifecycle =
+      PlayerPlaybackLifecycleCoordinator(
+    readVideoOutputConfigured: _usesAndroidVideoOutputDiagnostics
+        ? () async {
+            final native = _player.platform as NativePlayer;
+            return await native.getProperty('vo-configured') == 'yes';
+          }
+        : null,
+  );
   final PluginService _pluginService = PluginService();
   final HistoryCollectStore _historyStore =
       Modular.get<HistoryCollectStore>();
-  late final DownloadService? _downloadService;
+  late final PlayerDownloadActions? _downloadActions;
   late final PlayerDanmakuSession _danmakuSession;
   final AcceptanceReportService _acceptanceReports = AcceptanceReportService();
 
@@ -162,13 +173,13 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
   // Stream订阅管理（防止内存泄漏）
   final List<StreamSubscription> _subscriptions = [];
+  StreamSubscription<PlayerLog>? _videoOutputLogs;
 
   @override
   void initState() {
     super.initState();
-    _downloadService = widget.capabilities.downloads
-        ? (widget.downloadService ?? DownloadService())
-        : null;
+    _downloadActions =
+        widget.capabilities.downloads ? widget.downloadActions : null;
     _episodeSelection = PlayerEpisodeSelection(
       initialIndex: widget.episodeIndex,
     );
@@ -397,13 +408,23 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
       if (uri != null) headers['Referer'] = '${uri.scheme}://${uri.host}/';
     }
 
+    if (_usesAndroidVideoOutputDiagnostics) {
+      unawaited(_videoOutputLogs?.cancel());
+      _videoOutputLogs = _player.stream.log.listen(
+        (log) => unawaited(_handleVideoOutputLog(log, generation)),
+      );
+    }
     _playbackDiagnostics?.openRequested();
     _startPlaybackWatchdogs(generation);
     try {
       await _player
           .open(Media(url, httpHeaders: headers))
           .timeout(const Duration(seconds: 20));
-      if (!mounted || !_playbackLifecycle.isCurrent(generation)) return;
+      if (!mounted ||
+          !_playbackLifecycle.isCurrent(generation) ||
+          _playbackLifecycle.videoOutputFailed) {
+        return;
+      }
       _playbackDiagnostics?.openCompleted();
       final resumePosition = request.resumePosition;
       if (resumePosition > const Duration(seconds: 1)) {
@@ -413,6 +434,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         unawaited(_waitForFirstFrame(generation));
       }
     } on TimeoutException {
+      if (_playbackLifecycle.videoOutputFailed) return;
       _playbackDiagnostics?.fail(PlaybackFailureKind.timeout);
       Log.e(
         'Player',
@@ -430,6 +452,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
         generation,
       );
     } catch (e) {
+      if (_playbackLifecycle.videoOutputFailed) return;
       final failureKind = classifyPlaybackFailure(e.toString());
       _playbackDiagnostics?.fail(failureKind);
       Log.e(
@@ -493,6 +516,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     } on TimeoutException {
       if (!mounted ||
           !_playbackLifecycle.isCurrent(generation) ||
+          _playbackLifecycle.videoOutputFailed ||
           _hasVideoSignal) {
         return;
       }
@@ -511,7 +535,12 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   }
 
   void _markVideoSignalDetected() {
-    if (!mounted) return;
+    if (!mounted ||
+        (_usesAndroidVideoOutputDiagnostics &&
+            (!_playbackLifecycle.firstFrameEvidenceReady ||
+                _playbackIssue != null))) {
+      return;
+    }
     _recordFirstFrame();
     if (_hasVideoSignal && !_isOpeningVideo && !_isReconnecting) return;
     _playbackLifecycle.markVideoSignalDetected();
@@ -524,7 +553,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   }
 
   void _handleBufferingChanged(bool buffering) {
-    if (!mounted) return;
+    if (!mounted || _playbackLifecycle.videoOutputFailed) return;
     if (_appLifecycleState == AppLifecycleState.resumed) {
       _playbackDiagnostics?.bufferingChanged(buffering);
     }
@@ -558,8 +587,36 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _handleVideoOutputLog(PlayerLog log, int generation) async {
+    if (!mounted || _playbackDiagnostics == null) return;
+    if (!await _playbackLifecycle.recordVideoOutputLog(
+      generation: generation,
+      prefix: log.prefix,
+      level: log.level,
+      text: log.text,
+    )) {
+      return;
+    }
+    if (!mounted || !_playbackLifecycle.isCurrent(generation)) return;
+    _playbackRequestGeneration++;
+    _episodeLoadGeneration++;
+    _playbackDiagnostics?.fail(PlaybackFailureKind.noVideo);
+    Log.e('Player', 'video_output_init_failed failure_kind=noVideo');
+    _showPlaybackIssue(
+      const _PlaybackIssue(
+        icon: Icons.videocam_off_outlined,
+        title: '视频画面渲染失败',
+        message: '当前设备的视频输出初始化失败。请尝试重新加载；若持续黑屏，需检查播放器与设备的兼容性。',
+      ),
+    );
+  }
+
   void _handlePlayerError(String message) {
-    if (!mounted || message.trim().isEmpty) return;
+    if (!mounted ||
+        _playbackLifecycle.videoOutputFailed ||
+        message.trim().isEmpty) {
+      return;
+    }
     final failureKind = classifyPlaybackFailure(message);
     _playbackDiagnostics?.fail(failureKind);
     Log.e(
@@ -809,7 +866,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
             _playbackSession = sessionToHydrate!;
           }
         });
-        if (sessionToHydrate != null) {
+        if (sessionToHydrate != null && !_playbackLifecycle.videoOutputFailed) {
           unawaited(
             _openPlaybackRequest(
               sessionToHydrate!.openAt(_position),
@@ -904,6 +961,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     _finishPlaybackDiagnostics();
     _cancelPlaybackWatchdogs();
     _playbackLifecycle.dispose();
+    unawaited(_videoOutputLogs?.cancel());
     // 取消所有Stream订阅，防止内存泄漏
     for (final s in _subscriptions) {
       s.cancel();

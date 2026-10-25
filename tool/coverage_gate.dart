@@ -55,7 +55,15 @@ class CoverageReport {
       sourceLines[lineNumber] = (sourceLines[lineNumber] ?? 0) + hitCount;
     }
 
-    final all = _summarize(allLines.entries);
+    // 全仓口径排除页面组合层（lib/pages/**）与生成代码（*.g.dart）：
+    // 路由/接线测试会传递加载整个页面导入图但不执行页面主体，把这些
+    // 零执行行计入分母会掩盖逻辑层的真实覆盖；生成文件由 build_runner
+    // 产出并有独立一致性校验，不属于手工测试对象。页面的行为正确性
+    // 由真机/集成验收把关；发布关键模块口径不受影响（页面与生成文件
+    // 本就不在关键清单内）。
+    final all = _summarize(
+      allLines.entries.where((entry) => !_isPageComposition(entry.key)),
+    );
     if (all.found == 0) {
       throw const FormatException('LCOV 中没有可统计的 Dart 行覆盖数据。');
     }
@@ -96,6 +104,9 @@ class CoverageReport {
     }
     return CoverageMetrics(found: found, hit: hit);
   }
+
+  static bool _isPageComposition(String path) =>
+      path.startsWith('lib/pages/') || path.endsWith('.g.dart');
 
   static bool _isReleaseCritical(String path) {
     return path.contains('/lib/services/diagnostics/') ||

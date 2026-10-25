@@ -3,6 +3,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:weila/pages/player/widgets/player_diagnostics_overlay.dart';
 
 void main() {
+  testWidgets('视频输出初始化失败不宣称已恢复或推荐自动换源', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PlayerDiagnosticsOverlay(
+            issue: const PlayerDiagnosticIssue(
+              icon: Icons.videocam_off_outlined,
+              title: '视频画面渲染失败',
+              message: '当前设备的视频输出初始化失败。',
+              videoOutputInitializationFailed: true,
+            ),
+            onRetry: () {},
+            onBack: () {},
+          ),
+        ),
+      ),
+    );
+    expect(find.text('已尝试自动恢复'), findsNothing);
+    expect(find.textContaining('返回详情页更换播放源'), findsNothing);
+    expect(find.textContaining('该线路编码'), findsNothing);
+    expect(find.textContaining('设备兼容性'), findsOneWidget);
+    expect(find.text('重新加载'), findsOneWidget);
+  });
+
   testWidgets('播放器诊断层展示故障信息并触发恢复操作', (tester) async {
     var retried = false;
     var switched = false;

@@ -5,6 +5,8 @@ import 'package:media_kit/media_kit.dart';
 
 import '../app_module.dart';
 import '../app_widget.dart';
+import '../platform/player_download_actions.dart';
+import '../services/download/download_settings.dart';
 import '../services/http/http_client.dart';
 import '../services/plugin/plugin_service.dart';
 import '../services/storage/storage_service.dart';
@@ -12,7 +14,12 @@ import '../stores/theme_store.dart';
 import '../utils/logger.dart';
 import 'app_bootstrap.dart';
 
-Future<void> launchWeila(AppLaunchConfiguration configuration) async {
+Future<void> launchWeila(
+  AppLaunchConfiguration configuration, {
+  PlayerDownloadActions? downloadActions,
+  Future<void> Function(DownloadSettings)? configureDownloads,
+  WidgetBuilder? downloadPageBuilder,
+}) async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
 
@@ -48,6 +55,9 @@ Future<void> launchWeila(AppLaunchConfiguration configuration) async {
         credentialManager: configuration.credentialManager,
         capabilities: configuration.capabilities,
         fullscreenController: configuration.fullscreenController,
+        downloadActions: downloadActions,
+        configureDownloads: configureDownloads,
+        downloadPageBuilder: downloadPageBuilder,
       ),
       child: AppWidget(capabilities: configuration.capabilities),
     ),

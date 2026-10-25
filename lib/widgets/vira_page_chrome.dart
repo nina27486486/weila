@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../layout/adaptive_scaffold.dart';
+import '../layout/breakpoints.dart';
 import '../platform/app_capabilities.dart';
 import '../theme/vira_colors.dart';
 import 'liquid_glass_surface.dart';
@@ -26,6 +28,14 @@ extension on ViraDestination {
         ViraDestination.following => '追番',
         ViraDestination.library => '资料库',
         ViraDestination.downloads => '下载',
+      };
+
+  IconData get icon => switch (this) {
+        ViraDestination.home => Icons.home_outlined,
+        ViraDestination.discover => Icons.explore_outlined,
+        ViraDestination.following => Icons.bookmark_border_rounded,
+        ViraDestination.library => Icons.video_library_outlined,
+        ViraDestination.downloads => Icons.download_outlined,
       };
 }
 
@@ -59,50 +69,48 @@ class ViraPageScaffold extends StatelessWidget {
           destination,
     ];
 
-    return Scaffold(
+    return AdaptiveScaffold(
       backgroundColor: context.colors.bgDark,
-      body: SafeArea(
-        child: Column(
-          children: [
-            _Masthead(
-              activeDestination: activeDestination,
-              destinations: destinations,
-              onDestinationSelected: onDestinationSelected,
-              onSearch: onSearch,
-              onThemeToggle: onThemeToggle,
-              onProfile: onProfile,
-            ),
-            Expanded(
-              child: constrainContent
-                  ? LayoutBuilder(
-                      builder: (context, constraints) {
-                        final horizontal = switch (constraints.maxWidth) {
-                          >= 1440 => 56.0,
-                          >= 1180 => 32.0,
-                          _ => 20.0,
-                        };
-                        return Center(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 1488),
-                            child: Padding(
-                              padding:
-                                  EdgeInsets.symmetric(horizontal: horizontal),
-                              child: child,
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  : child,
-            ),
-          ],
-        ),
+      headerBuilder: (context, layout) => _Masthead(
+        layout: layout,
+        activeDestination: activeDestination,
+        destinations: destinations,
+        onDestinationSelected: onDestinationSelected,
+        onSearch: onSearch,
+        onThemeToggle: onThemeToggle,
+        onProfile: onProfile,
       ),
+      bottomNavigationBar: _BottomNavigation(
+        activeDestination: activeDestination,
+        destinations: destinations,
+        onSelected: onDestinationSelected,
+      ),
+      child: constrainContent
+          ? LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontal = switch (constraints.maxWidth) {
+                  >= 1440 => 56.0,
+                  >= 1180 => 32.0,
+                  _ => 20.0,
+                };
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1488),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: horizontal),
+                      child: child,
+                    ),
+                  ),
+                );
+              },
+            )
+          : child,
     );
   }
 }
 
 class _Masthead extends StatefulWidget {
+  final AdaptiveLayout layout;
   final ViraDestination? activeDestination;
   final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onDestinationSelected;
@@ -111,6 +119,7 @@ class _Masthead extends StatefulWidget {
   final VoidCallback onProfile;
 
   const _Masthead({
+    required this.layout,
     required this.activeDestination,
     required this.destinations,
     required this.onDestinationSelected,
@@ -179,6 +188,9 @@ class _MastheadState extends State<_Masthead>
     final dark = Theme.of(context).brightness == Brightness.dark;
     final disableAnimations =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final compact = widget.layout == AdaptiveLayout.compact;
+    final medium = widget.layout == AdaptiveLayout.medium;
+    final touchExtent = widget.layout == AdaptiveLayout.expanded ? 38.0 : 48.0;
 
     return Container(
       height: 72,
@@ -205,83 +217,85 @@ class _MastheadState extends State<_Masthead>
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final compact = constraints.maxWidth < 920;
-          // 360 档超窄屏收窄水平内边距：工具排与紧凑导航的最小宽度
-          // 之下已无余量，24px 边距会带来数像素溢出。
           final horizontal = constraints.maxWidth >= 1440
               ? 56.0
               : (constraints.maxWidth < 420 ? 12.0 : 24.0);
+          final navigation = ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 350),
+            child: AnimatedBuilder(
+              animation: _glassMotion,
+              builder: (context, _) => _GlassNavigationRail(
+                activeDestination: widget.activeDestination,
+                destinations: widget.destinations,
+                onSelected: widget.onDestinationSelected,
+                motionProgress: _glassMotion.value,
+                disableAnimations: disableAnimations,
+                compact: medium,
+              ),
+            ),
+          );
+          final tools = AnimatedBuilder(
+            animation: _glassMotion,
+            builder: (context, _) => LiquidGlassSurface(
+              key: const ValueKey('vira-tools-glass'),
+              motionProgress: _glassMotion.value,
+              phase: 0.34,
+              borderRadius: BorderRadius.circular(24),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _MastheadTool(
+                    id: 'search',
+                    tooltip: '搜索',
+                    icon: Icons.search_rounded,
+                    onTap: widget.onSearch,
+                    extent: touchExtent,
+                  ),
+                  const SizedBox(width: 2),
+                  _MastheadTool(
+                    id: 'theme',
+                    tooltip: '切换主题',
+                    icon: dark
+                        ? Icons.light_mode_outlined
+                        : Icons.dark_mode_outlined,
+                    onTap: widget.onThemeToggle,
+                    extent: touchExtent,
+                  ),
+                  const SizedBox(width: 2),
+                  _MastheadTool(
+                    id: 'profile',
+                    tooltip: '个人与设置',
+                    icon: Icons.person_outline_rounded,
+                    onTap: widget.onProfile,
+                    accent: true,
+                    extent: touchExtent,
+                  ),
+                ],
+              ),
+            ),
+          );
 
           return Padding(
             padding: EdgeInsets.symmetric(horizontal: horizontal),
             child: Row(
               children: [
-                // 窄屏空间不足时品牌文案省略收缩；超窄只留徽章，
-                // 避免刊头水平溢出。桌面空间充足时保持完整展示。
-                Flexible(
-                  child: _Brand(showText: constraints.maxWidth >= 420),
-                ),
-                const Spacer(),
-                if (compact)
-                  AnimatedBuilder(
-                    animation: _glassMotion,
-                    builder: (context, _) => _CompactNavigation(
-                      activeDestination: widget.activeDestination,
-                      destinations: widget.destinations,
-                      onSelected: widget.onDestinationSelected,
-                      motionProgress: _glassMotion.value,
-                    ),
-                  )
-                else
-                  AnimatedBuilder(
-                    animation: _glassMotion,
-                    builder: (context, _) => _GlassNavigationRail(
-                      activeDestination: widget.activeDestination,
-                      destinations: widget.destinations,
-                      onSelected: widget.onDestinationSelected,
-                      motionProgress: _glassMotion.value,
-                      disableAnimations: disableAnimations,
-                    ),
+                if (medium) ...[
+                  const _Brand(showText: false),
+                  const SizedBox(width: 12),
+                  Expanded(child: Center(child: navigation)),
+                  const SizedBox(width: 12),
+                ] else ...[
+                  Flexible(
+                    child: _Brand(showText: constraints.maxWidth >= 420),
                   ),
-                const Spacer(),
-                AnimatedBuilder(
-                  animation: _glassMotion,
-                  builder: (context, _) => LiquidGlassSurface(
-                    key: const ValueKey('vira-tools-glass'),
-                    motionProgress: _glassMotion.value,
-                    phase: 0.34,
-                    borderRadius: BorderRadius.circular(24),
-                    padding: const EdgeInsets.all(4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _MastheadTool(
-                          id: 'search',
-                          tooltip: '搜索',
-                          icon: Icons.search_rounded,
-                          onTap: widget.onSearch,
-                        ),
-                        const SizedBox(width: 2),
-                        _MastheadTool(
-                          id: 'theme',
-                          tooltip: '切换主题',
-                          icon: dark
-                              ? Icons.light_mode_outlined
-                              : Icons.dark_mode_outlined,
-                          onTap: widget.onThemeToggle,
-                        ),
-                        const SizedBox(width: 2),
-                        _MastheadTool(
-                          id: 'profile',
-                          tooltip: '个人与设置',
-                          icon: Icons.person_outline_rounded,
-                          onTap: widget.onProfile,
-                          accent: true,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                  const Spacer(),
+                  if (!compact) ...[
+                    navigation,
+                    const Spacer(),
+                  ],
+                ],
+                tools,
               ],
             ),
           );
@@ -298,6 +312,7 @@ class _GlassNavigationRail extends StatelessWidget {
     required this.onSelected,
     required this.motionProgress,
     required this.disableAnimations,
+    required this.compact,
   });
 
   final ViraDestination? activeDestination;
@@ -305,6 +320,7 @@ class _GlassNavigationRail extends StatelessWidget {
   final ValueChanged<ViraDestination> onSelected;
   final double motionProgress;
   final bool disableAnimations;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -312,50 +328,59 @@ class _GlassNavigationRail extends StatelessWidget {
         ? -1
         : destinations.indexOf(activeDestination!);
 
+    final height = compact ? 48.0 : 42.0;
     return LiquidGlassSurface(
-      key: const ValueKey('vira-navigation-glass'),
+      key: ValueKey(
+          compact ? 'vira-compact-navigation-glass' : 'vira-navigation-glass'),
       motionProgress: motionProgress,
       borderRadius: BorderRadius.circular(26),
       padding: const EdgeInsets.all(5),
       child: SizedBox(
-        width: destinations.length * 68.0,
-        height: 42,
-        child: Stack(
-          children: [
-            if (activeIndex >= 0)
-              AnimatedPositioned(
-                key: const ValueKey('vira-nav-lens'),
-                duration: disableAnimations
-                    ? Duration.zero
-                    : const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-                left: activeIndex * 68,
-                top: 0,
-                width: 68,
-                height: 42,
-                child: KeyedSubtree(
-                  key: ValueKey(
-                    'vira-nav-indicator-${activeDestination!.name}',
-                  ),
-                  child: KeyedSubtree(
-                    key: ValueKey(
-                      'vira-nav-lens-${activeDestination!.name}',
-                    ),
-                    child: const _SelectedGlassLens(),
-                  ),
-                ),
-              ),
-            Row(
+        height: height,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth = constraints.maxWidth / destinations.length;
+            return Stack(
               children: [
-                for (final destination in destinations)
-                  _NavigationItem(
-                    destination: destination,
-                    selected: destination == activeDestination,
-                    onTap: () => onSelected(destination),
+                if (activeIndex >= 0)
+                  AnimatedPositioned(
+                    key: const ValueKey('vira-nav-lens'),
+                    duration: disableAnimations
+                        ? Duration.zero
+                        : const Duration(milliseconds: 240),
+                    curve: Curves.easeOutCubic,
+                    left: activeIndex * itemWidth,
+                    top: 0,
+                    width: itemWidth,
+                    height: height,
+                    child: KeyedSubtree(
+                      key: ValueKey(
+                        'vira-nav-indicator-${activeDestination!.name}',
+                      ),
+                      child: KeyedSubtree(
+                        key: ValueKey(
+                          'vira-nav-lens-${activeDestination!.name}',
+                        ),
+                        child: const _SelectedGlassLens(),
+                      ),
+                    ),
                   ),
+                Row(
+                  children: [
+                    for (final destination in destinations)
+                      Expanded(
+                        child: _NavigationItem(
+                          destination: destination,
+                          selected: destination == activeDestination,
+                          onTap: () => onSelected(destination),
+                          height: height,
+                        ),
+                      ),
+                  ],
+                ),
               ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -431,29 +456,32 @@ class _Brand extends StatelessWidget {
           ),
           if (showText) ...[
             const SizedBox(width: 10),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '薇拉',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colors.textPrimary,
-                        letterSpacing: 0.5,
-                      ),
-                ),
-                Text(
-                  '私人动画放映室',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: colors.textMuted,
-                        fontWeight: FontWeight.w400,
-                      ),
-                ),
-              ],
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '薇拉',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: colors.textPrimary,
+                          letterSpacing: 0.5,
+                        ),
+                  ),
+                  if (MediaQuery.textScalerOf(context).scale(1) <= 1.5)
+                    Text(
+                      '私人动画放映室',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: colors.textMuted,
+                            fontWeight: FontWeight.w400,
+                          ),
+                    ),
+                ],
+              ),
             ),
           ],
         ],
@@ -466,11 +494,15 @@ class _NavigationItem extends StatefulWidget {
   final ViraDestination destination;
   final bool selected;
   final VoidCallback onTap;
+  final double height;
+  final bool bottom;
 
   const _NavigationItem({
     required this.destination,
     required this.selected,
     required this.onTap,
+    required this.height,
+    this.bottom = false,
   });
 
   @override
@@ -486,6 +518,7 @@ class _NavigationItemState extends State<_NavigationItem> {
     final colors = context.colors;
 
     return Semantics(
+      key: ValueKey('vira-nav-item-${widget.destination.name}'),
       button: true,
       selected: widget.selected,
       label: widget.destination.label,
@@ -504,11 +537,26 @@ class _NavigationItemState extends State<_NavigationItem> {
             splashColor: colors.sky.withValues(alpha: 0.1),
             highlightColor: colors.sky.withValues(alpha: 0.08),
             child: SizedBox(
-              width: 68,
-              height: 42,
+              height: widget.height,
+              width: double.infinity,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
+                  if (widget.bottom && widget.selected)
+                    Positioned.fill(
+                      child: Padding(
+                        key: ValueKey(
+                            'vira-nav-indicator-${widget.destination.name}'),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: colors.sky.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                      ),
+                    ),
                   if (_hovered && !widget.selected)
                     Positioned.fill(
                       child: AnimatedContainer(
@@ -550,7 +598,31 @@ class _NavigationItemState extends State<_NavigationItem> {
                               ? FontWeight.w700
                               : FontWeight.w500,
                         ),
-                    child: Text(widget.destination.label),
+                    child: ExcludeSemantics(
+                      child: widget.bottom
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    widget.destination.icon,
+                                    size: 24,
+                                    color: widget.selected
+                                        ? colors.sky
+                                        : colors.textSecondary,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(widget.destination.label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            )
+                          : Text(widget.destination.label,
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
                   ),
                 ],
               ),
@@ -562,46 +634,42 @@ class _NavigationItemState extends State<_NavigationItem> {
   }
 }
 
-class _CompactNavigation extends StatelessWidget {
+class _BottomNavigation extends StatelessWidget {
   final ViraDestination? activeDestination;
   final List<ViraDestination> destinations;
   final ValueChanged<ViraDestination> onSelected;
-  final double motionProgress;
 
-  const _CompactNavigation({
+  const _BottomNavigation({
     required this.activeDestination,
     required this.destinations,
     required this.onSelected,
-    required this.motionProgress,
   });
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<ViraDestination>(
-      tooltip: '切换页面',
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final destination in destinations)
-          PopupMenuItem(
-            value: destination,
-            child: Text(destination.label),
-          ),
-      ],
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: LiquidGlassSurface(
-          key: const ValueKey('vira-compact-navigation-glass'),
-          motionProgress: motionProgress,
-          borderRadius: BorderRadius.circular(22),
-          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+    final colors = context.colors;
+    final height = 48 + MediaQuery.textScalerOf(context).scale(14) * 1.5;
+    return Material(
+      key: const ValueKey('vira-bottom-navigation'),
+      color: colors.paper,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.divider)),
+        ),
+        child: SafeArea(
+          top: false,
           child: Row(
             children: [
-              Text(
-                activeDestination?.label ?? '页面',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.expand_more_rounded, size: 18),
+              for (final destination in destinations)
+                Expanded(
+                  child: _NavigationItem(
+                    destination: destination,
+                    selected: destination == activeDestination,
+                    onTap: () => onSelected(destination),
+                    height: height,
+                    bottom: true,
+                  ),
+                ),
             ],
           ),
         ),
@@ -616,12 +684,14 @@ class _MastheadTool extends StatefulWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool accent;
+  final double extent;
 
   const _MastheadTool({
     required this.id,
     required this.tooltip,
     required this.icon,
     required this.onTap,
+    required this.extent,
     this.accent = false,
   });
 
@@ -658,8 +728,8 @@ class _MastheadToolState extends State<_MastheadTool> {
               highlightColor: colors.sky.withValues(alpha: 0.09),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
-                width: 38,
-                height: 38,
+                width: widget.extent,
+                height: widget.extent,
                 decoration: BoxDecoration(
                   color: widget.accent
                       ? colors.sky.withValues(alpha: _hovered ? 0.95 : 0.86)
