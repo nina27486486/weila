@@ -10,6 +10,7 @@ class PlayerDiagnosticIssue {
   final String message;
   final String? sourceLabel;
   final String? variantLabel;
+  final bool videoOutputInitializationFailed;
 
   const PlayerDiagnosticIssue({
     required this.icon,
@@ -17,6 +18,7 @@ class PlayerDiagnosticIssue {
     required this.message,
     this.sourceLabel,
     this.variantLabel,
+    this.videoOutputInitializationFailed = false,
   });
 
   String? get selectionLabel {
@@ -311,10 +313,11 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
                                 icon: Icons.schedule_rounded,
                                 label: '进度 ${_formatDuration(position)}',
                               ),
-                              const _DiagnosticMetricChip(
-                                icon: Icons.auto_fix_high_rounded,
-                                label: '已尝试自动恢复',
-                              ),
+                              if (!issue.videoOutputInitializationFailed)
+                                const _DiagnosticMetricChip(
+                                  icon: Icons.auto_fix_high_rounded,
+                                  label: '已尝试自动恢复',
+                                ),
                               if (metrics.sourceResolveDuration != null)
                                 _DiagnosticMetricChip(
                                   icon: Icons.account_tree_outlined,
@@ -369,15 +372,21 @@ class PlayerDiagnosticsOverlay extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 10),
-                                _HintLine(
-                                  text: onSwitchSource == null
-                                      ? '先重新加载当前进度；如果仍然失败，返回详情页更换播放源。'
-                                      : '优先重新加载当前进度；如果仍然黑屏或卡住，切换到下一条线路。',
-                                ),
-                                const SizedBox(height: 6),
-                                const _HintLine(
-                                  text: '如果只有声音没有画面，通常是该线路编码或硬解码兼容性异常。',
-                                ),
+                                if (issue.videoOutputInitializationFailed)
+                                  const _HintLine(
+                                    text: '可手动重新加载；若仍失败，请复制验收报告排查视频输出与设备兼容性，切换线路不一定有效。',
+                                  )
+                                else ...[
+                                  _HintLine(
+                                    text: onSwitchSource == null
+                                        ? '先重新加载当前进度；如果仍然失败，返回详情页更换播放源。'
+                                        : '优先重新加载当前进度；如果仍然黑屏或卡住，切换到下一条线路。',
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const _HintLine(
+                                    text: '如果只有声音没有画面，通常是该线路编码或硬解码兼容性异常。',
+                                  ),
+                                ],
                               ],
                             ),
                           ),

@@ -6,7 +6,44 @@ class PlayerPlaybackLifecycleCoordinator {
     this.noVideoTimeout = const Duration(seconds: 12),
     this.bufferingTimeout = const Duration(seconds: 25),
     this.reconnectDelay = const Duration(milliseconds: 900),
+    this.readVideoOutputConfigured,
   });
+
+  final Future<bool> Function()? readVideoOutputConfigured;
+
+  bool get videoOutputFailed => _videoOutputFailed;
+
+  Future<bool> recordVideoOutputLog({
+    required int generation,
+    required String prefix,
+    required String level,
+    required String text,
+  }) async {
+    if (readVideoOutputConfigured == null ||
+        !isCurrent(generation) ||
+        _videoOutputFailed ||
+        (level != 'error' && level != 'fatal')) {
+      return false;
+    }
+    final message = text.trim();
+    final failed = (prefix == 'vo/gpu' &&
+            message == 'Failed initializing any suitable GPU context!') ||
+        (prefix == 'cplayer' &&
+            message ==
+                'Error opening/initializing the selected video_out (--vo) device.');
+    if (!failed) return false;
+    try {
+      // 原生日志没有媒体代次，不能让旧日志终止当前正常的视频输出。
+      if (await readVideoOutputConfigured!()) return false;
+    } catch (_) {
+      return false;
+    }
+    if (!isCurrent(generation) || _videoOutputFailed) return false;
+    _videoOutputFailed = true;
+    cancelWatchdogs();
+    if (!_firstFrameEvidence.isCompleted) _firstFrameEvidence.complete();
+    return true;
+  }
 
   final Duration openTimeout;
   final Duration noVideoTimeout;
@@ -22,6 +59,9 @@ class PlayerPlaybackLifecycleCoordinator {
   int _firstFrameGeneration = 0;
   bool _videoMetadataDetected = false;
   bool _playbackPositionAdvanced = false;
+  bool _videoOutputConfigured = false;
+  bool _videoOutputQueryPending = false;
+  bool _videoOutputFailed = false;
   bool _disposed = false;
 
   int get currentGeneration => _generation;
@@ -29,6 +69,8 @@ class PlayerPlaybackLifecycleCoordinator {
   bool get reconnectScheduled => _reconnectTimer?.isActive ?? false;
 
   bool get firstFrameEvidenceReady =>
+      !_disposed &&
+      !_videoOutputFailed &&
       _firstFrameGeneration == _generation &&
       _firstFrameEvidence.isCompleted;
 
@@ -42,6 +84,9 @@ class PlayerPlaybackLifecycleCoordinator {
     _firstFrameEvidence = Completer<void>();
     _videoMetadataDetected = false;
     _playbackPositionAdvanced = false;
+    _videoOutputConfigured = false;
+    _videoOutputQueryPending = false;
+    _videoOutputFailed = false;
     cancelWatchdogs();
     return _generation;
   }
@@ -158,12 +203,34 @@ class PlayerPlaybackLifecycleCoordinator {
   }
 
   void _completeFirstFrameEvidence() {
-    if (!_videoMetadataDetected ||
+    if (_disposed ||
+        _videoOutputFailed ||
+        !_videoMetadataDetected ||
         !_playbackPositionAdvanced ||
         _firstFrameEvidence.isCompleted) {
       return;
     }
+    if (readVideoOutputConfigured != null && !_videoOutputConfigured) {
+      if (!_videoOutputQueryPending) {
+        unawaited(_checkVideoOutput(_generation));
+      }
+      return;
+    }
     _firstFrameEvidence.complete();
+  }
+
+  Future<void> _checkVideoOutput(int generation) async {
+    _videoOutputQueryPending = true;
+    try {
+      final configured = await readVideoOutputConfigured!();
+      if (!isCurrent(generation) || _videoOutputFailed) return;
+      _videoOutputConfigured = configured;
+      if (configured) _completeFirstFrameEvidence();
+    } catch (_) {
+      // 原生属性不可用不构成成功或失败证据，交由明确错误或超时判定。
+    } finally {
+      if (isCurrent(generation)) _videoOutputQueryPending = false;
+    }
   }
 
   void _ensureActive() {

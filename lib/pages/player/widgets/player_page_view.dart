@@ -145,12 +145,38 @@ extension _PlayerPageView on _PlayerPageState {
 
   Future<void> _toggleFullscreen() async {
     final goingFullscreen = !_isFullscreen;
-    _updateState(() => _isFullscreen = goingFullscreen);
-    await widget.fullscreenController.setFullscreen(goingFullscreen);
+    if (Theme.of(context).platform != TargetPlatform.android) {
+      _updateState(() => _isFullscreen = goingFullscreen);
+      await widget.fullscreenController.setFullscreen(goingFullscreen);
+      return;
+    }
+    if (!goingFullscreen) {
+      await _exitFullscreen();
+      return;
+    }
+    _updateState(() => _isFullscreen = true);
+    try {
+      await widget.fullscreenController.setFullscreen(true);
+    } catch (error) {
+      Log.e('Player', '无法进入全屏', error);
+      if (mounted) ErrorHandler.showInfo(context, '无法进入全屏，请重试');
+      await _exitFullscreen();
+    }
+  }
+
+  Future<void> _exitFullscreen() async {
+    if (!_isFullscreen) return;
+    try {
+      await widget.fullscreenController.setFullscreen(false);
+      if (mounted) _updateState(() => _isFullscreen = false);
+    } catch (error) {
+      Log.e('Player', '无法恢复全屏前的系统状态', error);
+      if (mounted) ErrorHandler.showInfo(context, '暂时无法退出全屏，请重试');
+    }
   }
 
   void _checkDownloadStatus() async {
-    final downloadService = _downloadService;
+    final downloadService = _downloadActions;
     if (downloadService == null) return;
     final url = _currentVideoUrl ?? widget.videoUrl;
     final downloaded = await downloadService.isDownloaded(url);
@@ -189,7 +215,7 @@ extension _PlayerPageView on _PlayerPageState {
   }
 
   void _startDownload() {
-    final downloadService = _downloadService;
+    final downloadService = _downloadActions;
     if (downloadService == null) return;
     final url = _currentVideoUrl ?? widget.videoUrl;
     if (url.isEmpty) return;
@@ -274,7 +300,7 @@ extension _PlayerPageView on _PlayerPageState {
   }
 
   Widget _buildPlayerView() {
-    return Scaffold(
+    final player = Scaffold(
       backgroundColor: Colors.black,
       body: Focus(
         autofocus: true,
@@ -363,6 +389,18 @@ extension _PlayerPageView on _PlayerPageState {
         ),
       ),
     );
+    return PlayerBackScope(
+      fullscreen: _isFullscreen,
+      hasOpenPanel: _showShortcutPanel || _showDanmakuPanel,
+      hasOpenDrawer: _isEpisodeDrawerVisible,
+      onClosePanel: () => _updateState(() {
+        _showShortcutPanel = false;
+        _showDanmakuPanel = false;
+      }),
+      onCloseDrawer: () => _updateState(() => _showEpisodeDrawer = false),
+      onExitFullscreen: _exitFullscreen,
+      child: player,
+    );
   }
 
   /// 顶部标题栏
@@ -390,7 +428,10 @@ extension _PlayerPageView on _PlayerPageState {
                   _PlayerIconButton(
                     icon: Icons.arrow_back_rounded,
                     tooltip: '返回',
-                    onTap: () => Modular.to.pop(),
+                    onTap: () => PlayerBackScope.requestBack(
+                      context,
+                      onDesktopBack: () => Modular.to.pop(),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Container(
@@ -640,6 +681,7 @@ extension _PlayerPageView on _PlayerPageState {
         icon: issue.icon,
         title: issue.title,
         message: issue.message,
+        videoOutputInitializationFailed: _playbackLifecycle.videoOutputFailed,
         sourceLabel: resolved?.source.label,
         variantLabel: _playbackSession.selection.variantId == null
             ? '自动'
@@ -652,7 +694,10 @@ extension _PlayerPageView on _PlayerPageState {
       onRetry: _retryCurrentVideo,
       onSwitchSource: _hasNextVideoSource ? _switchToNextVideoSource : null,
       onCopyReport: () => unawaited(_copyAcceptanceReport()),
-      onBack: () => Modular.to.pop(),
+      onBack: () => PlayerBackScope.requestBack(
+        context,
+        onDesktopBack: () => Modular.to.pop(),
+      ),
     );
   }
 
