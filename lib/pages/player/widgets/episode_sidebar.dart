@@ -18,7 +18,9 @@ class EpisodeDrawerMotion extends StatelessWidget {
       key: const ValueKey('episode-drawer-motion'),
       width: open ? 220 : 0,
       duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutBack,
+      curve: !open && Theme.of(context).platform == TargetPlatform.android
+          ? Curves.easeOutCubic
+          : Curves.easeOutBack,
       clipBehavior: Clip.hardEdge,
       decoration: const BoxDecoration(),
       child: Align(
