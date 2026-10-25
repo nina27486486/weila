@@ -12,6 +12,13 @@ void main() {
     const capabilities = AppCapabilities.androidCompileBaseline;
     expect(capabilities.downloads, isFalse);
     expect(capabilities.pluginEditing, isFalse);
-    expect(capabilities.secureCredentialStorage, isFalse);
+  });
+
+  test('Android baseline enables secure credential storage', () {
+    // AndroidDanmakuCredentialStore 已接入 Android Keystore 加密存储。
+    expect(
+      AppCapabilities.androidCompileBaseline.secureCredentialStorage,
+      isTrue,
+    );
   });
 }

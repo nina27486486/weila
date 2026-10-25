@@ -4,7 +4,7 @@ import 'platform/app_capabilities.dart';
 import 'platform/app_window_controller.dart';
 import 'platform/android_fullscreen_controller.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
-import 'services/danmaku/unavailable_danmaku_credential_store.dart';
+import 'services/danmaku/android_danmaku_credential_store.dart';
 
 Future<void> main() {
   return launchWeila(
@@ -13,7 +13,7 @@ Future<void> main() {
       windowController: const NoopAppWindowController(),
       fullscreenController: AndroidFullscreenController(),
       credentialManager: DanmakuCredentialManager.platform(
-        store: const UnavailableDanmakuCredentialStore(),
+        store: AndroidDanmakuCredentialStore(),
       ),
     ),
   );

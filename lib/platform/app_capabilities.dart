@@ -16,7 +16,8 @@ class AppCapabilities {
   static const androidCompileBaseline = AppCapabilities(
     downloads: false,
     pluginEditing: false,
-    secureCredentialStorage: false,
+    // Android Keystore 加密存储已接入（AndroidDanmakuCredentialStore）。
+    secureCredentialStorage: true,
   );
 
   final bool downloads;
