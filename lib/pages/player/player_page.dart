@@ -14,6 +14,7 @@ import '../../platform/app_capabilities.dart';
 import '../../platform/fullscreen_controller.dart';
 import '../../services/plugin/plugin_service.dart';
 import '../../services/http/http_client.dart';
+import '../../platform/audio_focus_controller.dart';
 import '../../platform/player_download_actions.dart';
 import '../../services/danmaku/danmaku_load_result.dart';
 import '../../services/danmaku/danmaku_matcher.dart';
@@ -174,6 +175,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
   // Stream订阅管理（防止内存泄漏）
   final List<StreamSubscription> _subscriptions = [];
   StreamSubscription<PlayerLog>? _videoOutputLogs;
+  late final PlaybackAudioFocus _audioFocus = PlaybackAudioFocus.platform();
 
   @override
   void initState() {
@@ -214,8 +216,14 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     );
 
     // 监听播放状态（存储订阅，dispose时cancel）
+    _audioFocus
+      ..onPausedByInterruption = _pauseForAudioInterruption
+      ..onResumeAfterInterruption = _resumeAfterAudioInterruption
+      ..onPausedByNoise = _pauseForAudioNoise;
     _subscriptions.add(_player.stream.playing.listen((playing) {
       if (mounted) setState(() => _isPlaying = playing);
+      _audioFocus.notifyPlaybackStateChanged(playing: playing);
+      unawaited(playing ? _audioFocus.activate() : _audioFocus.deactivate());
     }));
     _subscriptions.add(_player.stream.position.listen((pos) {
       if (!mounted) return;
@@ -961,6 +969,7 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
     _finishPlaybackDiagnostics();
     _cancelPlaybackWatchdogs();
     _playbackLifecycle.dispose();
+    _audioFocus.dispose();
     unawaited(_videoOutputLogs?.cancel());
     // 取消所有Stream订阅，防止内存泄漏
     for (final s in _subscriptions) {
@@ -999,6 +1008,24 @@ class _PlayerPageState extends State<PlayerPage> with WidgetsBindingObserver {
 
     _player.dispose();
     super.dispose();
+  }
+
+  /// 来电/其他应用占用音频时让路（MVP 计划 §4）。
+  void _pauseForAudioInterruption() {
+    if (!mounted || _playbackIssue != null || _isOpeningVideo) return;
+    unawaited(_player.pause());
+  }
+
+  /// 通话结束后恢复此前因中断暂停的播放。
+  void _resumeAfterAudioInterruption() {
+    if (!mounted || _playbackIssue != null || _isOpeningVideo) return;
+    unawaited(_player.play());
+  }
+
+  /// 拔出耳机时暂停，避免声音外放。
+  void _pauseForAudioNoise() {
+    if (!mounted || _playbackIssue != null || _isOpeningVideo) return;
+    unawaited(_player.pause());
   }
 
   void _updateState(VoidCallback update) => setState(update);
