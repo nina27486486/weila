@@ -11,10 +11,14 @@ import '../download/download_settings.dart';
 import '../catalog/catalog_hive_stores.dart';
 import '../catalog/hive_catalog_repository.dart';
 import '../library/history_collect_repository.dart';
+import '../portable/portable_backup_service.dart';
 import '../../utils/constants.dart';
 
 class StorageService
-    implements HistoryCollectRepository, DownloadSettingsRepository {
+    implements
+        HistoryCollectRepository,
+        DownloadSettingsRepository,
+        PortableLibraryStore {
   static final StorageService _instance = StorageService._();
   factory StorageService() => _instance;
   StorageService._();
@@ -252,6 +256,35 @@ class StorageService
       Log.e('Storage', '迁移弹幕缓存失败（忽略，将重新匹配）', error);
     }
   }
+
+  // === 便携备份（PortableLibraryStore） ===
+  @override
+  List<CollectItem> getFavorites() => getCollects();
+
+  @override
+  List<TrackItem> getFollowing() => getTracks();
+
+  @override
+  Future<void> putFavorite(CollectItem item) => addCollect(item);
+
+  @override
+  Future<void> removeFavorite(String animeUrl) => removeCollect(animeUrl);
+
+  @override
+  Future<void> putFollowing(TrackItem item) => addTrack(item);
+
+  @override
+  Future<void> removeFollowing(String animeUrl) => removeTrack(animeUrl);
+
+  @override
+  Future<void> putHistory(HistoryItem item) => addHistory(item);
+
+  @override
+  Object? readSetting(String key) => getSetting<Object>(key);
+
+  @override
+  Future<void> writeSetting(String key, Object value) =>
+      setSetting(key, value);
 
   HiveCatalogRepository createCatalogRepository({
     CatalogPageLoader? loadPage,

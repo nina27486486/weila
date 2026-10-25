@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -6,6 +7,9 @@ import 'package:flutter_modular/flutter_modular.dart';
 import 'package:flutter_mobx/flutter_mobx.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_selector/file_selector.dart';
 
 import '../../debug/danmaku_debug_config.dart';
 import '../../platform/app_capabilities.dart';
@@ -15,8 +19,12 @@ import '../../services/danmaku/danmaku_service.dart';
 import '../../services/danmaku/danmaku_credential_draft.dart';
 import '../../services/catalog/catalog_settings.dart';
 import '../../services/download/download_settings.dart';
+import '../../services/portable/portable_backup_service.dart';
+import '../../services/portable/weila_portable_backup.dart'
+    show PortableBackupFormatException;
 import '../../services/plugin/plugin_service.dart';
 import '../../services/storage/storage_service.dart';
+import '../../utils/logger.dart';
 import '../../stores/theme_store.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/constants.dart';
@@ -42,6 +50,8 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  final PortableBackupService _portableBackup =
+      PortableBackupService(store: StorageService());
   final _scrollController = ScrollController();
   final _sectionKeys = List.generate(5, (_) => GlobalKey());
 
@@ -126,6 +136,66 @@ class _SettingsPageState extends State<SettingsPage> {
       _cacheBytes = memoryBytes;
       _scanningCache = false;
     });
+  }
+
+  Future<void> _exportPortableBackup() async {
+    try {
+      final json = await _portableBackup.exportJson();
+      final dir = await getTemporaryDirectory();
+      final stamp =
+          DateTime.now().toUtc().toIso8601String().replaceAll(':', '-');
+      final file = File('${dir.path}/weila-backup-$stamp.json');
+      await file.writeAsString(json);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)]),
+      );
+      if (mounted) {
+        ErrorHandler.showSuccess(context, '备份已生成，请通过分享面板保存');
+      }
+    } catch (error) {
+      Log.e('Settings', '导出便携备份失败', error);
+      if (mounted) {
+        ErrorHandler.showError(context, '导出失败，请稍后重试');
+      }
+    }
+  }
+
+  Future<void> _importPortableBackup() async {
+    try {
+      final picked = await openFile(
+        acceptedTypeGroups: [
+          XTypeGroup(label: 'JSON 备份', extensions: const ['json']),
+        ],
+      );
+      if (picked == null) return;
+      final length = await picked.length();
+      if (length > PortableBackupService.maximumBackupBytes) {
+        if (mounted) {
+          ErrorHandler.showError(context, '备份文件过大，已取消导入');
+        }
+        return;
+      }
+      final content = await picked.readAsString();
+      final report = await _portableBackup.importJson(content);
+      // 导入可能带回主题设置，重新读取让界面立即生效。
+      Modular.get<ThemeStore>().loadTheme();
+      if (mounted) {
+        ErrorHandler.showSuccess(
+          context,
+          '导入完成：收藏 ${report.favoritesApplied} · 追番 '
+          '${report.followingApplied} · 历史 ${report.historyApplied}',
+        );
+      }
+    } on PortableBackupFormatException catch (error) {
+      if (mounted) {
+        ErrorHandler.showError(context, '备份无法导入：${error.message}');
+      }
+    } catch (error) {
+      Log.e('Settings', '导入便携备份失败', error);
+      if (mounted) {
+        ErrorHandler.showError(context, '导入失败，文件可能已损坏');
+      }
+    }
   }
 
   Future<void> _clearCache() async {
@@ -471,13 +541,11 @@ class _SettingsPageState extends State<SettingsPage> {
                 children: [
                   Observer(
                     builder: (_) => SettingsHero(
-                      themeLabel:
-                          themeStore.isDarkMode ? '深色模式' : '浅色模式',
+                      themeLabel: themeStore.isDarkMode ? '深色模式' : '浅色模式',
                       enabledPluginCount: enabledPluginCount,
                       pluginCount: pluginCount,
-                      cacheLabel: _scanningCache
-                          ? '正在扫描'
-                          : _formatBytes(_cacheBytes),
+                      cacheLabel:
+                          _scanningCache ? '正在扫描' : _formatBytes(_cacheBytes),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -681,6 +749,23 @@ class _SettingsPageState extends State<SettingsPage> {
                             clearing: _clearingCache,
                             onRefresh: _loadCacheSize,
                             onClear: _clearCache,
+                          ),
+                          const SizedBox(height: 12),
+                          SettingsActionList(
+                            children: [
+                              SettingsActionRow(
+                                icon: Icons.ios_share_rounded,
+                                title: '导出我的数据',
+                                subtitle: '收藏、追番、观看历史与安全设置导出为 JSON 分享',
+                                onTap: _exportPortableBackup,
+                              ),
+                              SettingsActionRow(
+                                icon: Icons.restore_page_outlined,
+                                title: '导入备份数据',
+                                subtitle: '选择此前导出的 JSON，按最新记录合并，不重复写入',
+                                onTap: _importPortableBackup,
+                              ),
+                            ],
                           ),
                         ],
                       ),
