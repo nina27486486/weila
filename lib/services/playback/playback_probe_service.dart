@@ -186,6 +186,15 @@ class PlaybackProbeService {
         contentType: payload.contentType,
       );
     }
+    // 部分 CMS“线路”实为网页分享页（200 + text/html），不是媒体流；
+    // 放行会让自动选线把不可播线路顶到第一，播放瞬间失败。
+    if (_looksLikeHtml(payload)) {
+      return _failure(
+        PlaybackProbeFailure.invalidContent,
+        elapsed: payload.elapsed,
+        contentType: payload.contentType,
+      );
+    }
     if (manifest) {
       final prefix =
           utf8.decode(payload.prefix, allowMalformed: true).trimLeft();
@@ -203,6 +212,14 @@ class PlaybackProbeService {
       checkedAt: _now(),
       contentType: payload.contentType,
     );
+  }
+
+  static bool _looksLikeHtml(PlaybackProbePayload payload) {
+    final contentType = payload.contentType?.toLowerCase() ?? '';
+    if (contentType.contains('text/html')) return true;
+    final prefix =
+        utf8.decode(payload.prefix, allowMalformed: true).trimLeft().toLowerCase();
+    return prefix.startsWith('<!doctype') || prefix.startsWith('<html');
   }
 
   PlaybackProbeResult _failure(

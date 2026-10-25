@@ -105,6 +105,83 @@ void main() {
     expect(source.headers, const {'User-Agent': 'Weila-Test'});
   });
 
+  test('html share pages fail the probe as invalid content', () async {
+    // ffzy 等站点的“线路”可能是网页分享页（200 + text/html），
+    // 不是媒体流；探测必须把它们判失败，交给自动选线排到最后。
+    final service = PlaybackProbeService(
+      load: (
+          {required uri,
+          required headers,
+          required manifest,
+          required maxBytes}) async {
+        return PlaybackProbePayload(
+          statusCode: 200,
+          elapsed: const Duration(milliseconds: 90),
+          bytesRead: 64,
+          contentType: 'text/html; charset=utf-8',
+          prefix: utf8.encode('<!DOCTYPE html><html><body>player</body>'),
+        );
+      },
+    );
+
+    final result = await service.probe(
+      _source(id: 'share', url: 'https://vip.ffzy-play9.com/share/abcdef'),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.failure, PlaybackProbeFailure.invalidContent);
+  });
+
+  test('html body fails the probe even without an html content type', () async {
+    final service = PlaybackProbeService(
+      load: (
+          {required uri,
+          required headers,
+          required manifest,
+          required maxBytes}) async {
+        return PlaybackProbePayload(
+          statusCode: 200,
+          elapsed: const Duration(milliseconds: 90),
+          bytesRead: 32,
+          contentType: 'application/octet-stream',
+          prefix: utf8.encode('<html><script>var x=1;</script>'),
+        );
+      },
+    );
+
+    final result = await service.probe(
+      _source(id: 'htmlish', url: 'https://media.example/clip'),
+    );
+
+    expect(result.success, isFalse);
+    expect(result.failure, PlaybackProbeFailure.invalidContent);
+  });
+
+  test('direct media keeps probing successfully on non-html content',
+      () async {
+    final service = PlaybackProbeService(
+      load: (
+          {required uri,
+          required headers,
+          required manifest,
+          required maxBytes}) async {
+        return PlaybackProbePayload(
+          statusCode: 200,
+          elapsed: const Duration(milliseconds: 90),
+          bytesRead: 1,
+          contentType: 'video/mp4',
+          prefix: [0x00, 0x00, 0x00],
+        );
+      },
+    );
+
+    final result = await service.probe(
+      _source(id: 'mp4', url: 'https://media.example/clip.mp4'),
+    );
+
+    expect(result.success, isTrue);
+  });
+
   test('classifies HTTP status and timeout failures', () async {
     Future<PlaybackProbeResult> probeStatus(int statusCode) {
       return PlaybackProbeService(
