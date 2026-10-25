@@ -1,3 +1,4 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_modular/flutter_modular.dart';
 
 import 'debug/danmaku_debug_config.dart';
@@ -16,7 +17,6 @@ import 'pages/discover/anime_list_page.dart';
 import 'pages/discover/calendar_page.dart';
 import 'pages/discover/ranking_page.dart';
 import 'pages/discover/category_browse_page.dart';
-import 'pages/download/download_page.dart';
 import 'pages/debug/danmaku_debug_page.dart';
 import 'services/danmaku/dandanplay_credential_manager.dart';
 import 'stores/anime_store.dart';
@@ -25,6 +25,8 @@ import 'stores/home_store.dart';
 import 'stores/theme_store.dart';
 import 'platform/app_capabilities.dart';
 import 'platform/fullscreen_controller.dart';
+import 'platform/player_download_actions.dart';
+import 'services/download/download_settings.dart';
 import 'utils/app_routes.dart';
 
 class AppModule extends Module {
@@ -32,11 +34,20 @@ class AppModule extends Module {
     required this.credentialManager,
     required this.capabilities,
     required this.fullscreenController,
-  });
+    this.downloadActions,
+    this.configureDownloads,
+    this.downloadPageBuilder,
+  }) : assert(!capabilities.downloads ||
+            (downloadActions != null &&
+                configureDownloads != null &&
+                downloadPageBuilder != null));
 
   final DanmakuCredentialManager credentialManager;
   final AppCapabilities capabilities;
   final FullscreenController fullscreenController;
+  final PlayerDownloadActions? downloadActions;
+  final Future<void> Function(DownloadSettings)? configureDownloads;
+  final WidgetBuilder? downloadPageBuilder;
 
   @override
   void binds(i) {
@@ -83,6 +94,7 @@ class AppModule extends Module {
         contentId: r.args.queryParams['contentId'],
         capabilities: capabilities,
         fullscreenController: fullscreenController,
+        downloadActions: downloadActions,
       ),
     );
     r.child(
@@ -102,6 +114,7 @@ class AppModule extends Module {
       child: (context) => SettingsPage(
         credentialManager: credentialManager,
         capabilities: capabilities,
+        configureDownloads: configureDownloads,
       ),
     );
     if (danmakuDebugModeEnabled) {
@@ -147,7 +160,7 @@ class AppModule extends Module {
     if (capabilities.downloads) {
       r.child(
         AppRoutes.download,
-        child: (context) => const DownloadPage(),
+        child: downloadPageBuilder!,
       );
     }
   }

@@ -3,17 +3,22 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('Android entry imports no Windows implementation or download service',
+  test(
+      'Android dependency graph contains no Windows or download implementation',
       () {
-    final source = File('lib/main_android.dart').readAsStringSync();
-    for (final forbidden in [
-      'package:window_manager',
-      'package:win32',
-      'windows_danmaku_credential_store',
-      'DownloadService',
-    ]) {
-      expect(source, isNot(contains(forbidden)), reason: forbidden);
-    }
+    final closure = _collectDartDependencyClosure(
+      root: Directory.current,
+      startPath: 'lib/main_android.dart',
+    );
+
+    expect(
+      closure.localPaths.where(_isForbiddenAndroidDependencyPath),
+      isEmpty,
+    );
+    expect(
+      closure.externalPackageUris.where(_isForbiddenAndroidPackageUri),
+      isEmpty,
+    );
   });
 
   test('shared startup and credential manager have no Windows imports', () {
@@ -42,6 +47,42 @@ void main() {
     expect(
       closure.externalPackageUris.where(_isForbiddenExternalPackageUri),
       isEmpty,
+    );
+  });
+
+  test('Android guard blocks download execution but allows shared settings',
+      () {
+    expect(
+      _isForbiddenAndroidDependencyPath(
+        'lib/services/download/segment_downloader.dart',
+      ),
+      isTrue,
+    );
+    expect(
+      _isForbiddenAndroidDependencyPath(
+        'lib/services/download/download_settings.dart',
+      ),
+      isFalse,
+    );
+  });
+
+  test('relative imports resolve within the Dart package root', () {
+    expect(
+      _resolveRelativePath(
+          'lib/stores/home_store.dart', '../../utils/logger.dart'),
+      'lib/utils/logger.dart',
+    );
+    expect(
+      _resolveRelativePath(
+        'lib/pages/settings/plugin_detail_page.dart',
+        '../../../widgets/vira_state_view.dart',
+      ),
+      'lib/widgets/vira_state_view.dart',
+    );
+    expect(
+      _resolveRelativePath(
+          'tool/nested/script.dart', '../../utils/logger.dart'),
+      'utils/logger.dart',
     );
   });
 
@@ -162,6 +203,79 @@ export /* 'pages/inline_comment.dart' */ 'app_module.dart';
     );
   });
 
+  test('dependency closure follows same-line, conditional and part directives',
+      () {
+    final root = Directory.systemTemp.createTempSync('weila-dart-closure-');
+    addTearDown(() => root.deleteSync(recursive: true));
+    _writeFixture(root, 'lib/main_android.dart', '''
+import 'package:weila/barrel.dart'; export 'branch.dart';
+part 'entry.g.dart';
+const part = 'not-an-import.dart';
+''');
+    _writeFixture(root, 'lib/barrel.dart', '''
+export 'safe.dart' if (dart.library.io) 'platform/windows/bridge.dart';
+''');
+    _writeFixture(root, 'lib/safe.dart', 'const value = 1;');
+    _writeFixture(root, 'lib/platform/windows/bridge.dart',
+        "import 'package:win32/win32.dart';");
+    _writeFixture(root, 'lib/branch.dart',
+        "export 'services/download/download_service.dart';");
+    _writeFixture(root, 'lib/services/download/download_service.dart',
+        "export '../../main_android.dart';");
+    _writeFixture(root, 'lib/entry.g.dart', "part of 'main_android.dart';");
+
+    final closure = _collectDartDependencyClosure(
+      root: root,
+      startPath: 'lib/main_android.dart',
+    );
+    expect(
+        closure.localPaths,
+        containsAll([
+          'lib/safe.dart',
+          'lib/entry.g.dart',
+          'lib/branch.dart',
+          'lib/platform/windows/bridge.dart',
+          'lib/services/download/download_service.dart',
+        ]));
+    expect(closure.localPaths.where(_isForbiddenAndroidDependencyPath),
+        hasLength(2));
+    expect(closure.externalPackageUris.where(_isForbiddenAndroidPackageUri),
+        contains('package:win32/win32.dart'));
+  });
+
+  test('Windows graph retains native implementations and download page', () {
+    final closure = _collectDartDependencyClosure(
+      root: Directory.current,
+      startPath: 'lib/main.dart',
+    );
+    expect(
+        closure.localPaths,
+        containsAll([
+          'lib/services/download/download_service.dart',
+          'lib/pages/download/download_page.dart',
+          'lib/services/danmaku/windows_danmaku_credential_store.dart',
+        ]));
+    expect(
+        closure.externalPackageUris,
+        containsAll([
+          'package:window_manager/window_manager.dart',
+          'package:win32/win32.dart',
+        ]));
+  });
+
+  test('dependency closure rejects missing files', () {
+    final root = Directory.systemTemp.createTempSync('weila-dart-closure-');
+    addTearDown(() => root.deleteSync(recursive: true));
+    _writeFixture(root, 'lib/main.dart', "export 'missing.dart';");
+    expect(
+      () => _collectDartDependencyClosure(
+        root: root,
+        startPath: 'lib/main.dart',
+      ),
+      throwsStateError,
+    );
+  });
+
   test('Android capabilities gate routes and settings actions', () {
     final module = File('lib/app_module.dart').readAsStringSync();
     final settings =
@@ -182,6 +296,20 @@ class _DartDependencyClosure {
 
   final Set<String> localPaths;
   final Set<String> externalPackageUris;
+}
+
+bool _isForbiddenAndroidDependencyPath(String path) {
+  final canonicalPath = _normalizeRelativePath(path).toLowerCase();
+  return canonicalPath.startsWith('lib/platform/windows/') ||
+      canonicalPath ==
+          'lib/services/danmaku/windows_danmaku_credential_store.dart' ||
+      canonicalPath == 'lib/services/download/download_service.dart' ||
+      canonicalPath == 'lib/services/download/segment_downloader.dart';
+}
+
+bool _isForbiddenAndroidPackageUri(String uri) {
+  return uri.startsWith('package:window_manager/') ||
+      uri.startsWith('package:win32/');
 }
 
 bool _isForbiddenExternalPackageUri(String uri) {
@@ -246,7 +374,13 @@ _DartDependencyClosure _collectDartDependencyClosure({
       } else if (uri.startsWith('package:')) {
         externalPackageUris.add(uri);
       } else if (!uri.contains(':')) {
-        pending.add(_resolveRelativePath(relativePath, uri));
+        final dependencyPath = _resolveRelativePath(relativePath, uri);
+        if (!File('${root.path}/$dependencyPath').existsSync()) {
+          throw StateError(
+            'Local Dart dependency does not exist: $relativePath -> $uri',
+          );
+        }
+        pending.add(dependencyPath);
       }
     }
   }
@@ -261,8 +395,7 @@ Iterable<String> _dartDirectiveUris(String source) sync* {
   final codeMask = _maskDartSource(source, maskStrings: true);
   final commentMask = _maskDartSource(source, maskStrings: false);
   final directivePattern = RegExp(
-    r'^[ \t]*(?:import|export|part)\b[\s\S]*?;',
-    multiLine: true,
+    r'(?:^|(?<=;))\s*(?:import|export|part)\b[\s\S]*?;',
   );
   final partOfPattern = RegExp(r'^\s*part\s+of\b');
   final uriPattern = RegExp(
@@ -361,6 +494,11 @@ bool _isIdentifierCharacter(String character) {
 }
 
 String _resolveRelativePath(String fromPath, String uri) {
+  if (fromPath.startsWith('lib/')) {
+    final packageUri = Uri.parse('package:weila/${fromPath.substring(4)}');
+    final resolved = packageUri.resolve(uri);
+    return 'lib/${resolved.path.substring('weila/'.length)}';
+  }
   final base = fromPath.split('/')..removeLast();
   return _normalizeRelativePath([...base, ...uri.split('/')].join('/'));
 }
