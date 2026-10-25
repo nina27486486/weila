@@ -1,6 +1,9 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:weila/platform/app_capabilities.dart';
 import 'package:weila/theme/app_theme.dart';
 import 'package:weila/widgets/editorial_section_header.dart';
 import 'package:weila/widgets/liquid_glass_surface.dart';
@@ -204,8 +207,8 @@ void main() {
     expect(pausedAfter, pausedBefore);
   });
 
-  testWidgets('窄屏切换为紧凑玻璃导航且保留工具入口', (tester) async {
-    await tester.binding.setSurfaceSize(const Size(880, 800));
+  testWidgets('中屏直接展示紧凑顶部导航且保留工具入口', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(600, 800));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
@@ -231,6 +234,10 @@ void main() {
       findsNothing,
     );
     expect(find.byTooltip('搜索'), findsOneWidget);
+    expect(find.byType(PopupMenuButton<ViraDestination>), findsNothing);
+    for (final label in ['首页', '发现', '追番', '资料库', '下载']) {
+      expect(find.text(label), findsOneWidget);
+    }
     expect(tester.takeException(), isNull);
   });
 
@@ -253,13 +260,179 @@ void main() {
         ),
       );
 
-      final navigationKey = width < 920
-          ? const ValueKey('vira-compact-navigation-glass')
+      final navigationKey = width < 600
+          ? const ValueKey('vira-bottom-navigation')
           : const ValueKey('vira-navigation-glass');
       expect(find.byKey(navigationKey), findsOneWidget);
+      if (width >= 960) {
+        expect(tester.getSize(find.byKey(navigationKey)), const Size(350, 52));
+        expect(
+          tester.getSize(find.byKey(const ValueKey('vira-tools-glass'))),
+          const Size(126, 46),
+        );
+      }
       expect(tester.takeException(), isNull);
     });
   }
+
+  for (final width in [360.0, 411.0, 599.0, 600.0, 839.0, 840.0]) {
+    for (final dark in [false, true]) {
+      testWidgets('Android外壳 $width 暗色=$dark 使用正确导航且等分可点击', (tester) async {
+        await tester.binding.setSurfaceSize(Size(width, 800));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        var selected = ViraDestination.home;
+        var searched = false;
+        var themed = false;
+        var profiled = false;
+        await tester.pumpWidget(
+          _androidChrome(
+            dark: dark,
+            chromeBuilder: (setState) => ViraPageScaffold(
+              activeDestination: selected,
+              onDestinationSelected: (value) =>
+                  setState(() => selected = value),
+              onSearch: () => searched = true,
+              onThemeToggle: () => themed = true,
+              onProfile: () => profiled = true,
+              child: const SizedBox.expand(key: ValueKey('content')),
+            ),
+          ),
+        );
+
+        final key = width < 600
+            ? 'vira-bottom-navigation'
+            : width < 840
+                ? 'vira-compact-navigation-glass'
+                : 'vira-navigation-glass';
+        final navigation = find.byKey(ValueKey(key));
+        expect(navigation, findsOneWidget);
+        expect(find.byType(PopupMenuButton<ViraDestination>), findsNothing);
+        expect(find.text('下载'), findsNothing);
+        expect(find.byTooltip('搜索'), findsOneWidget);
+        final content = tester.getRect(find.byKey(const ValueKey('content')));
+        final navRect = tester.getRect(navigation);
+        if (width < 600) {
+          expect(navRect.top, greaterThanOrEqualTo(content.bottom));
+        } else {
+          expect(navRect.bottom, lessThanOrEqualTo(content.top));
+          expect(find.byKey(const ValueKey('vira-bottom-navigation')),
+              findsNothing);
+        }
+
+        final slots = [
+          for (final name in ['home', 'discover', 'following', 'library'])
+            tester.getRect(find.byKey(ValueKey('vira-nav-item-$name'))),
+        ];
+        for (var i = 0; i < slots.length; i++) {
+          expect(slots[i].width, closeTo(slots.first.width, 0.01));
+          if (i > 0) expect(slots[i].left, closeTo(slots[i - 1].right, 0.01));
+          if (width < 840) expect(slots[i].height, greaterThanOrEqualTo(48));
+        }
+        for (final destination in ViraDestination.values.take(4)) {
+          await tester
+              .tap(find.byKey(ValueKey('vira-nav-item-${destination.name}')));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(selected, destination);
+          expect(find.byKey(ValueKey('vira-nav-indicator-${destination.name}')),
+              findsOneWidget);
+          final node = tester.getSemantics(
+              find.byKey(ValueKey('vira-nav-item-${destination.name}')));
+          expect(node.flagsCollection.isSelected, Tristate.isTrue);
+          expect(node.flagsCollection.isButton, isTrue);
+          expect(
+              node.label,
+              switch (destination) {
+                ViraDestination.home => '首页',
+                ViraDestination.discover => '发现',
+                ViraDestination.following => '追番',
+                ViraDestination.library => '资料库',
+                ViraDestination.downloads => '下载',
+              });
+        }
+        await tester.tap(find.byTooltip('搜索'));
+        await tester.tap(find.byTooltip('切换主题'));
+        await tester.tap(find.byTooltip('个人与设置'));
+        expect([searched, themed, profiled], everyElement(isTrue));
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final width in [360.0, 411.0, 600.0, 840.0]) {
+    testWidgets('Android外壳 $width 无当前项且字体放大时避让安全区', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_androidChrome(
+        textScale: 2,
+        padding: const EdgeInsets.fromLTRB(12, 24, 12, 34),
+        chromeBuilder: (_) => ViraPageScaffold(
+          activeDestination: null,
+          onDestinationSelected: (_) {},
+          onSearch: () {},
+          onThemeToggle: () {},
+          onProfile: () {},
+          child: const SizedBox.expand(key: ValueKey('content')),
+        ),
+      ));
+      for (final destination in ViraDestination.values.take(4)) {
+        expect(find.byKey(ValueKey('vira-nav-indicator-${destination.name}')),
+            findsNothing);
+        final rect = tester
+            .getRect(find.byKey(ValueKey('vira-nav-item-${destination.name}')));
+        expect(rect.left, greaterThanOrEqualTo(12));
+        expect(rect.right, lessThanOrEqualTo(width - 12));
+        expect(rect.top, greaterThanOrEqualTo(24));
+        expect(rect.bottom, lessThanOrEqualTo(800 - 34));
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final width in [600.0, 840.0]) {
+    testWidgets('横屏 $width 大字号弹出键盘仍保留内容空间', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 360));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(_androidChrome(
+        textScale: 2,
+        padding: const EdgeInsets.only(top: 24),
+        viewInsets: const EdgeInsets.only(bottom: 240),
+        chromeBuilder: (_) => ViraPageScaffold(
+          activeDestination: null,
+          onDestinationSelected: (_) {},
+          onSearch: () {},
+          onThemeToggle: () {},
+          onProfile: () {},
+          child: const SizedBox.expand(key: ValueKey('content')),
+        ),
+      ));
+      expect(tester.takeException(), isNull);
+      expect(tester.getSize(find.byKey(const ValueKey('content'))).height,
+          greaterThan(0));
+    });
+  }
+
+  testWidgets('跨断点切换保留内容状态且不重建页面业务', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_androidChrome(
+      chromeBuilder: (_) => ViraPageScaffold(
+        activeDestination: ViraDestination.home,
+        onDestinationSelected: (_) {},
+        onSearch: () {},
+        onThemeToggle: () {},
+        onProfile: () {},
+        child: const _StatefulContent(),
+      ),
+    ));
+    await tester.tap(find.text('计数 0'));
+    await tester.pump();
+    for (final width in [600.0, 840.0, 411.0]) {
+      await tester.binding.setSurfaceSize(Size(width, 800));
+      await tester.pump();
+      expect(find.text('计数 1'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
 
   testWidgets('编辑式章节标题与文字索引保持轻量层级', (tester) async {
     var actionTapped = false;
@@ -320,4 +493,49 @@ void main() {
     await tester.tap(find.text('重新加载'));
     expect(retried, isTrue);
   });
+}
+
+Widget _androidChrome({
+  required Widget Function(StateSetter) chromeBuilder,
+  bool dark = false,
+  double textScale = 1,
+  EdgeInsets padding = EdgeInsets.zero,
+  EdgeInsets viewInsets = EdgeInsets.zero,
+}) {
+  return AppCapabilitiesScope(
+    capabilities: AppCapabilities.androidCompileBaseline,
+    child: MaterialApp(
+      theme: dark ? AppTheme.darkTheme : AppTheme.lightTheme,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+          padding: padding,
+          viewPadding: padding,
+          viewInsets: viewInsets,
+          disableAnimations: true,
+        ),
+        child: child!,
+      ),
+      home: StatefulBuilder(builder: (_, setState) => chromeBuilder(setState)),
+    ),
+  );
+}
+
+class _StatefulContent extends StatefulWidget {
+  const _StatefulContent();
+
+  @override
+  State<_StatefulContent> createState() => _StatefulContentState();
+}
+
+class _StatefulContentState extends State<_StatefulContent> {
+  var count = 0;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: TextButton(
+          onPressed: () => setState(() => count++),
+          child: Text('计数 $count'),
+        ),
+      );
 }
